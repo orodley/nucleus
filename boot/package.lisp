@@ -1,0 +1,2 @@
+(defpackage :boot
+  (:use :cl))

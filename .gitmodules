@@ -1,0 +1,3 @@
+[submodule "boot/CL-LLVM"]
+	path = boot/CL-LLVM
+	url = https://github.com/orodley/CL-LLVM.git
