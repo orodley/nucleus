@@ -20,7 +20,11 @@
 (defun compile-toplevel-form (form)
   (ecase (car form)
     (|defun|
-      (compile-defun (cadr form) (caddr form) (cdddr form)))))
+      (compile-defun (cadr form) (caddr form) (cdddr form)))
+    (|defvar|
+      (when (> (length form) 2)
+        (error "defvar doesn't yet support initializers"))
+      (compile-defvar (cadr form)))))
 
 (defun compile-defun (name args body)
   (let* ((func-type (llvm:function-type
@@ -41,10 +45,21 @@
       (error "Invalid definition for function ~S" name))
     (llvm:dump-value func)))
 
+(defun compile-defvar (name)
+  (unless (symbolp name)
+    (error "~S is not a valid variable name" name))
+  (llvm:set-initializer
+    (llvm:add-global *module* *lisp-value* (string name))
+    ; All globals are zeroed
+    (llvm-val<-int 0)))
+
 (defun compile-expr (expr)
   (etypecase expr
     ;; TODO: limit on size
     (integer (llvm-val<-int (ash expr *lowtag-bits*)))
+    (symbol (llvm:build-load *builder*
+                             (llvm:named-global *module* (string expr))
+                             (string expr)))
     (list (compile-form expr))))
 
 (defun llvm-val<-int (int)
