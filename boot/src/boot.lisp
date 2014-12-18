@@ -5,14 +5,16 @@
 (defvar *builder*)
 (defvar *module*)
 
-(defvar *lisp-value* (llvm:int-type 64))
-(defvar *lowtag-bits* 4)
+(defparameter *lisp-value* (llvm:int-type 64))
+(defparameter *lowtag-bits* 3)
+(defparameter *llvm-lowtag-bits-const* 3)
 
 (defun nuc-compile-file (input-filename output-filename)
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module "test"))
     (dolist (form (read-file input-filename))
       (compile-toplevel-form form)) 
+    (llvm:dump-module *module*)
     (llvm:write-bitcode-to-file *module* output-filename)))
 
 (defun compile-toplevel-form (form)
@@ -39,12 +41,22 @@
       (error "Invalid definition for function ~S" name))
     (llvm:dump-value func)))
 
-(defun compile-expr (form)
-  (typecase form
+(defun compile-expr (expr)
+  (etypecase expr
     ;; TODO: limit on size
-    (integer (llvm:const-int *lisp-value*
-                             (format nil "~D" (ash form *lowtag-bits*))
-                             10))))
+    (integer (llvm-val<-int (ash expr *lowtag-bits*)))
+    (list (compile-form expr))))
+
+(defun llvm-val<-int (int)
+  (llvm:const-int *lisp-value* (format nil "~D" int) 10))
+
+(defun compile-form (form)
+  (let* ((name (car form))
+         (args (cdr form))
+         (builtin (gethash name *builtins*)))
+    (if builtin
+      (funcall builtin args)
+      (error "Don't know how to compile form ~S" form))))
 
 (defun read-file (filename)
   (let ((eof-value (gensym))

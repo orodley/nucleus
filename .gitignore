@@ -1,1 +1,7 @@
 *.fasl
+
+*.ll
+*.bc
+
+*.[sS]
+a.out
