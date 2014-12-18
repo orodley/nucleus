@@ -11,7 +11,7 @@
 
 (defun nuc-compile-file (input-filename output-filename)
   (llvm:with-objects ((*builder* llvm:builder)
-                      (*module* llvm:module "test"))
+                      (*module* llvm:module output-filename))
     (dolist (form (read-file input-filename))
       (compile-toplevel-form form)) 
     (llvm:dump-module *module*)
