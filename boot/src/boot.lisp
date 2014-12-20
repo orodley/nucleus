@@ -2,20 +2,14 @@
 
 (declaim (optimize debug))
 
-(defvar *builder*)
-(defvar *module*)
-
-(defparameter *lisp-value* (llvm:int-type 64))
-(defparameter *lowtag-bits* 3)
-(defparameter *llvm-lowtag-bits-const* 3)
-
 (defun nuc-compile-file (input-filename output-filename)
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
-    (dolist (form (read-file input-filename))
-      (compile-toplevel-form form)) 
-    (llvm:dump-module *module*)
-    (llvm:write-bitcode-to-file *module* output-filename)))
+    (let ((*env* nil))
+      (dolist (form (cons '(|defvar| |__status-code|) (read-file input-filename)))
+        (compile-toplevel-form form))
+      (llvm:dump-module *module*)
+      (llvm:write-bitcode-to-file *module* output-filename))))
 
 (defun compile-toplevel-form (form)
   (ecase (car form)
@@ -33,14 +27,15 @@
          (func (llvm:add-function *module* (string name) func-type)))
     (map nil
          (lambda (param name)
-           (setf (llvm:value-name param) name))
+           (setf (llvm:value-name param) (string name)))
          (llvm:params func)
          args)
     (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
-    (loop for cons on body
-          for compiled-expr = (compile-expr (car cons))
-          when (null (cdr cons))
-            do (llvm:build-ret *builder* compiled-expr))
+    (let ((*env* (append (mapcar #'cons args (llvm:params func)) *env*)))
+      (loop for cons on body
+            for compiled-expr = (compile-expr (car cons))
+            when (null (cdr cons))
+              do (llvm:build-ret *builder* compiled-expr)))
     (unless (llvm:verify-function func)
       (error "Invalid definition for function ~S" name))
     (llvm:dump-value func)))
@@ -57,9 +52,10 @@
   (etypecase expr
     ;; TODO: limit on size
     (integer (llvm-val<-int (ash expr *lowtag-bits*)))
-    (symbol (llvm:build-load *builder*
-                             (llvm:named-global *module* (string expr))
-                             (string expr)))
+    (symbol (let ((lexical-binding (cdr (assoc expr *env*))))
+              (if lexical-binding
+                lexical-binding
+                (llvm:named-global *module* (string expr)))))
     (list (compile-form expr))))
 
 (defun llvm-val<-int (int)

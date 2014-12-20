@@ -7,7 +7,8 @@
   :description "Bootstrap compiler for nucleus, implemented in Common Lisp."
   :components ((:file "package")
                (:module "src"
-                :components ((:file "boot" :depends-on ("builtins"))
-                             (:file "builtins"))
+                :components ((:file "boot" :depends-on ("builtins" "globals"))
+                             (:file "builtins" :depends-on ("globals"))
+							 (:file "globals"))
                 :depends-on ("package")))
   :depends-on ("llvm"))
