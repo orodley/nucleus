@@ -31,8 +31,6 @@
            (setf (llvm:value-name param) (string name)))
          (llvm:params func)
          args)
-    (when (eq name '|main|)
-      (setf body (append body `((>> |$status-code| ,*lowtag-bits*)))))
     (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
     (let ((*env* (append
                    (mapcar (lambda (arg-name llvm-param)
@@ -48,7 +46,14 @@
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
             when (null (cdr cons))
-              do (llvm:build-ret *builder* compiled-expr)))
+              do (if (eq name '|main|)
+                   (llvm:build-ret
+                     *builder*
+                     (llvm::build-l-shr *builder*
+                                        (compile-expr '|$status-code|)
+                                        (llvm-val<-int *lowtag-bits*)
+                                        "$status-code"))
+                   (llvm:build-ret *builder* compiled-expr))))
     (unless (llvm:verify-function func)
       (llvm:dump-value func)
       (error "ICE compiling function ~S (failed llvm:verify-function)~%~
