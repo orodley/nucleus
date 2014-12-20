@@ -36,3 +36,7 @@
 (define-binary-op + llvm:build-add)
 (define-binary-op - llvm:build-sub)
 (define-binary-op * llvm:build-mul)
+
+(defbuiltin |set| (name value)
+  (let ((var (lookup-var name)))
+    (llvm:build-store *builder* (compile-expr value) var)))

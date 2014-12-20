@@ -31,13 +31,25 @@
          (llvm:params func)
          args)
     (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
-    (let ((*env* (append (mapcar #'cons args (llvm:params func)) *env*)))
+    (let ((*env* (append
+                   (mapcar (lambda (arg-name llvm-param)
+                             (let ((arg-on-stack
+                                     (llvm:build-alloca *builder* *lisp-value*
+                                                        (string arg-name))))
+                               (llvm:build-store *builder*
+                                                 llvm-param arg-on-stack)
+                               (cons arg-name arg-on-stack)))
+                           args
+                           (llvm:params func))
+                   *env*)))
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
             when (null (cdr cons))
               do (llvm:build-ret *builder* compiled-expr)))
     (unless (llvm:verify-function func)
-      (error "Invalid definition for function ~S" name))
+      (llvm:dump-value func)
+      (error "ICE compiling function ~S (failed llvm:verify-function)~%~
+              Function has been dumped" name))
     (llvm:dump-value func)))
 
 (defun compile-defvar (name)
@@ -52,11 +64,14 @@
   (etypecase expr
     ;; TODO: limit on size
     (integer (llvm-val<-int (ash expr *lowtag-bits*)))
-    (symbol (let ((lexical-binding (cdr (assoc expr *env*))))
-              (if lexical-binding
-                lexical-binding
-                (llvm:named-global *module* (string expr)))))
+    (symbol (llvm:build-load *builder* (lookup-var expr) (string expr)))
     (list (compile-form expr))))
+
+(defun lookup-var (name)
+  (let ((lexical-binding (cdr (assoc name *env*))))
+    (if lexical-binding
+      lexical-binding
+      (llvm:named-global *module* (string name)))))
 
 (defun llvm-val<-int (int)
   (llvm:const-int *lisp-value* (format nil "~D" int) 10))
