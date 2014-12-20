@@ -4,7 +4,7 @@ cd `dirname $0`
 
 usage() {
 	cat << EOF
-Usage: boot-compile.sh [-hai] <source file> [<output file>]
+Usage: nucc.sh [-hai] <source file> [<output file>]
 
 Invoke the bootstrap compiler to compile the given nucleus source file.
 
@@ -65,7 +65,7 @@ fi
 
 bc=$(mktemp ${input%%.*}_XXX.bc)
 
-sbcl --script boot-compile.lisp "$input" "$bc"
+sbcl --script nucc.lisp "$input" "$bc"
 if [ $? -ne 0 ]; then
 	rm "$bc"
 	exit 1
