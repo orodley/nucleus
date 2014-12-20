@@ -1,4 +1,4 @@
-(in-package :boot)
+(in-package boot)
 
 (defvar *builder*)
 (defvar *module*)

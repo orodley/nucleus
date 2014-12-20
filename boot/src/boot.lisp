@@ -1,14 +1,15 @@
-(in-package :boot)
+(in-package boot)
 
 (declaim (optimize debug))
 
-(defun nuc-compile-file (input-filename output-filename)
+(defun nuc-compile-file (input-filename output-filename &optional dump-module-p)
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
     (let ((*env* nil))
       (dolist (form (cons '(|defvar| |$status-code|) (read-file input-filename)))
         (compile-toplevel-form form))
-      (llvm:dump-module *module*)
+      (when dump-module-p
+        (llvm:dump-module *module*))
       (llvm:write-bitcode-to-file *module* output-filename))))
 
 (defun compile-toplevel-form (form)
@@ -31,7 +32,7 @@
          (llvm:params func)
          args)
     (when (eq name '|main|)
-      (setf body (append body (list (list '>> '|$status-code| *lowtag-bits*)))))
+      (setf body (append body `((>> |$status-code| ,*lowtag-bits*)))))
     (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
     (let ((*env* (append
                    (mapcar (lambda (arg-name llvm-param)
@@ -51,8 +52,7 @@
     (unless (llvm:verify-function func)
       (llvm:dump-value func)
       (error "ICE compiling function ~S (failed llvm:verify-function)~%~
-              Function has been dumped" name))
-    (llvm:dump-value func)))
+              Function has been dumped" name))))
 
 (defun compile-defvar (name)
   (unless (symbolp name)
@@ -91,7 +91,10 @@
 
 (defun read-file (filename)
   (let ((eof-value (gensym))
-        (*readtable* (copy-readtable *readtable*)))
+        (*readtable* (copy-readtable *readtable*))
+        ;; Make sure all symbols get read in the BOOT package, as all of the
+        ;; literal symbols in this file are in it.
+        (*package* (find-package 'boot)))
     (setf (readtable-case *readtable*) :preserve)
     (with-open-file (file filename)
       (loop for form = (read file nil eof-value)
