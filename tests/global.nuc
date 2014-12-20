@@ -1,0 +1,7 @@
+; 3
+
+(defvar global)
+
+(defun main ()
+  (set global 3)
+  (set $status-code global))

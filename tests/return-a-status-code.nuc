@@ -1,0 +1,4 @@
+; 99
+
+(defun main ()
+  (set $status-code 99))

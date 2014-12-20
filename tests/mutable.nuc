@@ -1,0 +1,8 @@
+; 5
+
+(defun mutate (x)
+  (set x (+ x 2))
+  x)
+
+(defun main ()
+  (set $status-code (mutate 3)))

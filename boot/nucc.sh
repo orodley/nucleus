@@ -1,7 +1,5 @@
 #!/bin/bash
 
-cd `dirname $0`
-
 usage() {
 	cat << EOF
 Usage: nucc.sh [-hai] <source file> [<output file>]
@@ -16,6 +14,8 @@ EOF
 
 output_ir=false
 output_asm=false
+
+script_dir=$(dirname "$(realpath "$0")")
 
 OPTIND=1
 while getopts 'hai' opt; do
@@ -48,20 +48,22 @@ if [ "$#" -lt 1 ]; then
 	exit 1
 fi
 
-input="$1"
-input_basename=$(basename "$input")
+input="$(realpath $1)"
+input_basename="$(realpath "$(basename "$input")")"
 
 if [ $output_ir = true ]; then
-	output=${input_basename%%.*}.ll
+	output="${input_basename%%.*}.ll"
 elif [ $output_asm = true ]; then
-	output=${input_basename%%.*}.s
+	output="${input_basename%%.*}.s"
 else
-	output=a.out
+	output="$(realpath a.out)"
 fi
 
 if [ "$#" -gt 1 ]; then
-	output="$2"
+	output="$(realpath $2)"
 fi
+
+cd "$script_dir"
 
 bc=$(mktemp ${input%%.*}_XXX.bc)
 
