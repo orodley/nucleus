@@ -68,10 +68,13 @@
     (list (compile-form expr))))
 
 (defun lookup-var (name)
-  (let ((lexical-binding (cdr (assoc name *env*))))
+  (let ((lexical-binding (cdr (assoc name *env*)))
+        (global-binding (llvm:named-global *module* (string name))))
     (if lexical-binding
       lexical-binding
-      (llvm:named-global *module* (string name)))))
+      (if (cffi:null-pointer-p global-binding)
+        (error "Undefined variable ~S" name)
+        global-binding))))
 
 (defun llvm-val<-int (int)
   (llvm:const-int *lisp-value* (format nil "~D" int) 10))
