@@ -6,7 +6,7 @@
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
     (let ((*env* nil))
-      (dolist (form (cons '(|defvar| |__status-code|) (read-file input-filename)))
+      (dolist (form (cons '(|defvar| |$status-code|) (read-file input-filename)))
         (compile-toplevel-form form))
       (llvm:dump-module *module*)
       (llvm:write-bitcode-to-file *module* output-filename))))
@@ -30,6 +30,8 @@
            (setf (llvm:value-name param) (string name)))
          (llvm:params func)
          args)
+    (when (eq name '|main|)
+      (setf body (append body (list (list '>> '|$status-code| *lowtag-bits*)))))
     (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
     (let ((*env* (append
                    (mapcar (lambda (arg-name llvm-param)
