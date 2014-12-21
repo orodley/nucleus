@@ -38,6 +38,27 @@
 (define-binary-op * llvm:build-mul)
 (define-binary-op >> llvm::build-l-shr)
 
+(defbuiltin |if| (condition then-form else-form)
+  (let ((then-block (llvm:append-basic-block *current-func* "then"))
+        (else-block (llvm:append-basic-block *current-func* "else"))
+        (after-block (llvm:append-basic-block *current-func* "after"))
+        (if-value (llvm:build-alloca *builder* *lisp-value* "if-value")))
+    (flet ((build-branch (form block)
+             (llvm:position-builder *builder* block)
+             (llvm:build-store *builder* (compile-expr form) if-value)
+             (llvm:build-br *builder* after-block)))
+      (llvm:build-cond-br
+        *builder*
+        (llvm:build-i-cmp *builder* :=
+                          (compile-expr condition)
+                          *true*
+                          "condition-true?")
+        then-block else-block)
+      (build-branch then-form then-block)
+      (build-branch else-form else-block)
+      (llvm:position-builder *builder* after-block)
+      (llvm:build-load *builder* if-value "if-value"))))
+
 (defbuiltin |set| (name value)
   (let ((var (lookup-lvalue name))
         (compiled-expr (compile-expr value)))

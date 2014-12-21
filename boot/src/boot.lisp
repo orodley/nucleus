@@ -5,7 +5,7 @@
 (defun nuc-compile-file (input-filename output-filename &optional dump-module-p)
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
-    (let ((*env* (initial-env)))
+    (let ((*env* nil))
       (compile-prelude)
       (dolist (form (read-file input-filename))
         (compile-toplevel-form form))
@@ -25,13 +25,6 @@
       (when (> (length form) 2)
         (error "defvar doesn't yet support initializers"))
       (compile-defvar (cadr form)))))
-
-(defun initial-env ()
-  (flet ((make-const (x)
-           (llvm-val<-int (logior (ash x *lowtag-bits*) 1))))
-    `((|nil|   . ,(make-const 0))
-      (|true|  . ,(make-const 1))
-      (|false| . ,(make-const 2)))))
 
 (defun compile-defun (name args body)
   (let* ((func-type (llvm:function-type
@@ -54,7 +47,8 @@
                                (cons arg-name arg-on-stack)))
                            args
                            (llvm:params func))
-                   *env*)))
+                   *env*))
+          (*current-func* func))
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
             when (null (cdr cons))
@@ -83,19 +77,19 @@
   (etypecase expr
     ;; TODO: limit on size
     (integer (llvm-val<-int (ash expr *lowtag-bits*)))
-    (symbol (llvm:build-load *builder* (lookup-var expr) (string expr)))
+    (symbol (let ((const (cdr (assoc expr *constants*))))
+              (if const
+                const
+                (llvm:build-load *builder* (lookup-lvalue expr) (string expr)))))
     (list (compile-form expr))))
 
-(defun lookup-var (name)
+(defun lookup-lvalue (name)
   (let ((lexical-binding (cdr (assoc name *env*)))
         (global-binding (llvm:named-global *module* (string name))))
     (cond
       (lexical-binding lexical-binding)
       ((not (cffi:null-pointer-p global-binding)) global-binding)
       (t (error "Undefined variable ~S" name)))))
-
-(defun llvm-val<-int (int)
-  (llvm:const-int *lisp-value* (format nil "~D" int) 10))
 
 (defun compile-form (form)
   (let* ((name (car form))
