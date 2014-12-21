@@ -7,14 +7,17 @@ import sys
 import uuid
 
 def main():
+    if len(sys.argv) > 1:
+        tests = sys.argv[1:]
+    else:
+        tests = ["tests/" + test for test in os.listdir("tests")]
+
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
     results = []
-    tests = os.listdir("tests")
     print "Running %d tests:" % len(tests)
 
     for test_file in tests:
-        test_file = "tests/" + test_file
         result = run_test(test_file)
         sys.stdout.write(result_char(result))
         sys.stdout.flush()
