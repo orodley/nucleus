@@ -77,11 +77,10 @@
 (defun lookup-var (name)
   (let ((lexical-binding (cdr (assoc name *env*)))
         (global-binding (llvm:named-global *module* (string name))))
-    (if lexical-binding
-      lexical-binding
-      (if (cffi:null-pointer-p global-binding)
-        (error "Undefined variable ~S" name)
-        global-binding))))
+    (cond
+      (lexical-binding lexical-binding)
+      ((not (cffi:null-pointer-p global-binding)) global-binding)
+      (t (error "Undefined variable ~S" name)))))
 
 (defun llvm-val<-int (int)
   (llvm:const-int *lisp-value* (format nil "~D" int) 10))
@@ -89,10 +88,15 @@
 (defun compile-form (form)
   (let* ((name (car form))
          (args (cdr form))
-         (builtin (gethash name *builtins*)))
-    (if builtin
-      (funcall builtin args)
-      (error "Don't know how to compile form ~S" form))))
+         (builtin (gethash name *builtins*))
+         (func (llvm:named-function *module* (string name))))
+    (cond
+      (builtin (funcall builtin args))
+      ((not (cffi:null-pointer-p func))
+       (llvm:build-call *builder* func
+                        (mapcar #'compile-expr args)
+                        (string name)))
+      (t (error "Don't know how to compile form ~S" form)))))
 
 (defun read-file (filename)
   (let ((eof-value (gensym))
