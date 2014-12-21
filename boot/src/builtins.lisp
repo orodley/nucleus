@@ -39,8 +39,10 @@
 (define-binary-op >> llvm::build-l-shr)
 
 (defbuiltin |set| (name value)
-  (let ((var (lookup-var name)))
-    (llvm:build-store *builder* (compile-expr value) var)))
+  (let ((var (lookup-lvalue name))
+        (compiled-expr (compile-expr value)))
+    (llvm:build-store *builder* compiled-expr var)
+    compiled-expr))
 
 (defbuiltin |cons| (car cdr)
   (let* ((cons (llvm::build-malloc *builder* *cons-cell* "cons"))

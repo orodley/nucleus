@@ -1,0 +1,4 @@
+; 1
+
+(defun main ()
+  (set $status-code (set $status-code 1)))
