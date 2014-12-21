@@ -49,6 +49,8 @@
                            (llvm:params func))
                    *env*))
           (*current-func* func))
+      (when (null body)
+        (setf body (list '|nil|)))
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
             when (null (cdr cons))
