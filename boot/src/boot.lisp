@@ -6,11 +6,16 @@
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
     (let ((*env* nil))
-      (dolist (form (cons '(|defvar| |$status-code|) (read-file input-filename)))
+      (compile-prelude)
+      (dolist (form (read-file input-filename))
         (compile-toplevel-form form))
       (when dump-module-p
         (llvm:dump-module *module*))
       (llvm:write-bitcode-to-file *module* output-filename))))
+
+(defun compile-prelude ()
+  (dolist (form '((|defvar| |$status-code|)))
+    (compile-toplevel-form form)))
 
 (defun compile-toplevel-form (form)
   (ecase (car form)

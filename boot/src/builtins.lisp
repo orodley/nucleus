@@ -41,3 +41,23 @@
 (defbuiltin |set| (name value)
   (let ((var (lookup-var name)))
     (llvm:build-store *builder* (compile-expr value) var)))
+
+(defbuiltin |cons| (car cdr)
+  (let* ((cons (llvm::build-malloc *builder* *cons-cell* "cons"))
+         (car-ptr (llvm:build-struct-gep *builder* cons 0 "car-ptr"))
+         (cdr-ptr (llvm:build-struct-gep *builder* cons 1 "cdr-ptr")))
+    (llvm:build-store *builder* (compile-expr car) car-ptr)
+    (llvm:build-store *builder* (compile-expr cdr) cdr-ptr)
+    cons))
+
+(defbuiltin |car| (cons)
+  (let ((cons-ptr (compile-expr cons)))
+    (llvm:build-load *builder* 
+                     (llvm:build-struct-gep *builder* cons-ptr 0 "car-ptr")
+                     "car")))
+
+(defbuiltin |cdr| (cons)
+  (let ((cons-ptr (compile-expr cons)))
+    (llvm:build-load *builder* 
+                     (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")
+                     "cdr")))
