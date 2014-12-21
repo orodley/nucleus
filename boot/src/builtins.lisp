@@ -63,7 +63,6 @@
                      "cdr")))
 
 (defbuiltin |let| (clauses &body body)
-  (print clauses)
   (let ((*env* (append
                  (mapcar
                    (lambda (clause)

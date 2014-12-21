@@ -5,7 +5,7 @@
 (defun nuc-compile-file (input-filename output-filename &optional dump-module-p)
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
-    (let ((*env* nil))
+    (let ((*env* (initial-env)))
       (compile-prelude)
       (dolist (form (read-file input-filename))
         (compile-toplevel-form form))
@@ -25,6 +25,13 @@
       (when (> (length form) 2)
         (error "defvar doesn't yet support initializers"))
       (compile-defvar (cadr form)))))
+
+(defun initial-env ()
+  (flet ((make-const (x)
+           (llvm-val<-int (logior (ash x *lowtag-bits*) 1))))
+    `((|nil|   . ,(make-const 0))
+      (|true|  . ,(make-const 1))
+      (|false| . ,(make-const 2)))))
 
 (defun compile-defun (name args body)
   (let* ((func-type (llvm:function-type
