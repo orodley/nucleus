@@ -1,0 +1,5 @@
+; 1
+
+(defun main ()
+  (let ((a 1))
+    (set $status-code a)))

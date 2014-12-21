@@ -1,0 +1,4 @@
+; 0
+
+(defun main ()
+  (cons 1 2))

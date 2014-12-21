@@ -1,0 +1,5 @@
+; 3
+
+(defun main ()
+  (set $status-code (+ (car (cons 1 2))
+                       (cdr (cons 1 2)))))

@@ -61,3 +61,22 @@
     (llvm:build-load *builder* 
                      (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")
                      "cdr")))
+
+(defbuiltin |let| (clauses &body body)
+  (print clauses)
+  (let ((*env* (append
+                 (mapcar
+                   (lambda (clause)
+                     (let* ((name (car clause))
+                            (expr (cadr clause)) 
+                            (var-on-stack (llvm:build-alloca *builder*
+                                                             *lisp-value*
+                                                             (string name))))
+                       (llvm:build-store
+                         *builder* (compile-expr expr) var-on-stack)
+                       (cons name var-on-stack)))
+                   clauses))))
+    (loop for cons on body
+          for compiled-expr = (compile-expr (car cons))
+          when (null (cdr cons))
+            return compiled-expr)))
