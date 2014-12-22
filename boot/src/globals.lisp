@@ -8,6 +8,7 @@
 (defparameter *lisp-value* (llvm:int-type 64))
 (defparameter *cons-cell* (llvm:struct-type
                             (list *lisp-value* *lisp-value*) nil))
+(defparameter *cons-cell-ptr* (llvm:pointer-type *cons-cell*))
 (defparameter *lowtag-bits* 3)
 (defparameter *llvm-lowtag-bits-const* 3)
 

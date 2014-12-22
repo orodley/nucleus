@@ -1,0 +1,7 @@
+; 1
+
+(defun foo (x)
+  (set $status-code (car x)))
+
+(defun main ()
+  (foo (cons 1 2)))

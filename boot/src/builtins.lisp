@@ -66,21 +66,23 @@
     compiled-expr))
 
 (defbuiltin |cons| (car cdr)
-  (let* ((cons (llvm::build-malloc *builder* *cons-cell* "cons"))
-         (car-ptr (llvm:build-struct-gep *builder* cons 0 "car-ptr"))
-         (cdr-ptr (llvm:build-struct-gep *builder* cons 1 "cdr-ptr")))
+  (let* ((cons-ptr (llvm::build-malloc *builder* *cons-cell* "cons"))
+         (car-ptr (llvm:build-struct-gep *builder* cons-ptr 0 "car-ptr"))
+         (cdr-ptr (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")))
     (llvm:build-store *builder* (compile-expr car) car-ptr)
     (llvm:build-store *builder* (compile-expr cdr) cdr-ptr)
-    cons))
+    (llvm:build-pointer-to-int *builder* cons-ptr *lisp-value* "cast-cons")))
 
 (defbuiltin |car| (cons)
-  (let ((cons-ptr (compile-expr cons)))
+  (let ((cons-ptr (llvm:build-int-to-pointer
+                    *builder* (compile-expr cons) *cons-cell-ptr* "cast-cons")))
     (llvm:build-load *builder* 
                      (llvm:build-struct-gep *builder* cons-ptr 0 "car-ptr")
                      "car")))
 
 (defbuiltin |cdr| (cons)
-  (let ((cons-ptr (compile-expr cons)))
+  (let ((cons-ptr (llvm:build-int-to-pointer
+                    *builder* (compile-expr cons) *cons-cell-ptr* "cast-cons")))
     (llvm:build-load *builder* 
                      (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")
                      "cdr")))
