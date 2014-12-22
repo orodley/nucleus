@@ -65,6 +65,12 @@ fi
 
 cd "$script_dir"
 
+make -C ../runtime > /dev/null
+if [ $? -ne 0 ]; then
+	echo Compiling the runtime failed, aborting
+	exit 1
+fi
+
 bc=$(mktemp ${input%%.*}_XXX.bc)
 
 sbcl --script nucc.lisp "$input" "$bc"
@@ -80,7 +86,7 @@ if [ $output_ir = true ]; then
 fi
 
 if [ $output_asm = true ]; then
-	llc-3.5 -filetype=asm "$bc" -o "$output"
+	llc-3.5 -filetype=asm "$bc" ../runtime/nuc-runtime.bc -o "$output"
 	rm "$bc"
 	exit 0
 fi
