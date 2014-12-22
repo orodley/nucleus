@@ -11,6 +11,7 @@
         (compile-toplevel-form form))
       (when dump-module-p
         (llvm:dump-module *module*))
+      (llvm:verify-module *module*)
       (llvm:write-bitcode-to-file *module* output-filename))))
 
 (defun compile-prelude ()

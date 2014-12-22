@@ -1,0 +1,5 @@
+; 1
+
+(defun main ()
+  (let ((c (cons 1 2)))
+    (set $status-code (if (eq? c c) 1 0))))

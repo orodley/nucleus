@@ -104,3 +104,21 @@
           for compiled-expr = (compile-expr (car cons))
           when (null (cdr cons))
             return compiled-expr)))
+
+(defbuiltin |eq?| (a b)
+  (let ((bool (llvm:build-alloca *builder* *lisp-value* "eq?-result"))
+        (true-block (llvm:append-basic-block *current-func* "eq?-true"))
+        (false-block (llvm:append-basic-block *current-func* "eq?-false"))
+        (after-block (llvm:append-basic-block *current-func* "eq?-after")))
+    (flet ((build-branch (block ret-val)
+             (llvm:position-builder *builder* block)
+             (llvm:build-store *builder* ret-val bool)
+             (llvm:build-br *builder* after-block)))
+      (llvm:build-cond-br
+        *builder* (llvm:build-i-cmp
+                    *builder* := (compile-expr a) (compile-expr b) "eq?-cmp")
+        true-block false-block)
+      (build-branch true-block *true*)
+      (build-branch false-block *false*)
+      (llvm:position-builder *builder* after-block)
+      (llvm:build-load *builder* bool "eq?"))))
