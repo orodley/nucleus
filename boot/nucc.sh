@@ -90,10 +90,12 @@ if [ $output_ir = true ]; then
 fi
 
 if [ $output_asm = true ]; then
-	llc-3.5 -filetype=asm "$bc" ../runtime/nuc-runtime.bc -o "$output"
+	llc-3.5 -filetype=asm "$bc" -o "$output"
 	rm "$bc"
 	exit 0
 fi
+
+llvm-link-3.5 "$bc" ../runtime/nuc-runtime.bc -o "$bc"
 
 obj=${input%%.*}.o
 llc-3.5 -filetype=obj "$bc" -o "$obj"
@@ -102,6 +104,10 @@ rm "$bc"
 
 # TODO: ld?
 gcc "$obj" -o "$output"
+if [ $? -ne 0 ]; then
+	echo Compilation failed, aborting
+	exit 1
+fi
 
 rm "$obj"
 

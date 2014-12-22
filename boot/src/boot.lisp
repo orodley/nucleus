@@ -25,7 +25,16 @@
     (|defvar|
       (when (> (length form) 2)
         (error "defvar doesn't yet support initializers"))
-      (compile-defvar (cadr form)))))
+      (compile-defvar (cadr form)))
+    (|extern|
+      (when (> (length form) 3)
+        (error "Invalid number of arguments to 'extern' (got ~D, expected 2)"
+               (length form)))
+      (llvm:add-function
+        *module* (string (cadr form))
+        (llvm:function-type
+          *lisp-value*
+          (make-array (caddr form) :initial-element *lisp-value*))))))
 
 (defun compile-defun (name args body)
   (let* ((func-type (llvm:function-type
