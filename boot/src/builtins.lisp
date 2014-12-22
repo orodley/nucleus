@@ -122,3 +122,13 @@
       (build-branch false-block *false*)
       (llvm:position-builder *builder* after-block)
       (llvm:build-load *builder* bool "eq?"))))
+
+
+;;; The following should definitely be macros in the standard library, but
+;;; for the bootstrap compiler it's easier to just define them in the compiler
+;;; than it is to add a macro system
+
+(defbuiltin |list| (&rest args)
+  (compile-expr (reduce (lambda (a b) `(|cons| ,a ,b)) args
+                        :from-end t
+                        :initial-value '|nil|)))
