@@ -5,16 +5,15 @@
 (defvar *env*)
 (defvar *current-func*)
 
-; TODO: rename this to 'nuc-val' to match runtime
-(defparameter *lisp-value* (llvm:int-type 64))
+(defparameter *nuc-val* (llvm:int-type 64))
 (defparameter *cons-cell* (llvm:struct-type
-                            (list *lisp-value* *lisp-value*) nil))
+                            (list *nuc-val* *nuc-val*) nil))
 (defparameter *cons-cell-ptr* (llvm:pointer-type *cons-cell*))
 (defparameter *lowtag-bits* 3)
 (defparameter *llvm-lowtag-bits-const* 3)
 
 (defun llvm-val<-int (int)
-  (llvm:const-int *lisp-value* (format nil "~D" int) 10))
+  (llvm:const-int *nuc-val* (format nil "~D" int) 10))
 
 (flet ((make-const (x)
          (llvm-val<-int (logior (ash x *lowtag-bits*) 1))))

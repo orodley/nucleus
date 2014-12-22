@@ -42,7 +42,7 @@
   (let ((then-block (llvm:append-basic-block *current-func* "then"))
         (else-block (llvm:append-basic-block *current-func* "else"))
         (after-block (llvm:append-basic-block *current-func* "after"))
-        (if-value (llvm:build-alloca *builder* *lisp-value* "if-value")))
+        (if-value (llvm:build-alloca *builder* *nuc-val* "if-value")))
     (flet ((build-branch (form block)
              (llvm:position-builder *builder* block)
              (llvm:build-store *builder* (compile-expr form) if-value)
@@ -71,7 +71,7 @@
          (cdr-ptr (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")))
     (llvm:build-store *builder* (compile-expr car) car-ptr)
     (llvm:build-store *builder* (compile-expr cdr) cdr-ptr)
-    (llvm:build-pointer-to-int *builder* cons-ptr *lisp-value* "cast-cons")))
+    (llvm:build-pointer-to-int *builder* cons-ptr *nuc-val* "cast-cons")))
 
 (defbuiltin |car| (cons)
   (let ((cons-ptr (llvm:build-int-to-pointer
@@ -94,7 +94,7 @@
                      (let* ((name (car clause))
                             (expr (cadr clause)) 
                             (var-on-stack (llvm:build-alloca *builder*
-                                                             *lisp-value*
+                                                             *nuc-val*
                                                              (string name))))
                        (llvm:build-store
                          *builder* (compile-expr expr) var-on-stack)
@@ -106,7 +106,7 @@
             return compiled-expr)))
 
 (defbuiltin |eq?| (a b)
-  (let ((bool (llvm:build-alloca *builder* *lisp-value* "eq?-result"))
+  (let ((bool (llvm:build-alloca *builder* *nuc-val* "eq?-result"))
         (true-block (llvm:append-basic-block *current-func* "eq?-true"))
         (false-block (llvm:append-basic-block *current-func* "eq?-false"))
         (after-block (llvm:append-basic-block *current-func* "eq?-after")))

@@ -33,13 +33,13 @@
       (llvm:add-function
         *module* (string (cadr form))
         (llvm:function-type
-          *lisp-value*
-          (make-array (caddr form) :initial-element *lisp-value*))))))
+          *nuc-val*
+          (make-array (caddr form) :initial-element *nuc-val*))))))
 
 (defun compile-defun (name args body)
   (let* ((func-type (llvm:function-type
-                     *lisp-value*
-                     (make-array (length args) :initial-element *lisp-value*)))
+                     *nuc-val*
+                     (make-array (length args) :initial-element *nuc-val*)))
          (func (llvm:add-function *module* (string name) func-type)))
     (map nil
          (lambda (param name)
@@ -50,7 +50,7 @@
     (let ((*env* (append
                    (mapcar (lambda (arg-name llvm-param)
                              (let ((arg-on-stack
-                                     (llvm:build-alloca *builder* *lisp-value*
+                                     (llvm:build-alloca *builder* *nuc-val*
                                                         (string arg-name))))
                                (llvm:build-store *builder*
                                                  llvm-param arg-on-stack)
@@ -81,7 +81,7 @@
   (unless (symbolp name)
     (error "~S is not a valid variable name" name))
   (llvm:set-initializer
-    (llvm:add-global *module* *lisp-value* (string name))
+    (llvm:add-global *module* *nuc-val* (string name))
     ; All globals are zeroed
     (llvm-val<-int 0)))
 
