@@ -9,6 +9,7 @@ Invoke the bootstrap compiler to compile the given nucleus source file.
     -h    display this help message
     -a    produce assembly output
     -i    produce LLVM IR output
+    -r    run the program immediately
 EOF
 }
 
@@ -18,7 +19,7 @@ output_asm=false
 script_dir=$(dirname "$(realpath "$0")")
 
 OPTIND=1
-while getopts 'hai' opt; do
+while getopts 'hair' opt; do
 	case "$opt" in
 		h)
 			usage
@@ -29,6 +30,9 @@ while getopts 'hai' opt; do
 			;;
 		i)
 			output_ir=true
+			;;
+		r)
+			run=true
 			;;
 		'?')
 			usage >&2
@@ -100,4 +104,10 @@ rm "$bc"
 gcc "$obj" -o "$output"
 
 rm "$obj"
+
+if [ $run = true ]; then
+	"$output"
+	rm "$output"
+fi
+
 exit 0
