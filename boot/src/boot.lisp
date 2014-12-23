@@ -5,7 +5,8 @@
 (defun nuc-compile-file (input-filename output-filename &optional dump-module-p)
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
-    (let ((*env* nil))
+    (let ((*env* nil)
+          (*current-file* input-filename))
       (compile-prelude)
       (dolist (form (read-file input-filename))
         (compile-toplevel-form form))
@@ -23,18 +24,26 @@
     (|defun|
       (compile-defun (cadr form) (caddr form) (cdddr form)))
     (|defvar|
-      (when (> (length form) 2)
+      (when (/= (length form) 2)
         (error "defvar doesn't yet support initializers"))
       (compile-defvar (cadr form)))
     (|extern|
-      (when (> (length form) 3)
+      (when (/= (length form) 3)
         (error "Invalid number of arguments to 'extern' (got ~D, expected 2)"
                (length form)))
       (llvm:add-function
         *module* (string (cadr form))
         (llvm:function-type
           *nuc-val*
-          (make-array (caddr form) :initial-element *nuc-val*))))))
+          (make-array (caddr form) :initial-element *nuc-val*))))
+    (|include|
+      (when (/= (length form) 2)
+        (error "Invalid number of arguments to 'include' (got ~D, expected 1)"
+               (length form)))
+      (let* ((includee (lookup-included-filename (cadr form)))
+             (*current-file* includee))
+        (dolist (included-form (read-file includee))
+          (compile-toplevel-form included-form))))))
 
 (defun compile-defun (name args body)
   (let* ((func-type (llvm:function-type
@@ -84,6 +93,18 @@
     (llvm:add-global *module* *nuc-val* (string name))
     ; All globals are zeroed
     (llvm-val<-int 0)))
+
+(defun lookup-included-filename (includee)
+  ;; Later we could have some predefined include paths or something.
+  ;; For now it's just relative to the including file
+  (let* ((path (namestring
+                 (merge-pathnames
+                   includee (make-pathname
+                              :directory (pathname-directory *current-file*)))))
+         (extension (search ".nuc" path)))
+    (if extension
+      path
+      (concatenate 'string path ".nuc"))))
 
 (defun compile-expr (expr)
   (etypecase expr

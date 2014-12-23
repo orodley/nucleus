@@ -4,6 +4,7 @@
 (defvar *module*)
 (defvar *env*)
 (defvar *current-func*)
+(defvar *current-file*)
 
 (defparameter *nuc-val* (llvm:int-type 64))
 (defparameter *cons-cell* (llvm:struct-type
