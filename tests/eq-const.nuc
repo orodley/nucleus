@@ -1,0 +1,6 @@
+; 3
+
+(defun main ()
+  (set $status-code (if (eq? nil nil) (+ $status-code 1) 0))
+  (set $status-code (if (eq? true true) (+ $status-code 1) 0))
+  (set $status-code (if (eq? false false) (+ $status-code 1) 0)))
