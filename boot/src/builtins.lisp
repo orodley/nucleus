@@ -56,6 +56,7 @@
 (define-binary-op >> llvm::build-l-shr)
 
 (defbuiltin |if| (condition then-form else-form)
+  ;; TODO: use phi
   (let ((then-block (llvm:append-basic-block *current-func* "then"))
         (else-block (llvm:append-basic-block *current-func* "else"))
         (after-block (llvm:append-basic-block *current-func* "after"))
@@ -81,14 +82,6 @@
         (compiled-expr (compile-expr value)))
     (llvm:build-store *builder* compiled-expr var)
     compiled-expr))
-
-(defbuiltin |cons| (car cdr)
-  (let* ((cons-ptr (llvm::build-malloc *builder* *cons-cell* "cons"))
-         (car-ptr (llvm:build-struct-gep *builder* cons-ptr 0 "car-ptr"))
-         (cdr-ptr (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")))
-    (llvm:build-store *builder* (compile-expr car) car-ptr)
-    (llvm:build-store *builder* (compile-expr cdr) cdr-ptr)
-    (nuc-val<-cons cons-ptr)))
 
 (defbuiltin |car| (cons)
   (let ((cons-ptr (cons<-nuc-val (compile-expr cons))))
@@ -122,6 +115,7 @@
             return compiled-expr)))
 
 (defbuiltin |eq?| (a b)
+  ;; TODO: use phi
   (let ((bool (llvm:build-alloca *builder* *nuc-val* "eq?-result"))
         (true-block (llvm:append-basic-block *current-func* "eq?-true"))
         (false-block (llvm:append-basic-block *current-func* "eq?-false"))

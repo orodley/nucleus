@@ -31,18 +31,18 @@
         (error "defvar doesn't yet support initializers"))
       (compile-defvar (cadr form)))
     (|extern|
-      (when (/= (length form) 3)
+      (when (/= (length (cdr form)) 2)
         (error "Invalid number of arguments to 'extern' (got ~D, expected 2)"
-               (length form)))
+               (length (cdr form))))
       (llvm:add-function
         *module* (string (cadr form))
         (llvm:function-type
           *nuc-val*
           (make-array (caddr form) :initial-element *nuc-val*))))
     (|include|
-      (when (/= (length form) 2)
+      (when (/= (length (cdr form)) 1)
         (error "Invalid number of arguments to 'include' (got ~D, expected 1)"
-               (length form)))
+               (length (cdr form))))
       (let* ((includee (lookup-included-filename (cadr form)))
              (*current-file* includee))
         (dolist (included-form (read-file includee))
