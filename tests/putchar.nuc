@@ -1,0 +1,4 @@
+; 0
+
+(defun main ()
+  (write-char 97))

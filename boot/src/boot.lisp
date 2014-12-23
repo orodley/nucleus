@@ -16,7 +16,10 @@
       (llvm:write-bitcode-to-file *module* output-filename))))
 
 (defun compile-prelude ()
-  (dolist (form '((|defvar| |$status-code|)))
+  (dolist (form '((|defvar| |$status-code|)
+                  ;; TODO: this should locate the standard library rather than
+                  ;; assuming we're sitting next to it
+                  (|include| "../stdlib/lib")))
     (compile-toplevel-form form)))
 
 (defun compile-toplevel-form (form)

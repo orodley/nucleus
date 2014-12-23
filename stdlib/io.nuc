@@ -1,0 +1,7 @@
+;;;; This file defines all primitive functions relating to input and output.
+;;;; Mostly wrappers around runtime stuff with nicer names.
+
+(extern rt_putchar 1)
+
+(defun write-char (c)
+  (rt_putchar c))

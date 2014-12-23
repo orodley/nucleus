@@ -15,6 +15,7 @@ EOF
 
 output_ir=false
 output_asm=false
+run=false
 
 script_dir=$(dirname "$(realpath "$0")")
 
