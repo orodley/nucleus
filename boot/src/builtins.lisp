@@ -9,26 +9,43 @@
              (destructuring-bind ,lambda-list ,args-sym
                ,@body)))))
 
-(defun lisp-val<-int (lisp-val)
-  ; TODO: type checking
+(defun nuc-val<-int (nuc-val)
   (llvm::build-shl *builder*
-                   lisp-val
+                   nuc-val
                    (llvm-val<-int *lowtag-bits*)
-                   "lisp-val<-int"))
+                   "nuc-val<-int"))
 
-(defun int<-lisp-val (int)
+(defun int<-nuc-val (int)
   ; TODO: type checking
   (llvm::build-l-shr *builder*
                      int
                      (llvm-val<-int *lowtag-bits*)
-                     "int<-lisp-val"))
+                     "int<-nuc-val"))
+
+(defun nuc-val<-cons (cons)
+  (llvm:build-or
+    *builder*
+    (llvm:build-pointer-to-int *builder* cons *nuc-val* "nuc-val<-cons") 
+    (llvm-val<-int #b010)
+    "nuc-val<-cons"))
+
+(defun cons<-nuc-val (nuc-val)
+  ; TODO: type checking
+  (llvm:build-int-to-pointer
+    *builder*
+    (llvm:build-and *builder*
+                    nuc-val
+                    (llvm-val<-int (lognot (1- (ash 1 *lowtag-bits*))))
+                    "cons<-nuc-val")
+    *cons-cell-ptr*
+    "cons<-nuc-val"))
 
 (defmacro define-binary-op (name instruction)
   `(defbuiltin ,name (&rest operands)
      (let ((operands (mapcar (lambda (expr)
-                               (int<-lisp-val (compile-expr expr)))
+                               (int<-nuc-val (compile-expr expr)))
                              operands)))
-       (lisp-val<-int
+       (nuc-val<-int
          (reduce (lambda (lhs rhs)
                    (,instruction *builder* lhs rhs (string ',name)))
                  operands)))))
@@ -71,18 +88,17 @@
          (cdr-ptr (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")))
     (llvm:build-store *builder* (compile-expr car) car-ptr)
     (llvm:build-store *builder* (compile-expr cdr) cdr-ptr)
-    (llvm:build-pointer-to-int *builder* cons-ptr *nuc-val* "cast-cons")))
+    (nuc-val<-cons cons-ptr)))
 
 (defbuiltin |car| (cons)
-  (let ((cons-ptr (llvm:build-int-to-pointer
-                    *builder* (compile-expr cons) *cons-cell-ptr* "cast-cons")))
+  (let ((cons-ptr (cons<-nuc-val (compile-expr cons))))
+    (llvm:dump-value cons-ptr)
     (llvm:build-load *builder* 
                      (llvm:build-struct-gep *builder* cons-ptr 0 "car-ptr")
                      "car")))
 
 (defbuiltin |cdr| (cons)
-  (let ((cons-ptr (llvm:build-int-to-pointer
-                    *builder* (compile-expr cons) *cons-cell-ptr* "cast-cons")))
+  (let ((cons-ptr (cons<-nuc-val (compile-expr cons))))
     (llvm:build-load *builder* 
                      (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")
                      "cdr")))
