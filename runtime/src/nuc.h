@@ -8,8 +8,10 @@
 
 
 #define LOWTAG_BITS 3
+#define LOWTAG(x) (((uintptr_t)(x)) & 7)
 
 #define CONS_LOWTAG 2
+#define STRING_LOWTAG 4
 
 #define NUC_VAL_TO_INT(x) ((nuc_val)((x) >> LOWTAG_BITS))
 #define INT_TO_NUC_VAL(x) ((nuc_val)((x) << LOWTAG_BITS))
