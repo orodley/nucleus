@@ -10,6 +10,9 @@
 (defparameter *cons-cell* (llvm:struct-type
                             (list *nuc-val* *nuc-val*) nil))
 (defparameter *cons-cell-ptr* (llvm:pointer-type *cons-cell*))
+;; PORT: change size based on target
+(defparameter *size-t* (llvm:int-type 64))
+
 (defparameter *lowtag-bits* 3)
 (defparameter *llvm-lowtag-bits-const* 3)
 

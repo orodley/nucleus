@@ -57,10 +57,12 @@
   (apply #'append (mapcar func list)))
 
 (defun declare-function (name arity)
-  (llvm:add-function
-    *module* name
-    (llvm:function-type *nuc-val*
-                        (make-array arity :initial-element *nuc-val*))))
+  (apply #'extern-func name *nuc-val* (loop repeat arity collecting *nuc-val*)))
+
+(defun extern-func (name return-type &rest arg-types)
+  (llvm:add-function *module* name
+                     (llvm:function-type return-type
+                                         (map 'vector #'identity arg-types))))
 
 (defun compile-toplevel-form (form)
   (ecase (car form)
@@ -125,7 +127,18 @@
               (if const
                 const
                 (llvm:build-load *builder* (lookup-lvalue expr) (string expr)))))
-    (list (compile-form expr))))
+    (list (compile-form expr))
+    (string (llvm:build-call
+              *builder*
+              (extern-func "rt_make_string" *nuc-val* *size-t*
+                           (llvm:pointer-type (llvm:int-type 8)))
+              (list (llvm-val<-int (length expr))
+                    (llvm:build-gep
+                      *builder*
+                      (llvm:build-global-string *builder* expr "string-lit")
+                      (make-array (list 2) :initial-element (llvm-val<-int 0))
+                      "str-to-ptr"))
+              "make-literal-string"))))
 
 (defun lookup-lvalue (name)
   (let ((lexical-binding (cdr (assoc name *env*)))

@@ -1,0 +1,5 @@
+; 0
+; TODO: check stdout
+
+(defun main ()
+  (write-string-ln "foobar"))
