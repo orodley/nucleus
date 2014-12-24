@@ -1,0 +1,6 @@
+; 2
+
+(defun main ()
+  (set $status-code (set $foo 2)))
+
+(defvar $foo)

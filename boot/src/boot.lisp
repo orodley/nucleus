@@ -8,7 +8,8 @@
     (let ((*env* nil)
           (*current-file* input-filename))
       (compile-prelude)
-      (dolist (form (read-file input-filename))
+      (dolist (form (mappend #'process-toplevel-form
+                             (read-file input-filename)))
         (compile-toplevel-form form))
       (when dump-module-p
         (llvm:dump-module *module*))
@@ -16,43 +17,58 @@
       (llvm:write-bitcode-to-file *module* output-filename))))
 
 (defun compile-prelude ()
-  (dolist (form '((|defvar| |$status-code|)
+  (map nil #'compile-toplevel-form
+       (mappend #'process-toplevel-form
+                '((|defvar| |$status-code|)
                   ;; TODO: this should locate the standard library rather than
                   ;; assuming we're sitting next to it
-                  (|include| "../stdlib/lib")))
-    (compile-toplevel-form form)))
+                  (|include| "../stdlib/lib")))))
 
-(defun compile-toplevel-form (form)
+(defun process-toplevel-form (form)
   (ecase (car form)
     (|defun|
-      (compile-defun (cadr form) (caddr form) (cdddr form)))
-    (|defvar|
-      (when (/= (length form) 2)
-        (error "defvar doesn't yet support initializers"))
-      (compile-defvar (cadr form)))
+      (declare-function (string (cadr form)) (length (caddr form)))
+      (list form))
     (|extern|
       (when (/= (length (cdr form)) 2)
         (error "Invalid number of arguments to 'extern' (got ~D, expected 2)"
                (length (cdr form))))
-      (llvm:add-function
-        *module* (string (cadr form))
-        (llvm:function-type
-          *nuc-val*
-          (make-array (caddr form) :initial-element *nuc-val*))))
+      (declare-function (string (cadr form)) (caddr form))
+      nil)
+    (|defvar|
+      (when (/= (length form) 2)
+        (error "defvar doesn't yet support initializers"))
+      (unless (symbolp (cadr form))
+        (error "~S is not a valid variable name" (cadr form)))
+      (llvm:set-initializer
+        (llvm:add-global *module* *nuc-val* (string (cadr form)))
+        ; All globals are zeroed
+        (llvm-val<-int 0))
+      nil)
     (|include|
       (when (/= (length (cdr form)) 1)
         (error "Invalid number of arguments to 'include' (got ~D, expected 1)"
                (length (cdr form))))
       (let* ((includee (lookup-included-filename (cadr form)))
              (*current-file* includee))
-        (dolist (included-form (read-file includee))
-          (compile-toplevel-form included-form))))))
+        (mappend #'process-toplevel-form (read-file includee))))))
+
+(defun mappend (func list)
+  (apply #'append (mapcar func list)))
+
+(defun declare-function (name arity)
+  (llvm:add-function
+    *module* name
+    (llvm:function-type *nuc-val*
+                        (make-array arity :initial-element *nuc-val*))))
+
+(defun compile-toplevel-form (form)
+  (ecase (car form)
+    (|defun|
+      (compile-defun (cadr form) (caddr form) (cdddr form)))))
 
 (defun compile-defun (name args body)
-  (let* ((func-type (llvm:function-type
-                     *nuc-val*
-                     (make-array (length args) :initial-element *nuc-val*)))
-         (func (llvm:add-function *module* (string name) func-type)))
+  (let* ((func (llvm:named-function *module* (string name))))
     (map nil
          (lambda (param name)
            (setf (llvm:value-name param) (string name)))
@@ -88,14 +104,6 @@
       (llvm:dump-value func)
       (error "ICE compiling function ~S (failed llvm:verify-function)~%~
               Function has been dumped" name))))
-
-(defun compile-defvar (name)
-  (unless (symbolp name)
-    (error "~S is not a valid variable name" name))
-  (llvm:set-initializer
-    (llvm:add-global *module* *nuc-val* (string name))
-    ; All globals are zeroed
-    (llvm-val<-int 0)))
 
 (defun lookup-included-filename (includee)
   ;; Later we could have some predefined include paths or something.

@@ -1,0 +1,7 @@
+; 2
+
+(defun main ()
+  (set $status-code (foo)))
+
+(defun foo ()
+  2)
