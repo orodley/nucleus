@@ -133,6 +133,23 @@
       (llvm:position-builder *builder* after-block)
       (llvm:build-load *builder* bool "eq?"))))
 
+(defparameter *lambda-counter* 0)
+
+(defbuiltin |lambda| (simple-lambda-list &body body)
+  (let* ((name (intern (format nil "lambda_~D" (1- (incf *lambda-counter*)))))
+         (current-block (llvm:insertion-block *builder*))
+         (func (prog1
+                 (declare-function (string name) (length simple-lambda-list))
+                 (compile-defun name simple-lambda-list body))))
+    ;; COMPILE-DEFUN will change the builders position.
+    (llvm:position-builder-at-end *builder* current-block)
+    (llvm:build-call *builder*
+                     (extern-func "rt_make_lambda" *nuc-val* (llvm:int-type 64))
+                     (list (llvm:build-pointer-to-int *builder* func
+                                                      (llvm:int-type 64)
+                                                      "func-pointer-to-int"))
+                     "make-lambda")))
+
 
 ;;; The following should definitely be macros in the standard library, but
 ;;; for the bootstrap compiler it's easier to just define them in the compiler

@@ -1,0 +1,5 @@
+; 1
+
+(defun main ()
+  (let ((func (lambda () 1)))
+    (set $status-code (func))))

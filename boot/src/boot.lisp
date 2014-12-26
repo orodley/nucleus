@@ -6,7 +6,8 @@
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
     (let ((*env* nil)
-          (*current-file* input-filename))
+          (*current-file* input-filename)
+          (*lambda-counter* 0))
       (compile-prelude)
       (dolist (form (mappend #'process-toplevel-form
                              (read-file input-filename)))
@@ -126,7 +127,10 @@
     (symbol (let ((const (cdr (assoc expr *constants*))))
               (if const
                 const
-                (llvm:build-load *builder* (lookup-lvalue expr) (string expr)))))
+                (multiple-value-bind (binding bindingp) (lookup-lvalue expr)
+                  (if bindingp
+                    (llvm:build-load *builder* binding (string expr))
+                    (error "Undefined variable '~S'~%" expr))))))
     (list (compile-form expr))
     (string (llvm:build-call
               *builder*
@@ -144,22 +148,44 @@
   (let ((lexical-binding (cdr (assoc name *env*)))
         (global-binding (llvm:named-global *module* (string name))))
     (cond
-      (lexical-binding lexical-binding)
-      ((not (cffi:null-pointer-p global-binding)) global-binding)
-      (t (error "Undefined variable ~S" name)))))
+      (lexical-binding (values lexical-binding t))
+      ((not (cffi:null-pointer-p global-binding)) (values global-binding t))
+      (t (values nil nil)))))
 
 (defun compile-form (form)
   (let* ((name (car form))
          (args (cdr form))
          (builtin (gethash name *builtins*))
          (func (llvm:named-function *module* (string name))))
-    (cond
-      (builtin (funcall builtin args))
-      ((not (cffi:null-pointer-p func))
-       (llvm:build-call *builder* func
-                        (mapcar #'compile-expr args)
-                        (string name)))
-      (t (error "Don't know how to compile form ~S" form)))))
+    (multiple-value-bind (binding bindingp) (lookup-lvalue name)
+      (cond
+        (builtin (funcall builtin args))
+        ((not (cffi:null-pointer-p func))
+         (llvm:build-call *builder* func
+                          (mapcar #'compile-expr args)
+                          (string name)))
+        (bindingp
+          (llvm:build-call
+            *builder*
+            (llvm:build-int-to-pointer
+              *builder*
+              (llvm:build-and *builder*
+                              (llvm:build-load *builder* binding (string name))
+                              (llvm:build-not
+                                *builder*
+                                (llvm-val<-int
+                                  (loop for n from 0 below *lowtag-bits*
+                                        summing (ash 1 n)))
+                                "lowtag-remover")
+                              "remove-lowtag")
+              (llvm:pointer-type 
+                (llvm:function-type
+                  *nuc-val*
+                  (loop repeat (length args) collecting *nuc-val*)))
+              "nuc-val-to-func-pointer")
+            (mapcar #'compile-expr args)
+            "call-func-pointer"))
+        (t (error "Don't know how to compile form ~S" form))))))
 
 (defun read-file (filename)
   (let ((eof-value (gensym))
