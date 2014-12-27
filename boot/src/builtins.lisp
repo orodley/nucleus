@@ -142,7 +142,8 @@
                        (llvm:build-store
                          *builder* (compile-expr expr) var-on-stack)
                        (cons name var-on-stack)))
-                   clauses))))
+                   clauses)
+                 *env*)))
     (loop for cons on body
           for compiled-expr = (compile-expr (car cons))
           when (null (cdr cons))
