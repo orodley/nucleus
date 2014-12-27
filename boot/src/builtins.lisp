@@ -55,11 +55,45 @@
 (define-binary-op * llvm:build-mul)
 (define-binary-op >> llvm::build-l-shr)
 
+(defmacro define-comparison (name)
+  (let ((name-str (string name)))
+    `(defbuiltin ,name (lhs rhs)
+       (let ((lhs (compile-expr lhs))
+             (rhs (compile-expr rhs))
+             (true-block (llvm:append-basic-block *current-func*
+                                                  (format nil "~S-true" ',name)))
+             (false-block (llvm:append-basic-block *current-func*
+                                                   (format nil "~S-false" ',name)))
+             (after-block (llvm:append-basic-block *current-func*
+                                                   (format nil "~S-after" ',name))))
+         (llvm:build-cond-br
+           *builder*
+           ;; We don't bother shifting off the lowtag, as it doesn't effect ordering
+           (llvm:build-i-cmp *builder* ,(intern name-str "KEYWORD")
+                             lhs rhs ,name-str)
+           true-block
+           false-block)
+         (llvm:position-builder-at-end *builder* true-block)
+         (llvm:build-br *builder* after-block)
+         (llvm:position-builder-at-end *builder* false-block)
+         (llvm:build-br *builder* after-block)
+         (llvm:position-builder-at-end *builder* after-block)
+         (let ((phi (llvm:build-phi *builder* *nuc-val* (format nil "~S?" ',name))))
+           (llvm:add-incoming phi
+                              (list *true* *false*)
+                              (list true-block false-block))
+           phi)))))
+
+(define-comparison <)
+(define-comparison <=)
+(define-comparison >)
+(define-comparison >=)
+
 (defbuiltin |if| (condition then-form else-form)
   ;; TODO: use phi
-  (let ((then-block (llvm:append-basic-block *current-func* "then"))
-        (else-block (llvm:append-basic-block *current-func* "else"))
-        (after-block (llvm:append-basic-block *current-func* "after"))
+  (let ((then-block (llvm:append-basic-block *current-func* "if-then"))
+        (else-block (llvm:append-basic-block *current-func* "if-else"))
+        (after-block (llvm:append-basic-block *current-func* "if-after"))
         (if-value (llvm:build-alloca *builder* *nuc-val* "if-value")))
     (flet ((build-branch (form block)
              (llvm:position-builder *builder* block)
