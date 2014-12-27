@@ -3,4 +3,4 @@
 (include "io")
 (include "cons")
 
-(extern type 1)
+(extern rt_type 1 -> type)

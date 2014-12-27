@@ -25,7 +25,7 @@
 (defun nuc-val<-cons (cons)
   (llvm:build-or
     *builder*
-    (llvm:build-pointer-to-int *builder* cons *nuc-val* "nuc-val<-cons") 
+    (llvm:build-pointer-to-int *builder* cons *nuc-val* "nuc-val<-cons")
     (llvm-val<-int #b010)
     "nuc-val<-cons"))
 
@@ -119,13 +119,13 @@
 
 (defbuiltin |car| (cons)
   (let ((cons-ptr (cons<-nuc-val (compile-expr cons))))
-    (llvm:build-load *builder* 
+    (llvm:build-load *builder*
                      (llvm:build-struct-gep *builder* cons-ptr 0 "car-ptr")
                      "car")))
 
 (defbuiltin |cdr| (cons)
   (let ((cons-ptr (cons<-nuc-val (compile-expr cons))))
-    (llvm:build-load *builder* 
+    (llvm:build-load *builder*
                      (llvm:build-struct-gep *builder* cons-ptr 1 "cdr-ptr")
                      "cdr")))
 
@@ -133,8 +133,8 @@
   (let ((*env* (append
                  (mapcar
                    (lambda (clause)
-                     (let* ((name (car clause))
-                            (expr (cadr clause)) 
+                     (let* ((name (first clause))
+                            (expr (second clause))
                             (var-on-stack (llvm:build-alloca *builder*
                                                              *nuc-val*
                                                              (string name))))
@@ -173,7 +173,7 @@
   (let* ((name (intern (format nil "lambda_~D" (1- (incf *lambda-counter*)))))
          (current-block (llvm:insertion-block *builder*))
          (func (prog1
-                 (declare-function (string name) (length simple-lambda-list))
+                 (declare-function (mangle-name name) (length simple-lambda-list))
                  (compile-defun name simple-lambda-list body))))
     ;; COMPILE-DEFUN will change the builders position.
     (llvm:position-builder-at-end *builder* current-block)
@@ -183,6 +183,13 @@
                                                       (llvm:int-type 64)
                                                       "func-pointer-to-int"))
                      "make-lambda")))
+
+(defbuiltin |%raw-call| (name &rest args)
+  (llvm:build-call
+    *builder*
+    (declare-function (string name) (length args)) ; deliberately DON'T mangle
+    (mapcar #'compile-expr args)
+    "%raw-call"))
 
 
 ;;; The following should definitely be macros in the standard library, but
@@ -210,5 +217,5 @@
          (|cond|
            ,@(mapcar (lambda (clause)
                        ;; TODO: change once cond support multiple exprs
-                       (list `(|eq?| ,case-sym ,(car clause)) (cadr clause)))
+                       (list `(|eq?| ,case-sym ,(first clause)) (second clause)))
                      clauses))))))

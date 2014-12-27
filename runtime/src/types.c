@@ -2,7 +2,7 @@
 #include "assert.h"
 #include "nuc.h"
 
-nuc_val type(nuc_val val)
+nuc_val rt_type(nuc_val val)
 {
 	switch (LOWTAG(val))
 	{

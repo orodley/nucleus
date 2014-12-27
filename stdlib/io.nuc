@@ -1,17 +1,10 @@
 ;;;; This file defines all primitive functions relating to input and output.
 ;;;; Mostly wrappers around runtime stuff with nicer names.
 
-(extern rt_write_char 1)
-(defun write-char (c)
-  (rt_write_char c))
+(extern rt_write_char 1 -> write-char)
+(extern rt_write_string 1 -> write-string)
+(extern rt_write_string_ln 1 -> write-string-ln)
 
-(extern rt_write_string 1)
-(defun write-string (str)
-  (rt_write_string str))
-
-(extern rt_write_string_ln 1)
-(defun write-string-ln (str)
-  (rt_write_string_ln str))
 
 
 (defun print (sexp)

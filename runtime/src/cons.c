@@ -4,7 +4,7 @@
 #include "nuc.h"
 #include "gc.h"
 
-nuc_val cons(nuc_val car, nuc_val cdr)
+nuc_val rt_cons(nuc_val car, nuc_val cdr)
 {
 	Cons *c = gc_alloc(sizeof *c);
 	c->car = car;

@@ -28,21 +28,23 @@
 (defun process-toplevel-form (form)
   (ecase (car form)
     (|defun|
-      (declare-function (string (cadr form)) (length (caddr form)))
+      (declare-function (mangle-name (second form)) (length (third form)))
       (list form))
     (|extern|
-      (when (/= (length (cdr form)) 2)
-        (error "Invalid number of arguments to 'extern' (got ~D, expected 2)"
+      (when (/= (length (cdr form)) 4)
+        (error "Invalid number of arguments to 'extern' (got ~D, expected 4)"
                (length (cdr form))))
-      (declare-function (string (cadr form)) (caddr form))
-      nil)
+      (process-toplevel-form
+        (let ((args (loop repeat (third form) collecting (gensym))))
+          `(|defun| ,(fifth form) ,args
+             (|%raw-call| ,(second form) ,@args)))))
     (|defvar|
       (when (/= (length form) 2)
         (error "defvar doesn't yet support initializers"))
       (unless (symbolp (cadr form))
         (error "~S is not a valid variable name" (cadr form)))
       (llvm:set-initializer
-        (llvm:add-global *module* *nuc-val* (string (cadr form)))
+        (llvm:add-global *module* *nuc-val* (mangle-name (second form)))
         ; All globals are zeroed
         (llvm-val<-int 0))
       nil)
@@ -50,7 +52,7 @@
       (when (/= (length (cdr form)) 1)
         (error "Invalid number of arguments to 'include' (got ~D, expected 1)"
                (length (cdr form))))
-      (let* ((includee (lookup-included-filename (cadr form)))
+      (let* ((includee (lookup-included-filename (second form)))
              (*current-file* includee))
         (mappend #'process-toplevel-form (read-file includee))))))
 
@@ -60,6 +62,16 @@
 (defun declare-function (name arity)
   (apply #'extern-func name *nuc-val* (loop repeat arity collecting *nuc-val*)))
 
+(defun mangle-name (name)
+  (if (eq name '|main|)
+    (string name)
+    ;; Dead simple name-mangling scheme, just to avoid name collisions with
+    ;; stuff from the C standard library or anything else we may link against.
+    (format nil "nuc(~A)" name)))
+
+;; TODO: This should probably be merged with DECLARE-FUNCTION, we never need
+;; to delcare functions with argument or return types other than *NUC-VAL*
+;; anyway (how would we even use them?)
 (defun extern-func (name return-type &rest arg-types)
   (let ((func (llvm:named-function *module* name)))
     (if (not (cffi:null-pointer-p func))
@@ -71,10 +83,10 @@
 (defun compile-toplevel-form (form)
   (ecase (car form)
     (|defun|
-      (compile-defun (cadr form) (caddr form) (cdddr form)))))
+      (compile-defun (second form) (third form) (cdddr form)))))
 
 (defun compile-defun (name args body)
-  (let* ((func (llvm:named-function *module* (string name))))
+  (let* ((func (llvm:named-function *module* (mangle-name name))))
     (map nil
          (lambda (param name)
            (setf (llvm:value-name param) (string name)))
@@ -149,7 +161,7 @@
 
 (defun lookup-lvalue (name)
   (let ((lexical-binding (cdr (assoc name *env*)))
-        (global-binding (llvm:named-global *module* (string name))))
+        (global-binding (llvm:named-global *module* (mangle-name name))))
     (cond
       (lexical-binding (values lexical-binding t))
       ((not (cffi:null-pointer-p global-binding)) (values global-binding t))
@@ -159,14 +171,14 @@
   (let* ((name (car form))
          (args (cdr form))
          (builtin (gethash name *builtins*))
-         (func (llvm:named-function *module* (string name))))
+         (func (llvm:named-function *module* (mangle-name name))))
     (multiple-value-bind (binding bindingp) (lookup-lvalue name)
       (cond
         (builtin (funcall builtin args))
         ((not (cffi:null-pointer-p func))
          (llvm:build-call *builder* func
                           (mapcar #'compile-expr args)
-                          (string name)))
+                          (mangle-name name)))
         (bindingp
           (llvm:build-call
             *builder*
@@ -181,7 +193,7 @@
                                         summing (ash 1 n)))
                                 "lowtag-remover")
                               "remove-lowtag")
-              (llvm:pointer-type 
+              (llvm:pointer-type
                 (llvm:function-type
                   *nuc-val*
                   (loop repeat (length args) collecting *nuc-val*)))
