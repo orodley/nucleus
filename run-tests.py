@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 
 import collections
+import fnmatch
 import os
 import subprocess
 import sys
@@ -10,7 +11,10 @@ def main():
     if len(sys.argv) > 1:
         tests = sys.argv[1:]
     else:
-        tests = ["tests/" + test for test in os.listdir("tests")]
+        tests = []
+        for root, dirnames, filenames in os.walk('tests'):
+            for filename in fnmatch.filter(filenames, '*.nuc'):
+                tests.append(os.path.join(root, filename))
 
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
