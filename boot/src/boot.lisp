@@ -61,9 +61,12 @@
   (apply #'extern-func name *nuc-val* (loop repeat arity collecting *nuc-val*)))
 
 (defun extern-func (name return-type &rest arg-types)
-  (llvm:add-function *module* name
-                     (llvm:function-type return-type
-                                         (map 'vector #'identity arg-types))))
+  (let ((func (llvm:named-function *module* name)))
+    (if (not (cffi:null-pointer-p func))
+      func
+      (llvm:add-function
+        *module* name
+        (llvm:function-type return-type (map 'vector #'identity arg-types))))))
 
 (defun compile-toplevel-form (form)
   (ecase (car form)
