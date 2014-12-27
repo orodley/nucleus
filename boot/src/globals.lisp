@@ -23,9 +23,13 @@
          (llvm-val<-int (logior (ash x *lowtag-bits*) 1))))
   (defparameter *nil* (make-const 0))
   (defparameter *true* (make-const 1))
-  (defparameter *false* (make-const 2)))
+  (defparameter *false* (make-const 2))
+  (defparameter *fixnum-type* (make-const 3))
+  (defparameter *cons-type* (make-const 4)))
 
 (defparameter *constants*
   `((|nil| . ,*nil*)
     (|true| . ,*true*)
-    (|false| . ,*false*)))
+    (|false| . ,*false*)
+    (|fixnum-t| . ,*fixnum-type*)
+    (|cons-t| . ,*cons-type*)))

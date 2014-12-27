@@ -12,3 +12,8 @@
 (extern rt_write_string_ln 1)
 (defun write-string-ln (str)
   (rt_write_string_ln str))
+
+
+(defun print (sexp)
+  
+  )

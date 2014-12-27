@@ -22,6 +22,14 @@
 #define NUC_VAL_TO_INT(x) ((nuc_val)((x) >> LOWTAG_BITS))
 #define INT_TO_NUC_VAL(x) ((nuc_val)((x) << LOWTAG_BITS))
 
+#define MAKE_DISCRETE(x) ((nuc_val)(((x) << LOWTAG_BITS) | DISCRETE_LOWTAG))
+
+#define NIL MAKE_DISCRETE(0)
+#define TRUE MAKE_DISCRETE(1)
+#define FALSE MAKE_DISCRETE(2)
+#define FIXNUM_TYPE MAKE_DISCRETE(3)
+#define CONS_TYPE MAKE_DISCRETE(4)
+
 typedef uint64_t nuc_val;
 
 typedef struct Cons

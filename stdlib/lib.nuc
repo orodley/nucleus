@@ -2,3 +2,5 @@
 
 (include "io")
 (include "cons")
+
+(extern type 1)
