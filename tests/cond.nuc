@@ -1,0 +1,9 @@
+; 3
+
+(defun main ()
+  (set $status-code
+    (cond
+      ((eq? nil 2) 1)
+      (false 2)
+      (true 3)
+      ((eq? 1 1) 4))))

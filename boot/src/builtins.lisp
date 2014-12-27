@@ -159,3 +159,12 @@
   (compile-expr (reduce (lambda (a b) `(|cons| ,a ,b)) args
                         :from-end t
                         :initial-value '|nil|)))
+
+(defbuiltin |cond| (&rest clauses)
+  (compile-expr
+    (if (null clauses)
+      '|nil|
+      `(|if| ,(caar clauses)
+         ; TODO: progn
+         ,(cadar clauses)
+         (|cond| ,@(cdr clauses))))))
