@@ -119,7 +119,6 @@
 
 (defbuiltin |car| (cons)
   (let ((cons-ptr (cons<-nuc-val (compile-expr cons))))
-    (llvm:dump-value cons-ptr)
     (llvm:build-load *builder* 
                      (llvm:build-struct-gep *builder* cons-ptr 0 "car-ptr")
                      "car")))
