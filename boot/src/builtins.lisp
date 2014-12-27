@@ -168,3 +168,13 @@
          ; TODO: progn
          ,(cadar clauses)
          (|cond| ,@(cdr clauses))))))
+
+(defbuiltin |case| (expr &rest clauses)
+  (let ((case-sym (gensym "case")))
+    (compile-expr
+      `(|let| ((,case-sym ,expr))
+         (|cond|
+           ,@(mapcar (lambda (clause)
+                       ;; TODO: change once cond support multiple exprs
+                       (list `(|eq?| ,case-sym ,(car clause)) (cadr clause)))
+                     clauses))))))
