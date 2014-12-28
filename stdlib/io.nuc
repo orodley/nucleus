@@ -5,8 +5,24 @@
 (extern rt_write_string 1 -> write-string)
 (extern rt_write_string_ln 1 -> write-string-ln)
 
-
-
 (defun print (sexp)
-  
-  )
+  (case (type sexp)
+    (fixnum-t (print-fixnum sexp))
+    (cons-t (print-cons sexp))
+    (nil-t (write-string "nil"))
+    (bool-t
+      (write-string (if sexp "true" "false")))
+    ;; TODO: write some "panic" builtin and use it here
+    ))
+
+(defun print-fixnum (x)
+  (if (< x 10)
+    (write-char (+ x 48)) ; 48 = #\0
+    nil))
+
+(defun print-cons (c)
+  (write-string "(")
+  (print (car c))
+  (write-string " . ")
+  (print (cdr c))
+  (write-string ")"))

@@ -4,12 +4,21 @@
 
 nuc_val rt_type(nuc_val val)
 {
-	switch (LOWTAG(val))
-	{
+	switch (LOWTAG(val)) {
 	case FIXNUM_LOWTAG: return FIXNUM_TYPE;
 	case CONS_LOWTAG: return CONS_TYPE;
+	case EXTTAG_LOWTAG:
+		switch (EXTTAG(val)) {
+		case DISCRETE_EXTTAG:
+			switch (val) {
+			case NIL: return NIL_TYPE;
+			case TRUE: case FALSE: return BOOL_TYPE;
+			}
+
+			assert(!"This should never be reached");
+		case FLOAT_EXTTAG: return FLOAT_TYPE;
+		}
 	}
 
 	assert(!"This should never be reached");
-	return NIL;
 }
