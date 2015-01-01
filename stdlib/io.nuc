@@ -1,5 +1,4 @@
 ;;;; This file defines all primitive functions relating to input and output.
-;;;; Mostly wrappers around runtime stuff with nicer names.
 
 (extern rt_write_char 1 -> write-char)
 (extern rt_write_string 1 -> write-string)
@@ -13,16 +12,28 @@
     (bool-t
       (write-string (if sexp "true" "false")))
     ;; TODO: write some "panic" builtin and use it here
-    ))
+    (true
+      (panic! "AAAARRRGGHHH!"))))
 
 (defun print-fixnum (x)
   (if (< x 10)
     (write-char (+ x 48)) ; 48 = #\0
-    nil))
+    (panic! "Too big!!!")))
 
 (defun print-cons (c)
   (write-string "(")
   (print (car c))
-  (write-string " . ")
-  (print (cdr c))
-  (write-string ")"))
+  (%print-tail (cdr c)))
+
+(defun %print-tail (c)
+  (cond
+    ((nil? c)
+     (write-string ")"))
+    ((cons? c)
+     (write-string " ")
+     (print (car c))
+     (%print-tail (cdr c)))
+    (true
+     (write-string " . ")
+     (print c)
+     (write-string ")"))))

@@ -1,3 +1,9 @@
 ;;;; Everything to do with conses
 
 (extern rt_cons 2 -> cons)
+
+(defun cons? (x)
+  (eq? (type x) cons-t))
+
+(defun nil? (x)
+  (eq? x nil))

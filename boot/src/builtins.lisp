@@ -212,8 +212,7 @@
     (if (null clauses)
       '|nil|
       `(|if| ,(caar clauses)
-         ; TODO: progn
-         ,(cadar clauses)
+         (|progn| ,@(cdar clauses))
          (|cond| ,@(cdr clauses))))))
 
 (defbuiltin |case| (expr &rest clauses)

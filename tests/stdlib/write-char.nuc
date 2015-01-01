@@ -1,4 +1,3 @@
-; status-code: 0
 ; run-stdout: a
 
 (defun main ()

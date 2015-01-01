@@ -1,0 +1,8 @@
+; run-stdout: abc
+
+(defun main ()
+  (cond
+    (true
+      (write-char 97)
+      (write-char 98)
+      (write-char 99))))
