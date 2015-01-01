@@ -22,11 +22,13 @@
 (defun llvm-val<-int (int)
   (llvm:const-int *nuc-val* (format nil "~D" int) 10))
 
-(flet ((make-const (x)
-         (llvm-val<-int
-           (logior (ash x (+ *lowtag-bits* *exttag-bits*))
-                   (ash *discrete-exttag* *lowtag-bits*)
-                   *exttag-lowtag*))))
+;; We use MACROLET rather than FLET as MACROLET ensures its subforms are
+;; processed as toplevel forms and FLET doesn't.
+(macrolet ((make-const (x)
+             `(llvm-val<-int
+                (logior (ash ,x (+ *lowtag-bits* *exttag-bits*))
+                        (ash *discrete-exttag* *lowtag-bits*)
+                        *exttag-lowtag*))))
   (defparameter *nil* (make-const 0))
   (defparameter *true* (make-const 1))
   (defparameter *false* (make-const 2))
