@@ -1,0 +1,4 @@
+; 2
+
+(defun main ()
+  (set $status-code (+ (progn 1 1) (progn 1 1))))

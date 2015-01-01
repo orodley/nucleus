@@ -184,6 +184,12 @@
                                                       "func-pointer-to-int"))
                      "make-lambda")))
 
+(defbuiltin |progn| (&body body)
+  (loop for cons on body
+        for compiled = (compile-expr (car cons))
+        when (null (cdr cons))
+          return compiled))
+
 (defbuiltin |%raw-call| (name &rest args)
   (llvm:build-call
     *builder*
