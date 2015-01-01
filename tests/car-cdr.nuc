@@ -1,4 +1,4 @@
-; 3
+; status-code: 3
 
 (defun main ()
   (set $status-code (+ (car (cons 1 2))

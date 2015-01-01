@@ -1,4 +1,4 @@
-; 4
+; status-code: 4
 
 (defun main ()
   (set $status-code (if (< 1 2) (+ $status-code 1) 0))

@@ -1,4 +1,4 @@
-; 3
+; status-code: 3
 
 (defun id (x)
   x)

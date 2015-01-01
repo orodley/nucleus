@@ -1,4 +1,5 @@
-; 0
+; status-code: 0
+; run-stdout: foobar
 
 (defun main ()
   (write-string "foo")

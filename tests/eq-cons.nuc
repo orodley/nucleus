@@ -1,4 +1,4 @@
-; 1
+; status-code: 1
 
 (defun main ()
   (let ((c (cons 1 2)))

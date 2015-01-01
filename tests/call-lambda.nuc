@@ -1,4 +1,4 @@
-; 1
+; status-code: 1
 
 (defun main ()
   (let ((func (lambda () 1)))

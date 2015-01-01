@@ -1,5 +1,5 @@
-; 0
-; TODO: check stdout
+; status-code: 0
+; run-stdout: foobar
 
 (defun main ()
-  (write-string-ln "foobar"))
+  (write-string "foobar"))

@@ -1,4 +1,4 @@
-; 2
+; status-code: 2
 
 (defun main ()
   (set $status-code (if (eq? (type 2) fixnum-t) (+ 1 $status-code) 0))

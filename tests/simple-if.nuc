@@ -1,4 +1,4 @@
-; 1
+; status-code: 1
 
 (defun main ()
   (if true (set $status-code 1) (set $status-code 0)))

@@ -34,16 +34,7 @@ def main():
 
     for result in results:
         if not result['passed']:
-            print "\ntest '%s' failed:" % result['name']
-
-            if not result['compiled']:
-                print "compilation failed with stderr:"
-                print '\n'.join("    " + line for line in
-                        result['compile_stderr'].split('\n'))
-            else:
-                print "expected return code %d, got %d" % \
-                    (result['expected_return_code'], result['return_code'])
-
+            print "\ntest '%s' failed:\n%s" % (result['name'], result['error'])
 
 def run_test(test_file):
     result = {'name': test_file}
@@ -51,26 +42,53 @@ def run_test(test_file):
     temp_file = str(uuid.uuid4())
     nucc_proc = subprocess.Popen(["boot/nucc.sh", test_file, temp_file],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    result['compile_stdout'], result['compile_stderr'] = nucc_proc.communicate()
+    result['compile-stdout'], result['compile-stderr'] = nucc_proc.communicate()
     result['compiled'] = nucc_proc.returncode == 0
     if not result['compiled']:
         result['passed'] = False
+        result['error'] = "compilation failed with stderr:" + \
+            '\n'.join("    " + line for line in
+                    result['compile-stderr'].split('\n'))
         return result
 
     program_proc = subprocess.Popen(["./" + temp_file],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    result['run_stdout'], result['run_stderr'] = program_proc.communicate()
-    result['return_code'] = program_proc.returncode
+    result['run-stdout'], result['run-stderr'] = program_proc.communicate()
+    result['status-code'] = program_proc.returncode
     os.remove(temp_file)
 
     with open(test_file, 'r') as f:
-        result['expected_return_code'] = int(f.readline()[1:])
-    if result['return_code'] != result['expected_return_code']:
-        result['passed'] = False
-        return result
+        add_expectations(result, f)
 
     result['passed'] = True
+    if result['status-code'] != result['expected-status-code']:
+        result['passed'] = False
+        result['error'] = "expected return code %d, got %d" % \
+            (result['expected-status-code'], result['status-code'])
+    if result['run-stdout'] != result['expected-run-stdout']:
+        result['passed'] = False
+        result['error'] = "expected runtime stdout of %r, got %r" % \
+            (result['expected-run-stdout'], result['run-stdout'])
+
     return result
+
+def add_expectations(result, f):
+    lines = []
+    for line in f.readlines():
+        if line[0] == ';':
+            lines.append(line)
+        else:
+            break
+    result['expected-status-code'] = 0
+    result['expected-run-stdout'] = ''
+    for line in lines:
+        line = line[1:].strip()
+        expectation_type, expectation = [cmpt.strip() for cmpt in line.split(':')]
+
+        if expectation_type == 'status-code':
+            result['expected-status-code'] = int(expectation)
+        elif expectation_type == 'run-stdout':
+            result['expected-run-stdout'] = expectation.strip('"')
 
 def result_char(result):
     if result['passed']:

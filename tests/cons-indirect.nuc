@@ -1,4 +1,4 @@
-; 1
+; status-code: 1
 
 (defun foo (x)
   (set $status-code (car x)))

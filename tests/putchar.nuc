@@ -1,4 +1,5 @@
-; 0
+; status-code: 0
+; run-stdout: a
 
 (defun main ()
   (write-char 97))

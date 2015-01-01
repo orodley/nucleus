@@ -1,4 +1,4 @@
-; 48
+; status-code: 48
 
 (defun main ()
   (set $status-code (+ 16 32)))

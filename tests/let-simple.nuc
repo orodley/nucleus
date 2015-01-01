@@ -1,4 +1,4 @@
-; 1
+; status-code: 1
 
 (defun main ()
   (let ((a 1))

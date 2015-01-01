@@ -1,4 +1,4 @@
-; 2
+; status-code: 2
 
 (defun main ()
   (set $status-code (foo)))
