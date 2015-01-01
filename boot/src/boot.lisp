@@ -6,7 +6,13 @@
   (llvm:with-objects ((*builder* llvm:builder)
                       (*module* llvm:module output-filename))
     (let ((*env* nil)
-          (*current-file* input-filename)
+          (*current-file*
+            (pathname (pathname
+                        (if (char= (elt input-filename 0) #\/)
+                          input-filename
+                          (concatenate 'string
+                                       (namestring *default-pathname-defaults*)
+                                       input-filename)))))
           (*lambda-counter* 0))
       (compile-prelude)
       (dolist (form (mappend #'process-toplevel-form
@@ -20,10 +26,31 @@
 (defun compile-prelude ()
   (map nil #'compile-toplevel-form
        (mappend #'process-toplevel-form
-                '((|defvar| |$status-code|)
-                  ;; TODO: this should locate the standard library rather than
-                  ;; assuming we're sitting next to it
-                  (|include| "../stdlib/lib")))))
+                `((|defvar| |$status-code|)
+                  (|include| ,(find-stdlib))))))
+
+(defun find-stdlib ()
+  ;; Eventually we should have some smarter way of looking for this - for
+  ;; now we just keep looking in the parent dir until we find it
+  (loop with file-dir = (canonical (pathname-directory *current-file*))
+        ;; I think the fact that PATHNAME-DIRECTORY returns a list of strings
+        ;; is implementation-dependent, but we don't care as this is just the
+        ;; bootstrap compiler and it doesn't have to be portable.
+        for dir = file-dir then (butlast dir)
+        for stdlib = (make-pathname :directory (append dir '("stdlib"))
+                                    :name "lib"
+                                    :type "nuc")
+        when (probe-file stdlib) return stdlib
+        when (null (cdr dir)) return nil))
+
+;;; TODO: I feel like there should be a function for this, but I can't find it
+(defun canonical (dir)
+  (loop for cons on dir
+        if (member (second cons) '(:up :back))
+          do (setf cons (cdr cons))
+        else
+          collect (car cons)))
+
 
 (defun process-toplevel-form (form)
   (ecase (car form)
@@ -54,6 +81,8 @@
                (length (cdr form))))
       (let* ((includee (lookup-included-filename (second form)))
              (*current-file* includee))
+        (when (null includee)
+          (error "Could not find included file '~S'" (second form)))
         (mappend #'process-toplevel-form (read-file includee))))))
 
 (defun mappend (func list)
@@ -126,14 +155,15 @@
 (defun lookup-included-filename (includee)
   ;; Later we could have some predefined include paths or something.
   ;; For now it's just relative to the including file
-  (let* ((path (namestring
-                 (merge-pathnames
-                   includee (make-pathname
-                              :directory (pathname-directory *current-file*)))))
-         (extension (search ".nuc" path)))
-    (if extension
-      path
-      (concatenate 'string path ".nuc"))))
+  (unless (null includee)
+    (let* ((path (namestring
+                   (merge-pathnames
+                     includee (make-pathname
+                                :directory (pathname-directory *current-file*)))))
+           (extension (search ".nuc" path)))
+      (if extension
+        path
+        (concatenate 'string path ".nuc")))))
 
 (defun compile-expr (expr)
   (etypecase expr
