@@ -195,7 +195,18 @@
     (integer (compile-expr thing))
     (null (compile-expr '|nil|))
     (cons (compile-expr `(|cons| (|quote| ,(car thing))
-                                 (|quote| ,(cdr thing)))))))
+                                 (|quote| ,(cdr thing)))))
+    (symbol (llvm:build-call
+              *builder*
+              (extern-func "rt_intern_symbol" *nuc-val*
+                           (llvm:pointer-type (llvm:int-type 8)))
+              (list (llvm:build-gep
+                      *builder*
+                      (llvm:build-global-string *builder* (string thing)
+                                                "intern-const")
+                      (make-array (list 2) :initial-element (llvm-val<-int 0))
+                      "str-to-ptr"))
+              "intern-const"))))
 
 (defbuiltin |%raw-call| (name &rest args)
   (llvm:build-call
@@ -222,6 +233,7 @@
          (|progn| ,@(cdar clauses))
          (|cond| ,@(cdr clauses))))))
 
+;;; TODO: Support 'otherwise' as a default case.
 (defbuiltin |case| (expr &rest clauses)
   (let ((case-sym (gensym "case")))
     (compile-expr

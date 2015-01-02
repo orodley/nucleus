@@ -1,0 +1,4 @@
+; run-stdout: foobar
+
+(defun main ()
+  (print (quote foobar)))

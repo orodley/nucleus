@@ -8,6 +8,7 @@
 
 typedef uint64_t nuc_val;
 
+// TODO: A lot of these should probably be inline functions.
 #define LOWTAG_BITS 3
 #define LOWTAG_MASK ((nuc_val)((1 << LOWTAG_BITS) - 1))
 #define LOWTAG(x) (((nuc_val)(x)) & LOWTAG_MASK)
@@ -15,15 +16,18 @@ typedef uint64_t nuc_val;
 
 #define FIXNUM_LOWTAG 0
 #define CONS_LOWTAG 2
+// TODO: does this really need a lowtag or could we move it to an exttag?
+// it's just an integer index into the symbol table, so we probably don't need
+// all 63 bits just for that.
 #define SYMBOL_LOWTAG 3
 #define STRING_LOWTAG 4
 #define LAMBDA_LOWTAG 5
 #define FOREIGN_LOWTAG 6
 #define EXTTAG_LOWTAG 7
 
-// TODO: these should probably be inline functions.
 #define NUC_VAL_TO_INT(x) ((nuc_val)((x) >> LOWTAG_BITS))
 #define INT_TO_NUC_VAL(x) ((nuc_val)((x) << LOWTAG_BITS))
+
 #define EXTTAG_BITS 5
 #define EXTTAG_MASK ((nuc_val)((1 << (EXTTAG_BITS - 1)) - 1))
 #define EXTTAG(x) ((((nuc_val)(x)) >> LOWTAG_BITS) & EXTTAG_MASK)
@@ -45,6 +49,7 @@ typedef uint64_t nuc_val;
 #define NIL_TYPE MAKE_DISCRETE(5)
 #define BOOL_TYPE MAKE_DISCRETE(6)
 #define FLOAT_TYPE MAKE_DISCRETE(7)
+#define SYMBOL_TYPE MAKE_DISCRETE(8)
 
 typedef union Float_converter
 {
@@ -79,5 +84,12 @@ typedef struct String
 	uint64_t length;
 	char bytes[];
 } String;
+
+
+// Functions we want to use across the runtime.
+// All the functions that need to be called from the stdlib or have calls
+// inserted directly by the compiler have their own declarations in the
+// appropriate place, so these are the only ones we need to declare here.
+nuc_val rt_make_string(size_t length, char *bytes);
 
 #endif

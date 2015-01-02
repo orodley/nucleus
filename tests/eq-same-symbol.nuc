@@ -1,0 +1,5 @@
+; status-code: 2
+
+(defun main ()
+  (let ((sym (quote foo)))
+    (set $status-code (if (eq? sym sym) 2 1))))

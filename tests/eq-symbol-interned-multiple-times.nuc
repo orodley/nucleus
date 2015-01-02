@@ -1,0 +1,4 @@
+; status-code: 2
+
+(defun main ()
+  (set $status-code (if (eq? (quote foo) (quote foo)) 2 1)))

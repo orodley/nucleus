@@ -3,15 +3,17 @@
 (extern rt_write_char 1 -> write-char)
 (extern rt_write_string 1 -> write-string)
 (extern rt_write_string_ln 1 -> write-string-ln)
+(extern rt_symbol_to_string 1 -> string<-symbol)
+
 
 (defun print (sexp)
   (case (type sexp)
     (fixnum-t (print-fixnum sexp))
     (cons-t (print-cons sexp))
     (nil-t (write-string "nil"))
-    (bool-t
-      (write-string (if sexp "true" "false")))
-    ;; TODO: write some "panic" builtin and use it here
+    (bool-t (write-string (if sexp "true" "false")))
+    (symbol-t (write-string (string<-symbol sexp)))
+    ;; TODO: this doesn't actually work until we support 'otherwise' or something
     (true
       (panic! "AAAARRRGGHHH!"))))
 

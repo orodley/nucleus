@@ -37,7 +37,8 @@
   (defparameter *cons-type* (make-const 4))
   (defparameter *nil-type* (make-const 5))
   (defparameter *bool-type* (make-const 6))
-  (defparameter *float-type* (make-const 7)))
+  (defparameter *float-type* (make-const 7))
+  (defparameter *symbol-type* (make-const 8)))
 
 (defparameter *constants*
   `((|nil| . ,*nil*)
@@ -47,4 +48,5 @@
     (|cons-t| . ,*cons-type*)
     (|nil-t| . ,*nil-type*)
     (|bool-t| . ,*bool-type*)
-    (|float-t| . ,*float-type*)))
+    (|float-t| . ,*float-type*)
+    (|symbol-t| . ,*symbol-type*)))
