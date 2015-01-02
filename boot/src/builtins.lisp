@@ -190,6 +190,13 @@
         when (null (cdr cons))
           return compiled))
 
+(defbuiltin |quote| (thing)
+  (etypecase thing
+    (integer (compile-expr thing))
+    (null (compile-expr '|nil|))
+    (cons (compile-expr `(|cons| (|quote| ,(car thing))
+                                 (|quote| ,(cdr thing)))))))
+
 (defbuiltin |%raw-call| (name &rest args)
   (llvm:build-call
     *builder*

@@ -1,0 +1,5 @@
+; status-code: 3
+
+(defun main ()
+  (let ((c (quote (1 . 2))))
+    (set $status-code (+ (car c) (cdr c)))))

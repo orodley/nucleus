@@ -1,0 +1,4 @@
+; run-stdout: (1 2 3)
+
+(defun main ()
+  (print (quote (1 2 3))))

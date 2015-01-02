@@ -1,0 +1,4 @@
+; status-code: 23
+
+(defun main ()
+  (set $status-code (quote 23)))
