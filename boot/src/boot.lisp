@@ -218,6 +218,10 @@
       (cond
         (builtin (funcall builtin args))
         ((not (cffi:null-pointer-p func))
+         (unless (= (length args) (length (llvm:params func)))
+           (error
+             "Invalid number of arguments to function '~A' (got ~D, expected ~D)"
+             name (length args) (length (llvm:params func))))
          (llvm:build-call *builder* func
                           (mapcar #'compile-expr args)
                           (mangle-name name)))
