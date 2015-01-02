@@ -1,0 +1,4 @@
+; run-stdout: (1 2 . 3)
+
+(defun main ()
+  (print (cons 1 (cons 2 3))))
