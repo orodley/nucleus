@@ -39,16 +39,16 @@ def main():
 def run_test(test_file):
     result = {'name': test_file}
 
-    temp_file = str(uuid.uuid4())
+    temp_file = "%s_%s" % (test_file, str(uuid.uuid4()))
     nucc_proc = subprocess.Popen(["boot/nucc.sh", test_file, temp_file],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result['compile-stdout'], result['compile-stderr'] = nucc_proc.communicate()
     result['compiled'] = nucc_proc.returncode == 0
     if not result['compiled']:
         result['passed'] = False
-        result['error'] = "compilation failed with stderr:" + \
+        result['error'] = "compilation failed with stderr:\n" + \
             '\n'.join("    " + line for line in
-                    result['compile-stderr'].split('\n'))
+                result['compile-stderr'].split('\n'))
         return result
 
     program_proc = subprocess.Popen(["./" + temp_file],
@@ -56,6 +56,13 @@ def run_test(test_file):
     result['run-stdout'], result['run-stderr'] = program_proc.communicate()
     result['status-code'] = program_proc.returncode
     os.remove(temp_file)
+
+    if result['run-stderr'] != '':
+        result['passed'] = False;
+        result['error'] = "non-empty stderr at runtime:\n" + \
+            '\n'.join("    " + line for line in
+                result['run-stderr'].split('\n'))
+        return result
 
     with open(test_file, 'r') as f:
         add_expectations(result, f)
