@@ -13,7 +13,8 @@
                           (concatenate 'string
                                        (namestring *default-pathname-defaults*)
                                        input-filename)))))
-          (*lambda-counter* 0))
+          (*lambda-counter* 0)
+          (*initialisers* ()))
       (compile-prelude)
       (dolist (form (mappend #'process-toplevel-form
                              (read-file input-filename)))
@@ -66,14 +67,17 @@
           `(|defun| ,(fifth form) ,args
              (|%raw-call| ,(second form) ,@args)))))
     (|defvar|
-      (when (/= (length form) 2)
-        (error "defvar doesn't yet support initializers"))
-      (unless (symbolp (cadr form))
-        (error "~S is not a valid variable name" (cadr form)))
+      (unless (< 0 (length (cdr form)) 3)
+        (error "Invalid number of arguments to 'defvar' (got ~D, expected 1-2)"
+               (length (cdr form))))
+      (unless (symbolp (second form))
+        (error "~S is not a valid variable name" (second form)))
       (llvm:set-initializer
         (llvm:add-global *module* *nuc-val* (mangle-name (second form)))
         ; All globals are zeroed
         (llvm-val<-int 0))
+      (when (= (length (cdr form)) 2)
+        (push (cons (second form) (third form)) *initialisers*))
       nil)
     (|include|
       (when (/= (length (cdr form)) 1)
@@ -135,7 +139,15 @@
                    *env*))
           (*current-func* func))
       (when (null body)
+        ;; implicit nil return for empty functions
         (setf body (list '|nil|)))
+      (when (eq name '|main|)
+        ;; *INITIALISERS* is in reverse order, so when we process it we push
+        ;; each initialiser, reversing it back to correct order
+        (dolist (init *initialisers*)
+          ;; TODO: we could detect if the initialiser is a constant expression,
+          ;; and if so initialise it statically instead.
+          (push (list '|set| (car init) (cdr init)) body)))
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
             when (null (cdr cons))

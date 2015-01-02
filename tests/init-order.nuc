@@ -1,0 +1,6 @@
+; run-stdout: foobar
+
+(defvar a (write-string "foo"))
+(defvar b (write-string "bar"))
+
+(defun main ())
