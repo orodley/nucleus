@@ -1,0 +1,28 @@
+(extern rt_log10 1 -> log10)
+(extern rt_floor 1 -> floor)
+(extern rt_ceiling 1 -> ceiling)
+(extern rt_int_to_float 1 -> float<-int)
+
+(defun zero? (x)
+  (eq? x 0))
+
+(defun even? (x)
+  (eq? (% x 2) 0))
+
+(defun odd? (x)
+  (eq? (% x 2) 1))
+
+(defun 1+ (x)
+  (+ x 1))
+
+(defun 1- (x)
+  (- x 1))
+
+(defun expt (base power)
+  (%expt base power 1))
+
+(defun %expt (base power acc)
+  (cond
+    ((zero? power) acc)
+    ((even? power) (%expt (* base base) (/ power 2) acc))
+    (true (%expt base (- power 1) (* acc base)))))

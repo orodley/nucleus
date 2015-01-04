@@ -1,0 +1,6 @@
+; status-code: 64
+
+(defun main ()
+  ;; We use 6 as the power to ensure we hit all branches of expt, which
+  ;; uses repeated squaring.
+  (set $status-code (expt 2 6)))

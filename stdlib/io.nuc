@@ -20,7 +20,11 @@
 (defun print-fixnum (x)
   (if (< x 10)
     (write-char (+ x 48)) ; 48 = #\0
-    (panic! "Too big!!!")))
+    ;; TODO: move the expt call into the let once we have let*
+    (let ((ndigits (ceiling (log10 (float<-int x)))))
+      (write-char (+ (/ x (expt 10 (1- ndigits))) 48))
+      (print-fixnum (- x (* (/ x (expt 10 (1- ndigits)))
+                            (expt 10 (1- ndigits))))))))
 
 (defun print-cons (c)
   (write-string "(")

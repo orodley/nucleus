@@ -1,0 +1,4 @@
+; status-code: 12
+
+(defun main ()
+  (set $status-code (/ 1234 100)))

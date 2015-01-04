@@ -2,6 +2,7 @@
 
 (include "io")
 (include "cons")
+(include "math")
 (include "misc")
 
 (extern rt_type 1 -> type)

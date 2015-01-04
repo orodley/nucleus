@@ -5,6 +5,7 @@
 #define NUC_H_
 
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef uint64_t nuc_val;
 

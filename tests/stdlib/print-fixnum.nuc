@@ -1,0 +1,4 @@
+; run-stdout: 123
+
+(defun main ()
+  (print 123))

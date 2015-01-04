@@ -104,7 +104,7 @@ llc-3.5 -filetype=obj "$bc" -o "$obj"
 rm "$bc"
 
 # TODO: ld?
-gcc "$obj" -o "$output"
+clang -lm "$obj" -o "$output"
 if [ $? -ne 0 ]; then
 	echo Compilation failed, aborting
 	exit 1
