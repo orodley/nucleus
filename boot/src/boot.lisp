@@ -181,6 +181,7 @@
   (etypecase expr
     ;; TODO: limit on size
     (integer (llvm-val<-int (ash expr *lowtag-bits*)))
+    (character (llvm-val<-int (ash (char-code expr) *lowtag-bits*)))
     (symbol (let ((const (cdr (assoc expr *constants*))))
               (if const
                 const

@@ -1,0 +1,4 @@
+; status-code: 97
+
+(defun main ()
+  (set $status-code #\a))

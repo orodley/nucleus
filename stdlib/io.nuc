@@ -19,10 +19,10 @@
 
 (defun print-fixnum (x)
   (if (< x 10)
-    (write-char (+ x 48)) ; 48 = #\0
+    (write-char (+ x #\0))
     (let* ((ndigits (ceiling (log10 (float<-int x))))
            (multiplier (expt 10 (1- ndigits))))
-      (write-char (+ (/ x multiplier) 48))
+      (write-char (+ (/ x multiplier) #\0))
       (print-fixnum (- x (* (/ x multiplier) multiplier))))))
 
 (defun print-cons (c)
