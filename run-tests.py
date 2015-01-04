@@ -39,16 +39,34 @@ def main():
 def run_test(test_file):
     result = {'name': test_file}
 
+    with open(test_file, 'r') as f:
+        add_expectations(result, f)
+
     temp_file = "%s_%s" % (test_file, str(uuid.uuid4()))
     nucc_proc = subprocess.Popen(["boot/nucc.sh", test_file, temp_file],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result['compile-stdout'], result['compile-stderr'] = nucc_proc.communicate()
     result['compiled'] = nucc_proc.returncode == 0
+    if result['expected-compile-stderr'] != '':
+        # We use a fuzzy match as compile errors can be huge
+        if not result['expected-compile-stderr'] in result['compile-stderr']:
+            result['passed'] = False
+            if result['compiled']:
+                os.remove(temp_file)
+                result['error'] = "compilation succeeded when expected to fail"
+            else:
+                result['error'] = "expected compile stderr matching '%s', got:\n%s" \
+                    % (result['expected-compile-stderr'],
+                       indent(result['compile-stderr']))
+            return result
+        else:
+            result['passed'] = True
+            return result
+
     if not result['compiled']:
         result['passed'] = False
-        result['error'] = "compilation failed with stderr:\n" + \
-            '\n'.join("    " + line for line in
-                result['compile-stderr'].split('\n'))
+        result['error'] = "compilation failed with stderr:\n" \
+            + indent(result['compile-stderr'])
         return result
 
     program_proc = subprocess.Popen(["./" + temp_file],
@@ -59,13 +77,9 @@ def run_test(test_file):
 
     if result['run-stderr'] != '':
         result['passed'] = False;
-        result['error'] = "non-empty stderr at runtime:\n" + \
-            '\n'.join("    " + line for line in
-                result['run-stderr'].split('\n'))
+        result['error'] = "non-empty stderr at runtime:\n" \
+            + indent(result['run-stderr'])
         return result
-
-    with open(test_file, 'r') as f:
-        add_expectations(result, f)
 
     result['passed'] = True
     if result['status-code'] != result['expected-status-code']:
@@ -88,6 +102,7 @@ def add_expectations(result, f):
             break
     result['expected-status-code'] = 0
     result['expected-run-stdout'] = ''
+    result['expected-compile-stderr'] = ''
     for line in lines:
         line = line[1:].strip()
         expectation_type, expectation = [cmpt.strip() for cmpt in line.split(':')]
@@ -96,6 +111,11 @@ def add_expectations(result, f):
             result['expected-status-code'] = int(expectation)
         elif expectation_type == 'run-stdout':
             result['expected-run-stdout'] = expectation.strip('"')
+        elif expectation_type == 'compile-stderr':
+            result['expected-compile-stderr'] = expectation.strip('"')
+
+def indent(str):
+    return '\n'.join("    " + line for line in str.split('\n'))
 
 def result_char(result):
     if result['passed']:

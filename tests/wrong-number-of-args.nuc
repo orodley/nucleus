@@ -1,0 +1,7 @@
+; compile-stderr: Invalid number of arguments to function 'foo' (got 2, expected 1)
+
+(defun foo (x)
+  x)
+
+(defun main ()
+  (foo 1 2))
