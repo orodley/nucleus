@@ -245,3 +245,9 @@
                        ;; TODO: change once cond support multiple exprs
                        (list `(|eq?| ,case-sym ,(first clause)) (second clause)))
                      clauses))))))
+
+(defbuiltin |let*| (clauses &body body)
+  (compile-expr
+    (if (null (cdr clauses))
+      `(|let| ,clauses ,@body)
+      `(|let| ,(list (first clauses)) (|let*| ,(rest clauses) ,@body)))))

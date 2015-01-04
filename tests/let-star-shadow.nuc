@@ -1,0 +1,8 @@
+; status-code: 6
+
+(defun main ()
+  (set $status-code
+       (let* ((x 1)
+              (x (+ x 2))
+              (x (+ x 3)))
+         x)))
