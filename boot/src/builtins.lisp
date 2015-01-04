@@ -218,36 +218,37 @@
     "%raw-call"))
 
 
-;;; The following should definitely be macros in the standard library, but
-;;; for the bootstrap compiler it's easier to just define them in the compiler
-;;; than it is to add a macro system
+;;; The following should definitely be in the standard library, but for the
+;;; bootstrap compiler it's easier to just define them in the compiler than it
+;;; is to add a macro system
 
-(defbuiltin |list| (&rest args)
-  (compile-expr (reduce (lambda (a b) `(|cons| ,a ,b)) args
-                        :from-end t
-                        :initial-value '|nil|)))
+(defmacro define-nuc-macro (name ll &body body)
+  `(defbuiltin ,name ,ll
+     (compile-expr (progn ,@body))))
 
-(defbuiltin |cond| (&rest clauses)
-  (compile-expr
-    (if (null clauses)
-      '|nil|
-      `(|if| ,(caar clauses)
-         (|progn| ,@(cdar clauses))
-         (|cond| ,@(cdr clauses))))))
+(define-nuc-macro |list| (&rest args)
+  (reduce (lambda (a b) `(|cons| ,a ,b)) args
+          :from-end t
+          :initial-value '|nil|))
+
+(define-nuc-macro |cond| (&rest clauses)
+  (if (null clauses)
+    '|nil|
+    `(|if| ,(caar clauses)
+       (|progn| ,@(cdar clauses))
+       (|cond| ,@(cdr clauses)))))
 
 ;;; TODO: Support 'otherwise' as a default case.
-(defbuiltin |case| (expr &rest clauses)
+(define-nuc-macro |case| (expr &rest clauses)
   (let ((case-sym (gensym "case")))
-    (compile-expr
-      `(|let| ((,case-sym ,expr))
-         (|cond|
-           ,@(mapcar (lambda (clause)
-                       ;; TODO: change once cond support multiple exprs
-                       (list `(|eq?| ,case-sym ,(first clause)) (second clause)))
-                     clauses))))))
+    `(|let| ((,case-sym ,expr))
+       (|cond|
+         ,@(mapcar (lambda (clause)
+                     ;; TODO: change once cond support multiple exprs
+                     (list `(|eq?| ,case-sym ,(first clause)) (second clause)))
+                   clauses)))))
 
-(defbuiltin |let*| (clauses &body body)
-  (compile-expr
-    (if (null (cdr clauses))
-      `(|let| ,clauses ,@body)
-      `(|let| ,(list (first clauses)) (|let*| ,(rest clauses) ,@body)))))
+(define-nuc-macro |let*| (clauses &body body)
+  (if (null (cdr clauses))
+    `(|let| ,clauses ,@body)
+    `(|let| ,(list (first clauses)) (|let*| ,(rest clauses) ,@body))))
