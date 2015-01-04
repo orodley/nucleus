@@ -1,0 +1,7 @@
+; run-stdout: ab
+
+(defun main ()
+  (and
+    (progn (write-char #\a) true)
+    (progn (write-char #\b) false)
+    (progn (write-char (/ 1 0)) true)))

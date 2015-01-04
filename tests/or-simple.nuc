@@ -1,0 +1,4 @@
+; status-code: 3
+
+(defun main ()
+  (set $status-code (if (or false true) 3 0)))

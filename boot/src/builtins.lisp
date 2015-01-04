@@ -252,3 +252,21 @@
   (if (null (cdr clauses))
     `(|let| ,clauses ,@body)
     `(|let| ,(list (first clauses)) (|let*| ,(rest clauses) ,@body))))
+
+(define-nuc-macro |and| (&rest operands)
+  (if (null operands)
+    '|true|
+    (let ((operand-sym (gensym)))
+      `(|let| ((,operand-sym ,(first operands)))
+         (|if| ,operand-sym
+           (|and| ,@(rest operands))
+           |false|)))))
+
+(define-nuc-macro |or| (&rest operands)
+  (if (null operands)
+    '|false|
+    (let ((operand-sym (gensym)))
+      `(|let| ((,operand-sym ,(first operands)))
+         (|if| ,operand-sym
+           |true|
+           (|or| ,@(rest operands)))))))
