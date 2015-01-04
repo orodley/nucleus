@@ -59,7 +59,7 @@
 
 (defmacro define-comparison (name)
   (let ((name-str (string name)))
-    `(defbuiltin ,name (lhs rhs)
+    `(defbuiltin ,(intern (format nil "binary-~A" name)) (lhs rhs)
        (let ((lhs (compile-expr lhs))
              (rhs (compile-expr rhs))
              (true-block (llvm:append-basic-block *current-func*
@@ -90,6 +90,20 @@
 (define-comparison <=)
 (define-comparison >)
 (define-comparison >=)
+
+(macrolet ((def (cmp)
+             `(defbuiltin ,cmp (&rest args)
+                (compile-expr
+                  `(|and|
+                     ,@(loop for cons on args
+                             until (null (cdr cons))
+                             collecting
+                               (list ',(intern (format nil "binary-~A" cmp))
+                                     (first cons) (second cons))))))))
+  (def <)
+  (def <=)
+  (def >)
+  (def >=))
 
 (defbuiltin |if| (condition then-form else-form)
   ;; TODO: use phi
