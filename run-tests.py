@@ -40,11 +40,11 @@ def run_test(test_file):
     result = {'name': test_file}
 
     with open(test_file, 'r') as f:
-        add_expectations(result, f)
+        process_header(result, f)
 
     temp_file = "%s_%s" % (test_file, str(uuid.uuid4()))
     nucc_proc = subprocess.Popen(["boot/nucc.sh", test_file, temp_file],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result['compile-stdout'], result['compile-stderr'] = nucc_proc.communicate()
     result['compiled'] = nucc_proc.returncode == 0
     if result['expected-compile-stderr'] != '':
@@ -70,8 +70,9 @@ def run_test(test_file):
         return result
 
     program_proc = subprocess.Popen(["./" + temp_file],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    result['run-stdout'], result['run-stderr'] = program_proc.communicate()
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    result['run-stdout'], result['run-stderr'] = \
+        program_proc.communicate(result['stdin'])
     result['status-code'] = program_proc.returncode
     os.remove(temp_file)
 
@@ -93,7 +94,7 @@ def run_test(test_file):
 
     return result
 
-def add_expectations(result, f):
+def process_header(result, f):
     lines = []
     for line in f.readlines():
         if line[0] == ';':
@@ -103,6 +104,7 @@ def add_expectations(result, f):
     result['expected-status-code'] = 0
     result['expected-run-stdout'] = ''
     result['expected-compile-stderr'] = ''
+    result['stdin'] = ''
     for line in lines:
         line = line[1:].strip()
         expectation_type, expectation = [cmpt.strip() for cmpt in line.split(':')]
@@ -113,6 +115,8 @@ def add_expectations(result, f):
             result['expected-run-stdout'] = expectation.strip('"')
         elif expectation_type == 'compile-stderr':
             result['expected-compile-stderr'] = expectation.strip('"')
+        elif expectation_type == 'stdin':
+            result['stdin'] = expectation.strip('"')
 
 def indent(str):
     return '\n'.join("    " + line for line in str.split('\n'))
