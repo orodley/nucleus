@@ -52,9 +52,9 @@
     ((nil? $unread-char)
      (read-char))
     (true
-     (let ((c $unread-char))
-       (set $unread-char nil)
-       c))))
+      (let ((c $unread-char))
+        (set $unread-char nil)
+        c))))
 
 (defun back-up-char (c)
   (if (nil? $unread-char)
@@ -65,21 +65,36 @@
 (defvar $eof (cons nil nil))
 
 (defun read ()
-  (let ((c (read-char)))
+  (let ((c (%read-char)))
     (cond
       ((<= #\0 c #\9) (read-fixnum (- c #\0)))
+      ((or (eq? c 32) (eq? c 10)) ; ' ' or '\n'
+       (read))
+      ((eq? c #\()
+       (let ((list-head (cons nil nil)))
+         (read-list list-head)
+         (cdr list-head)))
       ((eof? c) $eof)
-      (true (panic! "Don't know how to deal with this case"))
-      )))
+      (true (panic! "Don't know how to deal with this case")))))
 
 (defun read-fixnum (acc)
-  (let ((c (read-char)))
+  (let ((c (%read-char)))
     (cond
       ((<= #\0 c #\9)
        (read-fixnum (+ (* acc 10) (- c #\0))))
       (true
-       (back-up-char c)
-       acc))))
+        (back-up-char c)
+        acc))))
+
+(defun read-list (list-head)
+  (let ((c (%read-char)))
+    (cond
+      ((eq? c #\)) nil)
+      (true
+        (back-up-char c)
+        (let ((next (read)))
+          (set-cdr list-head (cons next nil))
+          (read-list (cdr list-head)))))))
 
 (defun eof? (c)
   (< c 0))

@@ -1,0 +1,7 @@
+; stdin: (1 2 3 4)
+; status-code: 10
+
+(defun main ()
+  (set $status-code
+       (let ((l (read)))
+         (+ (car l) (cadr l) (caddr l) (cadddr l)))))
