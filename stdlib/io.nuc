@@ -1,6 +1,7 @@
 ;;;; This file defines all primitive functions relating to input and output.
 
 (extern rt_write_char 1 -> write-char)
+(extern rt_read_char 0 -> read-char)
 (extern rt_write_string 1 -> write-string)
 (extern rt_write_string_ln 1 -> write-string-ln)
 (extern rt_symbol_to_string 1 -> string<-symbol)
@@ -15,7 +16,7 @@
     (symbol-t (write-string (string<-symbol sexp)))
     ;; TODO: this doesn't actually work until we support 'otherwise' or something
     (true
-      (panic! "AAAARRRGGHHH!"))))
+      (panic! "Can't print this type"))))
 
 (defun print-fixnum (x)
   (if (< x 10)
@@ -42,3 +43,43 @@
      (write-string " . ")
      (print c)
      (write-string ")"))))
+
+
+(defvar $unread-char nil)
+
+(defun %read-char ()
+  (cond
+    ((nil? $unread-char)
+     (read-char))
+    (true
+     (let ((c $unread-char))
+       (set $unread-char nil)
+       c))))
+
+(defun back-up-char (c)
+  (if (nil? $unread-char)
+    (set $unread-char c)
+    (panic! "Tried to back up when there was already an unread char")))
+
+;;; When and only when EOF is reached, read returns a value eq? to this
+(defvar $eof (cons nil nil))
+
+(defun read ()
+  (let ((c (read-char)))
+    (cond
+      ((<= #\0 c #\9) (read-fixnum (- c #\0)))
+      ((eof? c) $eof)
+      (true (panic! "Don't know how to deal with this case"))
+      )))
+
+(defun read-fixnum (acc)
+  (let ((c (read-char)))
+    (cond
+      ((<= #\0 c #\9)
+       (read-fixnum (+ (* acc 10) (- c #\0))))
+      (true
+       (back-up-char c)
+       acc))))
+
+(defun eof? (c)
+  (< c 0))

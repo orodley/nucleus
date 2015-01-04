@@ -27,3 +27,8 @@ nuc_val rt_write_string_ln(nuc_val str_val)
 
 	return str_val;
 }
+
+nuc_val rt_read_char()
+{
+	return INT_TO_NUC_VAL(getchar());
+}

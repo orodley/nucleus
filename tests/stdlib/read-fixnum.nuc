@@ -1,0 +1,5 @@
+; stdin: 123
+; status-code: 123
+
+(defun main ()
+  (set $status-code (read)))
