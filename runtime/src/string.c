@@ -13,6 +13,17 @@ nuc_val rt_make_string(size_t length, char *bytes)
 	return ((nuc_val)str) | STRING_LOWTAG;
 }
 
+char *rt_nuc_str_to_c_str(nuc_val nuc_str)
+{
+	// TODO: type checking
+	String *str = (String *)REMOVE_LOWTAG(nuc_str);
+
+	char *c_str = gc_alloc(str->length + 1);
+	strncpy(c_str, str->bytes, str->length);
+	c_str[str->length] = '\0';
+	return c_str;
+}
+
 nuc_val rt_char_list_to_string(nuc_val char_list)
 {
 	if (char_list == NIL) {

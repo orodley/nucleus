@@ -9,18 +9,20 @@ Invoke the bootstrap compiler to compile the given nucleus source file.
     -h    display this help message
     -a    produce assembly output
     -i    produce LLVM IR output
-    -r    run the program immediately
+    -r    run the resulting executable immediately
+    -l    link against llvm
 EOF
 }
 
 output_ir=false
 output_asm=false
 run=false
+link_llvm=false
 
 script_dir=$(dirname "$(realpath "$0")")
 
 OPTIND=1
-while getopts 'hair' opt; do
+while getopts 'hairl' opt; do
 	case "$opt" in
 		h)
 			usage
@@ -34,6 +36,9 @@ while getopts 'hair' opt; do
 			;;
 		r)
 			run=true
+			;;
+		l)
+			link_llvm=true
 			;;
 		'?')
 			usage >&2
@@ -103,8 +108,13 @@ llc-3.5 -filetype=obj "$bc" -o "$obj"
 
 rm "$bc"
 
-# TODO: ld?
-clang -lm "$obj" -o "$output"
+link_flags="-lm $obj -o $output"
+if [ $link_llvm = true ]; then
+	link_flags="$link_flags `llvm-config-3.5 --ldflags --system-libs --libs core`"
+fi
+
+# We have to use g++ as the linker when linking against LLVM
+g++ $link_flags
 if [ $? -ne 0 ]; then
 	echo Compilation failed, aborting
 	exit 1

@@ -1,0 +1,8 @@
+; TODO: including a directory should look for 'lib' inside it
+(include "llvm/lib")
+
+(defun main ()
+  (let* ((builder (LLVMCreateBuilder))
+         (context (LLVMGetGlobalContext))
+         (module (LLVMModuleCreateWithNameInContext "test" context)))
+    (LLVMDumpModule module)))

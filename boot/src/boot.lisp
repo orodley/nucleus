@@ -87,7 +87,22 @@
              (*current-file* includee))
         (when (null includee)
           (error "Could not find included file '~S'" (second form)))
-        (mappend #'process-toplevel-form (read-file includee))))))
+        (mappend #'process-toplevel-form (read-file includee))))
+    (|cfun|
+      (when (/= (length (cdr form)) 4)
+        (error "Invalid number of arguments to 'cfun' (got ~D, expected 4)"
+               (length (cdr form))))
+      (let* ((name (second form))
+            (arg-types (third form))
+            (ret-type (fifth form))
+            (args (loop for n below (length arg-types)
+                            collecting (intern (format nil "~D" n)))))
+        (process-toplevel-form
+          `(|defun| ,name ,args
+             (|%extern-call|
+               ,(string name)
+               ,(mapcar #'cons arg-types args)
+               ,ret-type)))))))
 
 (defun mappend (func list)
   (apply #'append (mapcar func list)))
@@ -102,9 +117,6 @@
     ;; stuff from the C standard library or anything else we may link against.
     (format nil "nuc(~A)" name)))
 
-;; TODO: This should probably be merged with DECLARE-FUNCTION, we never need
-;; to delcare functions with argument or return types other than *NUC-VAL*
-;; anyway (how would we even use them?)
 (defun extern-func (name return-type &rest arg-types)
   (let ((func (llvm:named-function *module* name)))
     (if (not (cffi:null-pointer-p func))

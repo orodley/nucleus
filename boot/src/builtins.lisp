@@ -1,5 +1,7 @@
 (in-package boot)
 
+(declaim (optimize debug))
+
 (defvar *builtins* (make-hash-table))
 
 (defmacro defbuiltin (name lambda-list &body body)
@@ -10,35 +12,44 @@
                ,@body)))))
 
 (defun nuc-val<-int (nuc-val)
-  (llvm::build-shl *builder*
-                   nuc-val
-                   (llvm-val<-int *lowtag-bits*)
-                   "nuc-val<-int"))
+  (llvm::build-shl
+    *builder*
+    nuc-val
+    (llvm-val<-int *lowtag-bits*)
+    "nuc-val<-int"))
 
 (defun int<-nuc-val (int)
   ; TODO: type checking
-  (llvm::build-l-shr *builder*
-                     int
-                     (llvm-val<-int *lowtag-bits*)
-                     "int<-nuc-val"))
+  (llvm::build-l-shr
+    *builder*
+    int
+    (llvm-val<-int *lowtag-bits*)
+    "int<-nuc-val"))
 
 (defun nuc-val<-cons (cons)
+  (add-lowtag cons #b010))
+
+(defun add-lowtag (nuc-val tag)
   (llvm:build-or
     *builder*
-    (llvm:build-pointer-to-int *builder* cons *nuc-val* "nuc-val<-cons")
-    (llvm-val<-int #b010)
-    "nuc-val<-cons"))
+    (llvm:build-pointer-to-int *builder* nuc-val *nuc-val* "ptr-to-int")
+    (llvm-val<-int tag)
+    "add-lowtag"))
 
 (defun cons<-nuc-val (nuc-val)
   ; TODO: type checking
   (llvm:build-int-to-pointer
     *builder*
-    (llvm:build-and *builder*
-                    nuc-val
-                    (llvm-val<-int (lognot (1- (ash 1 *lowtag-bits*))))
-                    "cons<-nuc-val")
+    (remove-lowtag nuc-val)
     *cons-cell-ptr*
     "cons<-nuc-val"))
+
+(defun remove-lowtag (nuc-val)
+  (llvm:build-and
+    *builder*
+    nuc-val
+    (llvm-val<-int (lognot (1- (ash 1 *lowtag-bits*))))
+    "remove-lowtag"))
 
 (defmacro define-binary-op (name instruction)
   `(defbuiltin ,name (&rest operands)
@@ -227,10 +238,56 @@
 (defbuiltin |%raw-call| (name &rest args)
   (llvm:build-call
     *builder*
-    (declare-function (string name) (length args)) ; deliberately DON'T mangle
+    ;; deliberately DON'T mangle 
+    (declare-function (string name) (length args))
     (mapcar #'compile-expr args)
     "%raw-call"))
 
+(defbuiltin |%extern-call| (name args-alist return-type)
+  (nuc-val<-c-val
+    return-type
+    (llvm:build-call
+      *builder*
+      (apply #'extern-func
+             name
+             (llvm-type<-type-spec return-type)
+             (mapcar (lambda (entry)
+                       (llvm-type<-type-spec (car entry)))
+                     args-alist))
+      (mapcar (lambda (entry) (c-val<-nuc-val (car entry)
+                                              (compile-expr (cdr entry))))
+              args-alist)
+      (if (eq return-type '|void|)
+        ""
+        "%extern-call"))))
+
+(defun llvm-type<-type-spec (type)
+  (ecase type
+    (* *foreign-pointer*)
+    (|string| (llvm:pointer-type (llvm:int-type 8)))
+    (|void| (llvm:void-type))))
+
+(defun c-val<-nuc-val (type val)
+  (ecase type
+    (* (llvm:build-int-to-pointer *builder* (remove-lowtag val)
+                                  *foreign-pointer* "foreign-pointer<-nuc-val"))
+    (|string| ; char *
+      (llvm:build-call
+        *builder*
+        (extern-func "rt_nuc_str_to_c_str"
+                     (llvm:pointer-type (llvm:int-type 8))
+                     *nuc-val*)
+        (list val)
+        "c-val<-nuc-val"))))
+
+(defun nuc-val<-c-val (type val)
+  (ecase type
+    (* ; opaque pointer
+      (add-lowtag (llvm:build-pointer-to-int *builder* val *nuc-val*
+                    "nuc-val<-foreign-pointer")
+                  #b110))
+    (|void|
+      (compile-expr '|nil|))))
 
 ;;; The following should definitely be in the standard library, but for the
 ;;; bootstrap compiler it's easier to just define them in the compiler than it

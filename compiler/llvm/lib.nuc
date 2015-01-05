@@ -1,0 +1,7 @@
+(cfun LLVMGetGlobalContext () -> *)
+
+(cfun LLVMCreateBuilder () -> *)
+
+(cfun LLVMModuleCreateWithNameInContext (string *) -> *)
+(cfun LLVMDumpModule (*) -> void)
+(cfun LLVMDisposeModule (*) -> void)
