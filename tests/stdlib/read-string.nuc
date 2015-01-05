@@ -1,0 +1,5 @@
+; run-stdout: foobar
+; stdin: "foobar"
+
+(defun main ()
+  (write-string (read)))

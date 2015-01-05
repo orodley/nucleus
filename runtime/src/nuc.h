@@ -19,7 +19,7 @@ typedef uint64_t nuc_val;
 #define CONS_LOWTAG 2
 // TODO: does this really need a lowtag or could we move it to an exttag?
 // it's just an integer index into the symbol table, so we probably don't need
-// all 63 bits just for that.
+// all 61 bits just for that.
 #define SYMBOL_LOWTAG 3
 #define STRING_LOWTAG 4
 #define LAMBDA_LOWTAG 5

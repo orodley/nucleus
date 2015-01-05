@@ -72,6 +72,10 @@
        (read))
       ((or (eq? c 32) (eq? c 10)) ; ' ' or '\n'
        (read))
+      ((eq? c #\")
+       (let ((list-head (cons nil nil)))
+         (read-string list-head)
+         (string<-char-list (cdr list-head))))
       ((<= #\0 c #\9) (read-fixnum (- c #\0)))
       ((eq? c #\()
        (let ((list-head (cons nil nil)))
@@ -85,6 +89,14 @@
     (if (eq? c 10) ; '\n' 
       nil
       (skip-comment))))
+
+(defun read-string (list-head)
+  (let ((c (%read-char)))
+    (cond
+      ((eq? c #\") nil)
+      (true
+        (set-cdr list-head (cons c nil))
+        (read-string (cdr list-head))))))
 
 (defun read-fixnum (acc)
   (let ((c (%read-char)))

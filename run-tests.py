@@ -119,7 +119,7 @@ def process_header(result, f):
             result['stdin'] = escape_str(expectation)
 
 def escape_str(s):
-    return s.strip('"').replace('\\n', '\n')
+    return s.replace('\\n', '\n')
 
 def indent(str):
     return '\n'.join("    " + line for line in str.split('\n'))
