@@ -1,0 +1,5 @@
+; status-code: 1
+; stdin: foobar
+
+(defun main ()
+  (set $status-code (if (eq? (read) (quote foobar)) 1 0)))

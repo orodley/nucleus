@@ -1,10 +1,11 @@
-;;;; This file defines all primitive functions relating to input and output.
+;;;; This file defines all functions relating to input and output.
 
 (extern rt_write_char 1 -> write-char)
 (extern rt_read_char 0 -> read-char)
 (extern rt_write_string 1 -> write-string)
 (extern rt_write_string_ln 1 -> write-string-ln)
 (extern rt_symbol_to_string 1 -> string<-symbol)
+(extern rt_string_to_symbol 1 -> symbol<-string)
 
 
 (defun print (sexp)
@@ -59,6 +60,7 @@
 (defun back-up-char (c)
   (if (nil? $unread-char)
     (set $unread-char c)
+    ;; We should only ever need to do this once before reading another char
     (panic! "Tried to back up when there was already an unread char")))
 
 ;;; When and only when EOF is reached, read returns a value eq? to this
@@ -82,7 +84,10 @@
          (read-list list-head)
          (cdr list-head)))
       ((eof? c) $eof)
-      (true (panic! "Don't know how to deal with this case")))))
+      (true
+        (let ((list-head (cons c nil)))
+          (read-symbol list-head)
+          (symbol<-string (string<-char-list list-head)))))))
 
 (defun skip-comment ()
   (let ((c (%read-char)))
@@ -117,5 +122,18 @@
           (set-cdr list-head (cons next nil))
           (read-list (cdr list-head)))))))
 
+(defun read-symbol (list-head)
+  (let ((c (%read-char)))
+    (cond
+      ((symbol-char? c)
+       (set-cdr list-head (cons c nil))
+       (read-symbol (cdr list-head)))
+      (true
+        (back-up-char c)))))
+
 (defun eof? (c)
   (< c 0))
+
+(defun symbol-char? (c)
+  (and (not (eof? c))
+       (not (member? c (list #\; 32 10 #\" #\( #\))))))

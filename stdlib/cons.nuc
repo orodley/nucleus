@@ -5,12 +5,6 @@
 (extern rt_set_cdr 2 -> set-cdr)
 (extern rt_char_list_to_string 1 -> string<-char-list)
 
-(defun cons? (x)
-  (eq? (type x) cons-t))
-
-(defun nil? (x)
-  (eq? x nil))
-
 (defun caar (c) (car (car c)))
 (defun cadr (c) (car (cdr c)))
 (defun cdar (c) (cdr (car c)))
@@ -39,3 +33,15 @@
 (defun cddadr (c) (cdr (cdr (car (cdr c)))))
 (defun cdddar (c) (cdr (cdr (cdr (car c)))))
 (defun cddddr (c) (cdr (cdr (cdr (cdr c)))))
+
+(defun cons? (x)
+  (eq? (type x) cons-t))
+
+(defun nil? (x)
+  (eq? x nil))
+
+(defun member? (elem lizt)
+  (if (nil? lizt)
+    false
+    (or (eq? (car lizt) elem)
+        (member? elem (cdr lizt)))))

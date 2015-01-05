@@ -1,1 +1,5 @@
 (extern rt_panic 1 -> panic!)
+(extern rt_type 1 -> type)
+
+(defun not (bool)
+  (if bool false true))

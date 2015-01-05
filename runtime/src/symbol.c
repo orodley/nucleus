@@ -14,7 +14,7 @@ typedef struct Symbol_table
 
 static Symbol_table sym_tab;
 
-nuc_val rt_intern_symbol(char *symbol)
+nuc_val rt_intern_symbol(char *str)
 {
 	int symbol_pos = -1;
 	for (size_t i = 0; i < MAX_SYMBOLS; i++) {
@@ -23,10 +23,10 @@ nuc_val rt_intern_symbol(char *symbol)
 		if (*entry == 0) {
 			// Not found
 			// TODO: make a copy?
-			*entry = symbol;
+			*entry = str;
 			symbol_pos = i;
 			break;
-		} else if (strcmp(*entry, symbol) == 0) {
+		} else if (strcmp(*entry, str) == 0) {
 			// Found it
 			symbol_pos = i;
 			break;
@@ -52,4 +52,17 @@ nuc_val rt_symbol_to_string(nuc_val sym)
 	char *str = look_up_symbol(&sym_tab, index);
 
 	return rt_make_string(strlen(str), str);
+}
+
+nuc_val rt_string_to_symbol(nuc_val str_val)
+{
+	// TODO: type checking
+	String *str = (String *)REMOVE_LOWTAG(str_val);
+	char *c_str = malloc(str->length + 1);
+	strncpy(c_str, str->bytes, str->length);
+	c_str[str->length] = '\0';
+
+	nuc_val symbol = rt_intern_symbol(c_str);
+	free(str);
+	return symbol;
 }
