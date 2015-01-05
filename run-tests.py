@@ -112,11 +112,14 @@ def process_header(result, f):
         if expectation_type == 'status-code':
             result['expected-status-code'] = int(expectation)
         elif expectation_type == 'run-stdout':
-            result['expected-run-stdout'] = expectation.strip('"')
+            result['expected-run-stdout'] = escape_str(expectation)
         elif expectation_type == 'compile-stderr':
-            result['expected-compile-stderr'] = expectation.strip('"')
+            result['expected-compile-stderr'] = escape_str(expectation)
         elif expectation_type == 'stdin':
-            result['stdin'] = expectation.strip('"')
+            result['stdin'] = escape_str(expectation)
+
+def escape_str(s):
+    return s.strip('"').replace('\\n', '\n')
 
 def indent(str):
     return '\n'.join("    " + line for line in str.split('\n'))

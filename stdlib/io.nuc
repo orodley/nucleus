@@ -67,15 +67,24 @@
 (defun read ()
   (let ((c (%read-char)))
     (cond
-      ((<= #\0 c #\9) (read-fixnum (- c #\0)))
+      ((eq? c #\;)
+       (skip-comment)
+       (read))
       ((or (eq? c 32) (eq? c 10)) ; ' ' or '\n'
        (read))
+      ((<= #\0 c #\9) (read-fixnum (- c #\0)))
       ((eq? c #\()
        (let ((list-head (cons nil nil)))
          (read-list list-head)
          (cdr list-head)))
       ((eof? c) $eof)
       (true (panic! "Don't know how to deal with this case")))))
+
+(defun skip-comment ()
+  (let ((c (%read-char)))
+    (if (eq? c 10) ; '\n' 
+      nil
+      (skip-comment))))
 
 (defun read-fixnum (acc)
   (let ((c (%read-char)))

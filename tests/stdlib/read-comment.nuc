@@ -1,0 +1,6 @@
+; status-code: 23
+; stdin: 1 ; foobar \n 23
+
+(defun main ()
+  (read)
+  (set $status-code (read)))
