@@ -1,0 +1,7 @@
+; status-code: 3
+
+(defun main ()
+  (let ((a 1))
+    (let ((a 2))
+      (set $status-code a))
+    (set $status-code (+ $status-code a))))
