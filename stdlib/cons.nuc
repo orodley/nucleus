@@ -34,6 +34,15 @@
 (defun cdddar (c) (cdr (cdr (cdr (car c)))))
 (defun cddddr (c) (cdr (cdr (cdr (cdr c)))))
 
+(defun first (lizt) (car lizt))
+(defun second (lizt) (cadr lizt))
+(defun third (lizt) (caddr lizt))
+(defun fourth (lizt) (cadddr lizt))
+(defun fifth (lizt) (car (cddddr lizt)))
+(defun sixth (lizt) (cadr (cddddr lizt)))
+(defun seventh (lizt) (caddr (cddddr lizt)))
+(defun eighth (lizt) (cadddr (cddddr lizt)))
+
 (defun cons? (x)
   (eq? (type x) cons-t))
 
@@ -45,3 +54,17 @@
     false
     (or (eq? (car lizt) elem)
         (member? elem (cdr lizt)))))
+
+(defun length (lizt)
+  (%length lizt 0))
+
+(defun %length (lizt acc)
+  (if (nil? lizt)
+    acc
+    (%length (cdr lizt) (1+ acc))))
+
+(defun length-is? (lizt len)
+  (cond
+    ((< len 0) false)
+    ((nil? lizt) (eq? len 0))
+    (true (length-is? (cdr lizt) (1- len)))))

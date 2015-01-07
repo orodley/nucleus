@@ -176,14 +176,7 @@
               do (if (eq name '|main|)
                    (llvm:build-ret
                      *builder*
-                     (llvm:build-int-cast
-                       *builder*
-                       (llvm::build-l-shr *builder*
-                                          (compile-expr '|$status-code|)
-                                          (llvm-val<-int *lowtag-bits*)
-                                          "$status-code")
-                       (llvm:int-type 32)
-                       "downcast-status-code"))
+                     (c-val<-nuc-val '|int| (compile-expr '|$status-code|)))
                    (llvm:build-ret *builder* compiled-expr))))
     (unless (llvm:verify-function func)
       (llvm:dump-value func)

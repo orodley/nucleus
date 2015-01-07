@@ -265,7 +265,8 @@
   (ecase type
     (* *foreign-pointer*)
     (|string| (llvm:pointer-type (llvm:int-type 8)))
-    (|void| (llvm:void-type))))
+    (|void| (llvm:void-type))
+    (|int| (llvm:int-type 32))))
 
 (defun c-val<-nuc-val (type val)
   (ecase type
@@ -278,7 +279,17 @@
                      (llvm:pointer-type (llvm:int-type 8))
                      *nuc-val*)
         (list val)
-        "c-val<-nuc-val"))))
+        "c-val<-nuc-val"))
+    (|int| ; platform dependent int type
+      (llvm::build-int-cast
+        *builder*
+        (llvm::build-l-shr
+          *builder*
+          val
+          (llvm-val<-int *lowtag-bits*)
+          "shift-off-lowtag")
+        (llvm-type<-type-spec type)
+        "downcast-nuc-val-to-i32"))))
 
 (defun nuc-val<-c-val (type val)
   (ecase type
@@ -287,7 +298,11 @@
                     "nuc-val<-foreign-pointer")
                   #b110))
     (|void|
-      (compile-expr '|nil|))))
+      (compile-expr '|nil|))
+    (|int|
+      (add-lowtag
+        (llvm::build-int-cast *builder* val *nuc-val* "upcast-i32-to-nuc-val")
+        #b000))))
 
 ;;; The following should definitely be in the standard library, but for the
 ;;; bootstrap compiler it's easier to just define them in the compiler than it
