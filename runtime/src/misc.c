@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,4 +42,10 @@ void rt_store_argv(int32_t argc, char *argv[])
 nuc_val rt_get_argv()
 {
 	return argv_list;
+}
+
+nuc_val rt_get_stdin()
+{
+	assert(LOWTAG(stdin) == 0);
+	return ((nuc_val)stdin) | FOREIGN_LOWTAG;
 }

@@ -1,12 +1,14 @@
 ;;;; This file defines all functions relating to input and output.
 
 (extern rt_write_char 1 -> write-char)
-(extern rt_read_char 0 -> read-char)
+(extern rt_read_char 1 -> read-char-from-stream)
 (extern rt_write_string 1 -> write-string)
 (extern rt_write_string_ln 1 -> write-string-ln)
 (extern rt_symbol_to_string 1 -> string<-symbol)
 (extern rt_string_to_symbol 1 -> symbol<-string)
 
+(defun read-char ()
+  (read-char-from-stream $stdin))
 
 (defun print (sexp)
   (case (type sexp)
@@ -48,10 +50,10 @@
 
 (defvar $unread-char nil)
 
-(defun %read-char ()
+(defun %read-char (stream)
   (cond
     ((nil? $unread-char)
-     (read-char))
+     (read-char-from-stream stream))
     (true
       (let ((c $unread-char))
         (set $unread-char nil)
@@ -67,66 +69,69 @@
 (defvar $eof (cons nil nil))
 
 (defun read ()
-  (let ((c (%read-char)))
+  (read-from-stream $stdin))
+
+(defun read-from-stream (stream)
+  (let ((c (%read-char stream)))
     (cond
       ((eq? c #\;)
-       (skip-comment)
-       (read))
+       (skip-comment stream)
+       (read-from-stream stream))
       ((or (eq? c 32) (eq? c 10)) ; ' ' or '\n'
-       (read))
+       (read-from-stream stream))
       ((eq? c #\")
        (let ((list-head (cons nil nil)))
-         (read-string list-head)
+         (read-string stream list-head)
          (string<-char-list (cdr list-head))))
-      ((<= #\0 c #\9) (read-fixnum (- c #\0)))
+      ((<= #\0 c #\9) (read-fixnum stream (- c #\0)))
       ((eq? c #\()
        (let ((list-head (cons nil nil)))
-         (read-list list-head)
+         (read-list stream list-head)
          (cdr list-head)))
       ((eof? c) $eof)
       (true
         (let ((list-head (cons c nil)))
-          (read-symbol list-head)
+          (read-symbol stream list-head)
           (symbol<-string (string<-char-list list-head)))))))
 
-(defun skip-comment ()
-  (let ((c (%read-char)))
+(defun skip-comment (stream)
+  (let ((c (%read-char stream)))
     (if (not (eq? c 10)) ; '\n' 
-      (skip-comment))))
+      (skip-comment stream))))
 
-(defun read-string (list-head)
-  (let ((c (%read-char)))
+(defun read-string (stream list-head)
+  (let ((c (%read-char stream)))
     (cond
       ((eq? c #\") nil)
       (true
         (set-cdr list-head (cons c nil))
-        (read-string (cdr list-head))))))
+        (read-string stream (cdr list-head))))))
 
-(defun read-fixnum (acc)
-  (let ((c (%read-char)))
+(defun read-fixnum (stream acc)
+  (let ((c (%read-char stream)))
     (cond
       ((<= #\0 c #\9)
-       (read-fixnum (+ (* acc 10) (- c #\0))))
+       (read-fixnum stream (+ (* acc 10) (- c #\0))))
       (true
         (back-up-char c)
         acc))))
 
-(defun read-list (list-head)
-  (let ((c (%read-char)))
+(defun read-list (stream list-head)
+  (let ((c (%read-char stream)))
     (cond
       ((eq? c #\)) nil)
       (true
         (back-up-char c)
-        (let ((next (read)))
+        (let ((next (read-from-stream stream)))
           (set-cdr list-head (cons next nil))
-          (read-list (cdr list-head)))))))
+          (read-list stream (cdr list-head)))))))
 
-(defun read-symbol (list-head)
-  (let ((c (%read-char)))
+(defun read-symbol (stream list-head)
+  (let ((c (%read-char stream)))
     (cond
       ((symbol-char? c)
        (set-cdr list-head (cons c nil))
-       (read-symbol (cdr list-head)))
+       (read-symbol stream (cdr list-head)))
       (true
         (back-up-char c)))))
 

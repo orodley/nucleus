@@ -1,4 +1,7 @@
 ;;;; Functions for interacting with the operating system
 
-(extern rt_get_argv 0 -> get-argv)
-(defvar $argv (get-argv))
+(extern rt_get_argv 0 -> %get-argv)
+(defvar $argv (%get-argv))
+
+(extern rt_get_stdin 0 -> %get-stdin)
+(defvar $stdin (%get-stdin))
