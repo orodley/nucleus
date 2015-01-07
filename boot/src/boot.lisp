@@ -56,7 +56,10 @@
 (defun process-toplevel-form (form)
   (ecase (car form)
     (|defun|
-      (declare-function (mangle-name (second form)) (length (third form)))
+      (if (eq (second form) '|main|)
+        (extern-func "main" (llvm:int-type 32) (llvm:int-type 32)
+                     (llvm:pointer-type (llvm:pointer-type (llvm:int-type 8))))
+        (declare-function (mangle-name (second form)) (length (third form))))
       (list form))
     (|extern|
       (when (/= (length (cdr form)) 4)
@@ -112,7 +115,7 @@
 
 (defun mangle-name (name)
   (if (eq name '|main|)
-    (string name)
+    "main"
     ;; Dead simple name-mangling scheme, just to avoid name collisions with
     ;; stuff from the C standard library or anything else we may link against.
     (format nil "nuc(~A)" name)))
@@ -154,6 +157,13 @@
         ;; implicit nil return for empty functions
         (setf body (list '|nil|)))
       (when (eq name '|main|)
+        ;; Code to capture argv
+        (llvm:build-call
+          *builder*
+          (extern-func "rt_store_argv" (llvm:void-type) (llvm:int-type 32)
+                       (llvm:pointer-type (llvm:pointer-type (llvm:int-type 8))))
+          (map 'list #'identity (llvm:params func))
+          "")
         ;; *INITIALISERS* is in reverse order, so when we process it we push
         ;; each initialiser, reversing it back to correct order
         (dolist (init *initialisers*)
@@ -166,10 +176,14 @@
               do (if (eq name '|main|)
                    (llvm:build-ret
                      *builder*
-                     (llvm::build-l-shr *builder*
-                                        (compile-expr '|$status-code|)
-                                        (llvm-val<-int *lowtag-bits*)
-                                        "$status-code"))
+                     (llvm:build-int-cast
+                       *builder*
+                       (llvm::build-l-shr *builder*
+                                          (compile-expr '|$status-code|)
+                                          (llvm-val<-int *lowtag-bits*)
+                                          "$status-code")
+                       (llvm:int-type 32)
+                       "downcast-status-code"))
                    (llvm:build-ret *builder* compiled-expr))))
     (unless (llvm:verify-function func)
       (llvm:dump-value func)

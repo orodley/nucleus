@@ -1,0 +1,4 @@
+;;;; Functions for interacting with the operating system
+
+(extern rt_get_argv 0 -> get-argv)
+(defvar $argv (get-argv))

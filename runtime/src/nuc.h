@@ -92,5 +92,6 @@ typedef struct String
 // inserted directly by the compiler have their own declarations in the
 // appropriate place, so these are the only ones we need to declare here.
 nuc_val rt_make_string(size_t length, char *bytes);
+nuc_val rt_cons(nuc_val car, nuc_val cdr);
 
 #endif
