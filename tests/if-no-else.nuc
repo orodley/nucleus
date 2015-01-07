@@ -1,0 +1,6 @@
+; status-code: 3
+; run-stdout: nil
+
+(defun main ()
+  (print (if false 123))
+  (if true (set $status-code 3)))

@@ -116,7 +116,7 @@
   (def >)
   (def >=))
 
-(defbuiltin |if| (condition then-form else-form)
+(defbuiltin |if| (condition then-form &optional (else-form '|nil|))
   ;; TODO: use phi
   (let ((then-block (llvm:append-basic-block *current-func* "if-then"))
         (else-block (llvm:append-basic-block *current-func* "if-else"))

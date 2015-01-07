@@ -2,8 +2,7 @@
 (include "llvm/lib")
 
 (defun main ()
-  (if (nil? (cdr $argv))
-    nil
+  (if (not (nil? (cdr $argv)))
     (write-string (cadr $argv)))
   (let* ((builder (LLVMCreateBuilder))
          (context (LLVMGetGlobalContext))
