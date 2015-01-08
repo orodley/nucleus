@@ -30,3 +30,20 @@ nuc_val rt_set_cdr(nuc_val cons, nuc_val new_cdr)
 
 	return new_cdr;
 }
+
+size_t rt_list_length(Cons *cons)
+{
+	size_t len = 1;
+	Cons *tmp = cons;
+	for (;;) {
+		nuc_val next = tmp->cdr;
+		if (next == NIL)
+			break;
+
+		// TODO: type checking
+		tmp = (Cons *)REMOVE_LOWTAG(next);
+		len++;
+	}
+
+	return len;
+}

@@ -5,3 +5,7 @@
 (cfun LLVMModuleCreateWithNameInContext (string *) -> *)
 (cfun LLVMDumpModule (*) -> void)
 (cfun LLVMDisposeModule (*) -> void)
+
+(cfun LLVMAddFunction (*  string *) -> *)
+
+(cfun LLVMFunctionType (* array uint bool) -> *)

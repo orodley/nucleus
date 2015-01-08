@@ -266,7 +266,8 @@
     (* *foreign-pointer*)
     (|string| (llvm:pointer-type (llvm:int-type 8)))
     (|void| (llvm:void-type))
-    (|int| (llvm:int-type 32))))
+    ((|int| |uint| |bool|) (llvm:int-type 32))
+    (|array| (llvm:pointer-type *foreign-pointer*))))
 
 (defun c-val<-nuc-val (type val)
   (ecase type
@@ -280,7 +281,7 @@
                      *nuc-val*)
         (list val)
         "c-val<-nuc-val"))
-    (|int| ; platform dependent int type
+    ((|int| |uint|) ; platform dependent int type
       (llvm::build-int-cast
         *builder*
         (llvm::build-l-shr
@@ -289,7 +290,20 @@
           (llvm-val<-int *lowtag-bits*)
           "shift-off-lowtag")
         (llvm-type<-type-spec type)
-        "downcast-nuc-val-to-i32"))))
+        "downcast-nuc-val-to-int"))
+    (|bool|
+      (llvm::build-int-cast
+        *builder*
+        (llvm:build-i-cmp *builder* := val *true* "int<-bool")
+        (llvm-type<-type-spec '|int|)
+        "cast-cmp-result-to-int"))
+    (|array|
+      (llvm:build-call
+        *builder*
+        (extern-func "rt_list_to_array"
+                     (llvm:pointer-type *foreign-pointer*) *nuc-val*)
+        (list val)
+        "array<-list"))))
 
 (defun nuc-val<-c-val (type val)
   (ecase type
@@ -299,9 +313,9 @@
                   #b110))
     (|void|
       (compile-expr '|nil|))
-    (|int|
+    ((|int| |uint|)
       (add-lowtag
-        (llvm::build-int-cast *builder* val *nuc-val* "upcast-i32-to-nuc-val")
+        (llvm::build-int-cast *builder* val *nuc-val* "upcast-int-to-nuc-val")
         #b000))))
 
 ;;; The following should definitely be in the standard library, but for the

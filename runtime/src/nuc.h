@@ -51,6 +51,7 @@ typedef uint64_t nuc_val;
 #define BOOL_TYPE MAKE_DISCRETE(6)
 #define FLOAT_TYPE MAKE_DISCRETE(7)
 #define SYMBOL_TYPE MAKE_DISCRETE(8)
+#define FOREIGN_TYPE MAKE_DISCRETE(9)
 
 typedef union Float_converter
 {
@@ -93,5 +94,6 @@ typedef struct String
 // appropriate place, so these are the only ones we need to declare here.
 nuc_val rt_make_string(size_t length, char *bytes);
 nuc_val rt_cons(nuc_val car, nuc_val cdr);
+size_t rt_list_length(Cons *cons);
 
 #endif

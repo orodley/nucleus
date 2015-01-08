@@ -68,3 +68,9 @@
     ((< len 0) false)
     ((nil? lizt) (eq? len 0))
     (true (length-is? (cdr lizt) (1- len)))))
+
+(defun each (lizt func)
+  (if (not (nil? lizt))
+    (progn
+      (func (car lizt))
+      (each (cdr lizt) func))))
