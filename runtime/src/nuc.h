@@ -88,6 +88,9 @@ typedef struct String
 } String;
 
 
+#define CHECK(val, type_tag) \
+	rt_check_type(val, type_tag, __FILE__, __func__, __LINE__)
+
 // Functions we want to use across the runtime.
 // All the functions that need to be called from the stdlib or have calls
 // inserted directly by the compiler have their own declarations in the
@@ -95,5 +98,6 @@ typedef struct String
 nuc_val rt_make_string(size_t length, char *bytes);
 nuc_val rt_cons(nuc_val car, nuc_val cdr);
 size_t rt_list_length(Cons *cons);
+void rt_check_type(nuc_val val, int type_tag, const char *file, const char *func, int line);
 
 #endif

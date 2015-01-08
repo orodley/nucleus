@@ -20,7 +20,7 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 		return rt_make_string(0, &nothing);
 	}
 
-	// TODO: type checking
+	CHECK(char_list, CONS_LOWTAG);
 	Cons *cons = (Cons *)REMOVE_LOWTAG(char_list);
 	size_t len = rt_list_length(cons);
 
@@ -33,7 +33,7 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 		if (next == NIL)
 			break;
 
-		// TODO: type checking
+		CHECK(next, CONS_LOWTAG);
 		tmp = (Cons *)REMOVE_LOWTAG(next);
 		str_bytes[i++] = (char)NUC_VAL_TO_INT(tmp->car);
 	}

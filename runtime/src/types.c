@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "assert.h"
 #include "nuc.h"
 
@@ -23,4 +24,14 @@ nuc_val rt_type(nuc_val val)
 	}
 
 	assert(!"This should never be reached");
+}
+
+// TODO: doesn't handle exttags
+void rt_check_type(nuc_val val, int type_tag, const char *file, const char *func, int line)
+{
+	if (LOWTAG(val) != type_tag) {
+		printf("Wrong type given! Expected %d, got %d.\nError occured at "
+				"%s:%d in %s", type_tag, (int)LOWTAG(val), file, line, func);
+		exit(1);
+	}
 }

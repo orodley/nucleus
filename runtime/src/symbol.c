@@ -47,7 +47,7 @@ char *look_up_symbol(Symbol_table *table, int symbol_index)
 
 nuc_val rt_symbol_to_string(nuc_val sym)
 {
-	// TODO: type checking
+	CHECK(sym, SYMBOL_LOWTAG);
 	int index = sym >> LOWTAG_BITS;
 	char *str = look_up_symbol(&sym_tab, index);
 
@@ -56,7 +56,7 @@ nuc_val rt_symbol_to_string(nuc_val sym)
 
 nuc_val rt_string_to_symbol(nuc_val str_val)
 {
-	// TODO: type checking
+	CHECK(str_val, STRING_LOWTAG);
 	String *str = (String *)REMOVE_LOWTAG(str_val);
 	char *c_str = malloc(str->length + 1);
 	strncpy(c_str, str->bytes, str->length);

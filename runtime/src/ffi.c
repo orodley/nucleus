@@ -6,7 +6,7 @@
 
 char *rt_nuc_str_to_c_str(nuc_val nuc_str)
 {
-	// TODO: type checking
+	CHECK(nuc_str, STRING_LOWTAG);
 	String *str = (String *)REMOVE_LOWTAG(nuc_str);
 
 	char *c_str = gc_alloc(str->length + 1);
@@ -24,7 +24,7 @@ uint64_t *rt_list_to_array(nuc_val list)
 		return result;
 	}
 
-	// TODO: type checking
+	CHECK(list, CONS_LOWTAG);
 	Cons *cons = (Cons *)REMOVE_LOWTAG(list);
 	size_t len = rt_list_length(cons);
 	uint64_t *result = malloc(sizeof(*result) * (len + 1));
@@ -37,7 +37,7 @@ uint64_t *rt_list_to_array(nuc_val list)
 		if (next == NIL)
 			break;
 		
-		// TODO: type checking
+		CHECK(next, CONS_LOWTAG);
 		cons = (Cons *)REMOVE_LOWTAG(next);
 		result[i++] = REMOVE_LOWTAG(cons->car);
 	}
