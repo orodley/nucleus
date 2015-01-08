@@ -2,7 +2,7 @@
 
 usage() {
 	cat << EOF
-Usage: nucc.sh [-hai] <source file> [<output file>]
+Usage: nucc.sh [-hairl] <source file> [<output file>]
 
 Invoke the bootstrap compiler to compile the given nucleus source file.
 
