@@ -344,8 +344,7 @@
     `(|let| ((,case-sym ,expr))
        (|cond|
          ,@(mapcar (lambda (clause)
-                     ;; TODO: change once cond support multiple exprs
-                     (list `(|eq?| ,case-sym ,(first clause)) (second clause)))
+                     `((|eq?| ,case-sym ,(first clause)) ,@(rest clause)))
                    clauses)))))
 
 (define-nuc-macro |let*| (clauses &body body)

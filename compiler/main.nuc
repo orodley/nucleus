@@ -1,21 +1,38 @@
 ; TODO: including a directory should look for 'lib' inside it
 (include "llvm/lib")
 
+(defvar $builder)
+(defvar $module)
+
+(defvar $nuc-val-bits 64)
+(defvar $nuc-val (LLVMIntType $nuc-val-bits))
+
 (defun main ()
-  (if (length-is? $argv 2)
-    (let* ((input-filename (second $argv))
-           (stream (open input-filename))
-           (builder (LLVMCreateBuilder))
-           (context (LLVMGetGlobalContext))
-           (module (LLVMModuleCreateWithNameInContext input-filename context))
-           (first-form (read-from-stream stream)))
-      (write-string-ln "")
-      (close stream)
-      (process-form first-form)
-      (LLVMDumpModule module))
-    (write-string-ln "Usage: nucc <input filename>")))
+  (cond
+    ((length-is? $argv 2)
+     (set $builder (LLVMCreateBuilder))
+     (let* ((input-filename (second $argv))
+            (stream (open input-filename))
+            (context (LLVMGetGlobalContext))
+            (first-form (read-from-stream stream)))
+       (set $module (LLVMModuleCreateWithNameInContext input-filename context))
+       (write-string-ln "")
+       (close stream)
+       (process-form first-form)
+       (LLVMDumpModule $module)))
+    (true 
+      (write-string-ln "Usage: nucc <input filename>"))))
 
 (defun process-form (form)
-  (case (car form)
+  (case (first form)
     ((quote defun)
-     (write-string-ln "Processing DEFUN"))))
+     (write-string-ln "Processing DEFUN")
+     (declare-function (second form)
+                       $nuc-val
+                       (map (lambda (_) $nuc-val) (third form))))))
+
+(defun declare-function (name ret-type arg-types)
+  (LLVMAddFunction
+    $module
+    (string<-symbol name)
+    (LLVMFunctionType ret-type arg-types (length arg-types) false)))

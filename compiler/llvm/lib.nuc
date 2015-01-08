@@ -6,6 +6,7 @@
 (cfun LLVMDumpModule (*) -> void)
 (cfun LLVMDisposeModule (*) -> void)
 
-(cfun LLVMAddFunction (*  string *) -> *)
+(cfun LLVMAddFunction (* string *) -> *)
 
 (cfun LLVMFunctionType (* array uint bool) -> *)
+(cfun LLVMIntType (uint) -> *)

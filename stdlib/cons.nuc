@@ -69,8 +69,19 @@
     ((nil? lizt) (eq? len 0))
     (true (length-is? (cdr lizt) (1- len)))))
 
-(defun each (lizt func)
+(defun each (func lizt)
   (if (not (nil? lizt))
     (progn
       (func (car lizt))
-      (each (cdr lizt) func))))
+      (each func (cdr lizt)))))
+
+(defun map (func lizt)
+  (let ((list-head (cons nil nil)))
+    (%map list-head func lizt)
+    (cdr list-head)))
+
+(defun %map (list-head func lizt)
+  (if (not (nil? lizt))
+    (let ((next-list (cons (func (car lizt)) nil)))
+      (set-cdr list-head next-list)
+      (%map (cdr list-head) func (cdr lizt)))))
