@@ -6,6 +6,7 @@
 (extern rt_write_string_ln_to_stream 2 -> write-string-ln-to-stream)
 (extern rt_symbol_to_string 1 -> string<-symbol)
 (extern rt_string_to_symbol 1 -> symbol<-string)
+(extern rt_make_string_stream 1 -> make-string-stream)
 
 (defun read-char ()
   (read-char-from-stream $stdin))

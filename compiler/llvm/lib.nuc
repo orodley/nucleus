@@ -16,3 +16,4 @@
 
 
 (cfun LLVMBuildRetVoid (*) -> *)
+(cfun LLVMBuildRet (* *) -> *)

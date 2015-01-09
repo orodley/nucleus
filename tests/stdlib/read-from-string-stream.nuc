@@ -1,0 +1,4 @@
+; run-stdout: (1 2 3 4)
+
+(defun main ()
+  (print (read-from-stream (make-string-stream "(1 2 3 4)"))))

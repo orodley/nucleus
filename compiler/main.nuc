@@ -83,4 +83,13 @@
     (LLVMPositionBuilderAtEnd
       $builder
       (LLVMAppendBasicBlock func "entry"))
-    (LLVMBuildRetVoid $builder)))
+    (if (nil? (func-body func))
+      (LLVMBuildRetVoid $builder)
+      (each-cons (lambda (c)
+                   (let ((e (compile-expr (car c))))
+                     (if (nil? (cdr c))
+                       (LLVMBuildRet $builder e))))
+                 (func-body f)))))
+
+(defun compile-expr (e)
+  nil)
