@@ -4,4 +4,5 @@
 (include "cons")
 (include "math")
 (include "misc")
+(include "string")
 (include "os")

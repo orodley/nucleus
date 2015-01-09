@@ -42,3 +42,24 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 	free(str_bytes);
 	return string;
 }
+
+nuc_val rt_string_to_char_list(nuc_val string)
+{
+	CHECK(string, STRING_LOWTAG);
+
+	String *str = (String *)REMOVE_LOWTAG(string);
+	if (str->length == 0)
+		return NIL;
+
+	Cons *cons = gc_alloc(sizeof *cons);
+	cons->car = INT_TO_NUC_VAL(str->bytes[0]);
+	for (size_t i = 1; i < str->length; i++) {
+		Cons *next = gc_alloc(sizeof *cons);
+		next->car = INT_TO_NUC_VAL(str->bytes[i]);
+		cons->cdr = ((nuc_val)next) | CONS_LOWTAG;
+		cons = next;
+	}
+
+	cons->cdr = NIL;
+	return ((nuc_val)cons) | CONS_LOWTAG;
+}

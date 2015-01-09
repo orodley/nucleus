@@ -14,25 +14,60 @@
      (let* ((input-filename (second $argv))
             (stream (open input-filename))
             (context (LLVMGetGlobalContext))
-            (first-form (read-from-stream stream)))
+            (forms (read-all stream)))
        (set $module (LLVMModuleCreateWithNameInContext input-filename context))
        (write-string-ln "")
        (close stream)
-       (process-form first-form)
+       ;; TODO: Pass process-form directly once we support that.
+       (each (lambda (f) (process-form f)) forms)
        (LLVMDumpModule $module)))
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
 
+(defun read-all (stream)
+  (let ((list-head (cons nil nil)))
+    (%read-all list-head stream)
+    (cdr list-head)))
+
+(defun %read-all (list-head stream)
+  (let ((sexp (read-from-stream stream)))
+    (cond
+      ((not (eq? sexp $eof))
+       (set-cdr list-head (cons sexp nil))
+       (%read-all (cdr list-head) stream)))))
+
 (defun process-form (form)
   (case (first form)
     ((quote defun)
-     (write-string-ln "Processing DEFUN")
      (declare-function (second form)
                        $nuc-val
                        (map (lambda (_) $nuc-val) (third form))))))
 
 (defun declare-function (name ret-type arg-types)
-  (LLVMAddFunction
-    $module
-    (string<-symbol name)
-    (LLVMFunctionType ret-type arg-types (length arg-types) false)))
+  (let ((arity (length arg-types))
+        (name (string<-symbol name)))
+    (add-func (make-func name arity))
+    (LLVMAddFunction
+      $module
+      name
+      (LLVMFunctionType ret-type arg-types (length arg-types) false))))
+
+;;; TODO: Replace with a struct once they exist
+(defun make-func (name arity) (cons name arity))
+(defun func-name (func) (car func))
+(defun func-arity (func) (cdr func))
+
+;;; TODO: Replace with a hash table once that exists
+(defvar $functions nil)
+
+(defun add-func (f)
+  (cond
+    ((not (nil? (get-func (func-name f))))
+     (write-string "Duplicate definition of function '")
+     (write-string (func-name f))
+     (write-string-ln "'")
+     (panic! "Aborting"))
+    (true
+      (set $functions (cons f $functions)))))
+
+(defun get-func (name) (assoc name $functions))

@@ -1,0 +1,2 @@
+(defun string-eq? (s1 s2)
+  (list-eq? (char-list<-string s1) (char-list<-string s2)))

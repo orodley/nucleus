@@ -4,6 +4,7 @@
 (extern rt_set_car 2 -> set-car)
 (extern rt_set_cdr 2 -> set-cdr)
 (extern rt_char_list_to_string 1 -> string<-char-list)
+(extern rt_string_to_char_list 1 -> char-list<-string)
 
 (defun caar (c) (car (car c)))
 (defun cadr (c) (car (cdr c)))
@@ -85,3 +86,16 @@
     (let ((next-list (cons (func (car lizt)) nil)))
       (set-cdr list-head next-list)
       (%map (cdr list-head) func (cdr lizt)))))
+
+(defun assoc (kar alist)
+  (cond
+    ((nil? alist) nil)
+    ;; TODO: This shouldn't default to string-eq?
+    ((string-eq? (caar alist) kar) (car alist))
+    (true (assoc kar (cdr alist)))))
+
+(defun list-eq? (l1 l2)
+  (cond ((nil? l1) (nil? l2))
+        ((nil? l2) (nil? l1))
+        (true (and (eq? (car l1) (car l2))
+                   (list-eq? (cdr l1) (cdr l2))))))
