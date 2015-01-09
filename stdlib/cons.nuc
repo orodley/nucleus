@@ -90,8 +90,7 @@
 (defun assoc (kar alist)
   (cond
     ((nil? alist) nil)
-    ;; TODO: This shouldn't default to string-eq?
-    ((string-eq? (caar alist) kar) (car alist))
+    ((eq? (caar alist) kar) (car alist))
     (true (assoc kar (cdr alist)))))
 
 (defun list-eq? (l1 l2)
@@ -99,3 +98,12 @@
         ((nil? l2) (nil? l1))
         (true (and (eq? (car l1) (car l2))
                    (list-eq? (cdr l1) (cdr l2))))))
+
+(defun append! (l1 l2)
+  (%append! l1 l2)
+  l1)
+
+(defun %append! (l1 l2)
+  (if (nil? (cdr l1))
+     (set-cdr l1 l2)
+     (%append! (cdr l1) l2)))

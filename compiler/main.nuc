@@ -39,23 +39,27 @@
 (defun process-form (form)
   (case (first form)
     ((quote defun)
-     (declare-function (second form)
-                       $nuc-val
-                       (map (lambda (_) $nuc-val) (third form))))))
+     (let* ((name (second form))
+            (args (third form))
+            (arity (length args))
+            (body (cdddr form)))
+       (declare-function (string<-symbol (second form))
+                         $nuc-val
+                         (map (lambda (_) $nuc-val) (third form)))
+       (add-func (make-func name arity args body))))))
 
 (defun declare-function (name ret-type arg-types)
-  (let ((arity (length arg-types))
-        (name (string<-symbol name)))
-    (add-func (make-func name arity))
-    (LLVMAddFunction
-      $module
-      name
-      (LLVMFunctionType ret-type arg-types (length arg-types) false))))
+  (LLVMAddFunction
+    $module
+    name
+    (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-func (name arity) (cons name arity))
-(defun func-name (func) (car func))
-(defun func-arity (func) (cdr func))
+(defun make-func (name arity args body) (list name arity args body))
+(defun func-name (func) (first func))
+(defun func-arity (func) (second func))
+(defun func-args (func) (third func))
+(defun func-body (func) (fourth func))
 
 ;;; TODO: Replace with a hash table once that exists
 (defvar $functions nil)
@@ -64,10 +68,10 @@
   (cond
     ((not (nil? (get-func (func-name f))))
      (write-string "Duplicate definition of function '")
-     (write-string (func-name f))
+     (write-string (string<-symbol (func-name f)))
      (write-string-ln "'")
      (panic! "Aborting"))
     (true
-      (set $functions (cons f $functions)))))
+      (set $functions (cons (cons (func-name f) f) $functions)))))
 
 (defun get-func (name) (assoc name $functions))
