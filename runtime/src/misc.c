@@ -49,3 +49,9 @@ nuc_val rt_get_stdin()
 	assert(LOWTAG(stdin) == 0);
 	return ((nuc_val)stdin) | FOREIGN_LOWTAG;
 }
+
+nuc_val rt_get_stdout()
+{
+	assert(LOWTAG(stdout) == 0);
+	return ((nuc_val)stdout) | FOREIGN_LOWTAG;
+}

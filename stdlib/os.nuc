@@ -6,6 +6,9 @@
 (extern rt_get_stdin 0 -> %get-stdin)
 (defvar $stdin (%get-stdin))
 
+(extern rt_get_stdout 0 -> %get-stdout)
+(defvar $stdout (%get-stdout))
+
 (cfun fopen (string string) -> *)
 (defun open (filename)
   (fopen filename "r"))

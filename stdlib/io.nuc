@@ -1,51 +1,63 @@
 ;;;; This file defines all functions relating to input and output.
 
-(extern rt_write_char 1 -> write-char)
-(extern rt_read_char 1 -> read-char-from-stream)
-(extern rt_write_string 1 -> write-string)
-(extern rt_write_string_ln 1 -> write-string-ln)
+(extern rt_write_char_to_stream 2 -> write-char-to-stream)
+(extern rt_read_char_from_stream 1 -> read-char-from-stream)
+(extern rt_write_string_to_stream 2 -> write-string-to-stream)
+(extern rt_write_string_ln_to_stream 2 -> write-string-ln-to-stream)
 (extern rt_symbol_to_string 1 -> string<-symbol)
 (extern rt_string_to_symbol 1 -> symbol<-string)
 
 (defun read-char ()
   (read-char-from-stream $stdin))
 
+(defun write-char (c)
+  (write-char-to-stream $stdout c))
+
+(defun write-string (str)
+  (write-string-to-stream $stdout str))
+
+(defun write-string-ln (str)
+  (write-string-ln-to-stream $stdout str))
+
 (defun print (sexp)
+  (print-to-stream $stdout sexp))
+
+(defun print-to-stream (stream sexp)
   (case (type sexp)
-    (fixnum-t (print-fixnum sexp))
-    (cons-t (print-cons sexp))
-    (nil-t (write-string "nil"))
-    (bool-t (write-string (if sexp "true" "false")))
-    (symbol-t (write-string (string<-symbol sexp)))
+    (fixnum-t (print-fixnum stream sexp))
+    (cons-t (print-cons stream sexp))
+    (nil-t (write-string-to-stream stream "nil"))
+    (bool-t (write-string-to-stream stream (if sexp "true" "false")))
+    (symbol-t (write-string-to-stream stream (string<-symbol sexp)))
     ;; TODO: this doesn't actually work until we support 'otherwise' or something
     (true
       (panic! "Can't print this type"))))
 
-(defun print-fixnum (x)
+(defun print-fixnum (stream x)
   (if (< x 10)
     (write-char (+ x #\0))
     (let* ((ndigits (ceiling (log10 (float<-int x))))
            (multiplier (expt 10 (1- ndigits))))
-      (write-char (+ (/ x multiplier) #\0))
-      (print-fixnum (- x (* (/ x multiplier) multiplier))))))
+      (write-char-to-stream stream (+ (/ x multiplier) #\0))
+      (print-fixnum stream (- x (* (/ x multiplier) multiplier))))))
 
-(defun print-cons (c)
-  (write-string "(")
-  (print (car c))
-  (%print-tail (cdr c)))
+(defun print-cons (stream c)
+  (write-string-to-stream stream "(")
+  (print-to-stream stream (car c))
+  (%print-tail stream (cdr c)))
 
-(defun %print-tail (c)
+(defun %print-tail (stream c)
   (cond
     ((nil? c)
-     (write-string ")"))
+     (write-string-to-stream stream ")"))
     ((cons? c)
-     (write-string " ")
-     (print (car c))
-     (%print-tail (cdr c)))
+     (write-string-to-stream stream " ")
+     (print-to-stream stream (car c))
+     (%print-tail stream (cdr c)))
     (true
-     (write-string " . ")
-     (print c)
-     (write-string ")"))))
+     (write-string-to-stream stream " . ")
+     (print-to-stream stream c)
+     (write-string-to-stream stream ")"))))
 
 
 (defvar $unread-char nil)

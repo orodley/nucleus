@@ -76,6 +76,12 @@
       (func (car lizt))
       (each func (cdr lizt)))))
 
+(defun each-cons (func lizt)
+  (if (not (nil? lizt))
+    (progn
+      (func lizt)
+      (each func (cdr lizt)))))
+
 (defun map (func lizt)
   (let ((list-head (cons nil nil)))
     (%map list-head func lizt)
