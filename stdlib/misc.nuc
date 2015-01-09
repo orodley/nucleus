@@ -3,3 +3,7 @@
 
 (defun not (bool)
   (if bool false true))
+
+(defun assert! (condition message)
+  (if (not condition)
+    (panic! message)))

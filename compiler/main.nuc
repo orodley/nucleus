@@ -20,6 +20,7 @@
        (close stream)
        ;; TODO: Pass process-form directly once we support that.
        (each (lambda (f) (process-form f)) forms)
+       (each (lambda (f) (compile-function f)) $functions)
        (LLVMDumpModule $module)))
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
@@ -75,3 +76,11 @@
       (set $functions (cons (cons (func-name f) f) $functions)))))
 
 (defun get-func (name) (assoc name $functions))
+
+(defun compile-function (f)
+  (let ((func (LLVMGetNamedFunction $module (string<-symbol (func-name f)))))
+    (assert! (not (nil? func)) "Function should have been declared")
+    (LLVMPositionBuilderAtEnd
+      $builder
+      (LLVMAppendBasicBlock func "entry"))
+    (LLVMBuildRetVoid $builder)))

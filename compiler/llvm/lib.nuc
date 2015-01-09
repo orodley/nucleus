@@ -5,8 +5,14 @@
 (cfun LLVMModuleCreateWithNameInContext (string *) -> *)
 (cfun LLVMDumpModule (*) -> void)
 (cfun LLVMDisposeModule (*) -> void)
-
 (cfun LLVMAddFunction (* string *) -> *)
+(cfun LLVMGetNamedFunction (* string) -> *)
+
+(cfun LLVMAppendBasicBlock (* string) -> *)
+(cfun LLVMPositionBuilderAtEnd (* *) -> void)
 
 (cfun LLVMFunctionType (* array uint bool) -> *)
 (cfun LLVMIntType (uint) -> *)
+
+
+(cfun LLVMBuildRetVoid (*) -> *)
