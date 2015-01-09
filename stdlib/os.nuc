@@ -9,11 +9,5 @@
 (extern rt_get_stdout 0 -> %get-stdout)
 (defvar $stdout (%get-stdout))
 
-(cfun fopen (string string) -> *)
-(defun open (filename)
-  (fopen filename "r"))
-
-(cfun fclose (*) -> int)
-(defun close (stream)
-  (fclose stream)
-  nil)
+(extern rt_open 1 -> open)
+(extern rt_close 1 -> close)
