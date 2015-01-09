@@ -208,6 +208,9 @@ static void string_stream_ensure_room_for(String_stream *stream, size_t size)
 		new_buf = stream->chars;
 
 	memmove(new_buf, stream->chars + stream->read_pos, required_size);
+	if (new_buf != stream->chars)
+		free(stream->chars);
+
 	stream->capacity = new_buf_size;
 	stream->write_pos = stream->write_pos - stream->read_pos;
 	stream->read_pos = 0;
