@@ -7,6 +7,7 @@
 (extern rt_symbol_to_string 1 -> string<-symbol)
 (extern rt_string_to_symbol 1 -> symbol<-string)
 (extern rt_make_string_stream 1 -> make-string-stream)
+(extern rt_string_stream_to_string 1 -> string<-string-stream)
 
 (defun read-char ()
   (read-char-from-stream $stdin))
@@ -36,7 +37,7 @@
 
 (defun print-fixnum (stream x)
   (if (< x 10)
-    (write-char (+ x #\0))
+    (write-char-to-stream stream (+ x #\0))
     (let* ((ndigits (ceiling (log10 (float<-int x))))
            (multiplier (expt 10 (1- ndigits))))
       (write-char-to-stream stream (+ (/ x multiplier) #\0))

@@ -1,0 +1,6 @@
+; run-stdout: (1 2 3 4)
+
+(defun main ()
+  (let ((stream (make-string-stream "")))
+    (print-to-stream stream (list 1 2 3 4))
+    (write-string (string<-string-stream stream))))

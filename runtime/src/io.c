@@ -182,6 +182,16 @@ nuc_val rt_make_string_stream(nuc_val initial_contents_val)
 	return (nuc_val)stream | FOREIGN_LOWTAG;
 }
 
+nuc_val rt_string_stream_to_string(nuc_val stream_val)
+{
+	CHECK(stream_val, FOREIGN_LOWTAG);
+	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
+	String_stream *string_stream = &stream->impl.string_stream;
+
+	return rt_make_string(string_stream->write_pos - string_stream->read_pos,
+			string_stream->chars + string_stream->read_pos);
+}
+
 static void string_stream_ensure_room_for(String_stream *stream, size_t size)
 {
 	int diff = stream->write_pos + size - stream->capacity;
