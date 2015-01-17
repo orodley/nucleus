@@ -120,6 +120,8 @@
     ;; stuff from the C standard library or anything else we may link against.
     (format nil "nuc(~A)" name)))
 
+;;; TODO: Should probably rename this - it's not necessarily extern it can just
+;;; have types in it that aren't *nuc-val*'s
 (defun extern-func (name return-type &rest arg-types)
   (let ((func (llvm:named-function *module* name)))
     (if (not (cffi:null-pointer-p func))
@@ -155,7 +157,7 @@
           (*current-func* func))
       (when (null body)
         ;; implicit nil return for empty functions
-        (setf body (list '|nil|)))
+        (push '|nil| body))
       (when (eq name '|main|)
         ;; Code to capture argv
         (llvm:build-call
@@ -182,6 +184,44 @@
       (llvm:dump-value func)
       (error "ICE compiling function ~S (failed llvm:verify-function)~%~
               Function has been dumped" name))))
+
+(defun compile-lambda (name args body captured-vars)
+  (let* ((func (apply #'extern-func (mangle-name name) *nuc-val*
+                      (cons (llvm:pointer-type *closure*)
+                            (mapcar (constantly *nuc-val*) args))))
+         (closure-sym (gensym))
+         (args (cons closure-sym args)))
+    (when (null body)
+      (push '|nil| body))
+    (map nil
+         (lambda (param name)
+           (setf (llvm:value-name param) (string name)))
+         (llvm:params func)
+         args)
+    (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
+    (let* ((captures-array
+             (llvm:build-load
+               *builder*
+               (llvm:build-gep *builder* (elt (llvm:params func) 0)
+                               (map 'vector (lambda (n) (llvm-val<-int n 32))
+                                    (list 0 2))
+                               "get-captured-vars-from-closure")
+               ""))
+           (*env*
+             (append
+               (loop for name in captured-vars
+                     for i = 0 then (1+ i)
+                     collecting (cons name (llvm:build-gep
+                                             *builder*
+                                             captures-array
+                                             (vector (llvm-val<-int i))
+                                             "get-var-from-closure")))
+               *env*)))
+      (loop for cons on body
+            for compiled-expr = (compile-expr (car cons))
+            when (null (cdr cons))
+              do (llvm:build-ret *builder* compiled-expr)))
+    func))
 
 (defun lookup-included-filename (includee)
   ;; Later we could have some predefined include paths or something.
@@ -246,26 +286,34 @@
                           (mapcar #'compile-expr args)
                           (mangle-name name)))
         (bindingp
-          (llvm:build-call
-            *builder*
-            (llvm:build-int-to-pointer
+          ;; TODO: Runtime arity check
+          (let ((closure (llvm:build-int-to-pointer
+                           *builder*
+                           (remove-lowtag
+                             (llvm:build-load *builder* binding "get-closure"))
+                           (llvm:pointer-type *closure*)
+                           "cast-nuc-val-to-closure")))
+            (llvm:build-call
               *builder*
-              (llvm:build-and *builder*
-                              (llvm:build-load *builder* binding (string name))
-                              (llvm:build-not
-                                *builder*
-                                (llvm-val<-int
-                                  (loop for n from 0 below *lowtag-bits*
-                                        summing (ash 1 n)))
-                                "lowtag-remover")
-                              "remove-lowtag")
-              (llvm:pointer-type
-                (llvm:function-type
-                  *nuc-val*
-                  (loop repeat (length args) collecting *nuc-val*)))
-              "nuc-val-to-func-pointer")
-            (mapcar #'compile-expr args)
-            "call-func-pointer"))
+              (llvm:build-int-to-pointer
+                *builder*
+                ;; TODO: extract-value
+                (llvm:build-load
+                  *builder*
+                  (llvm:build-gep
+                           *builder*
+                           closure
+                           (map 'vector (lambda (n) (llvm-val<-int n 32)) (list 0 0))
+                           "get-func-pointer-from-closure")
+                  "load-func-pointer-from-struct")
+                (llvm:pointer-type
+                  (llvm:function-type
+                    *nuc-val*
+                    (cons (llvm:pointer-type *closure*)
+                          (loop repeat (length args) collecting *nuc-val*))))
+                "cast-to-correct-function-type")
+              (cons closure (mapcar #'compile-expr args))
+              "call-closure")))
         (t (error "Don't know how to compile form ~S" form))))))
 
 (defun read-file (filename)

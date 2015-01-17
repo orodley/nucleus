@@ -199,17 +199,52 @@
 (defbuiltin |lambda| (simple-lambda-list &body body)
   (let* ((name (intern (format nil "lambda_~D" (1- (incf *lambda-counter*)))))
          (current-block (llvm:insertion-block *builder*))
-         (func (prog1
-                 (declare-function (mangle-name name) (length simple-lambda-list))
-                 (compile-defun name simple-lambda-list body))))
+         (captures (find-captured-vars body *env*))
+         (func (compile-lambda name simple-lambda-list body (mapcar #'car captures))))
     ;; COMPILE-DEFUN will change the builders position.
     (llvm:position-builder-at-end *builder* current-block)
-    (llvm:build-call *builder*
-                     (extern-func "rt_make_lambda" *nuc-val* (llvm:int-type 64))
-                     (list (llvm:build-pointer-to-int *builder* func
-                                                      (llvm:int-type 64)
-                                                      "func-pointer-to-int"))
-                     "make-lambda")))
+    (let ((captures-array (llvm:build-alloca
+                            *builder*
+                            (llvm:array-type
+                              (llvm:pointer-type *nuc-val*)
+                              (length captures))
+                            "make-captures-array")))
+      (loop for capture in captures
+            for i = 0 then (1+ i)
+            ;; TODO: insert-value
+            do (llvm:build-store
+                 *builder*
+                 (cdr capture)
+                 (llvm:build-gep *builder* captures-array
+                                 (map 'vector #'llvm-val<-int (list 0 i))
+                                 "array-elt")))
+      (llvm:build-call *builder*
+                       (extern-func "rt_make_lambda" *nuc-val*
+                                    *uintptr* (llvm:int-type 8)
+                                    (llvm:int-type 32) *uintptr*)
+                       (list (llvm:build-pointer-to-int
+                               *builder* func *uintptr* "func-pointer-to-int")
+                             (llvm-val<-int (length simple-lambda-list) 8)
+                             (llvm-val<-int (length captures) 32)
+                             (llvm:build-pointer-to-int
+                               *builder* captures-array *uintptr* "array-to-int"))
+                       "make-lambda"))))
+
+(defun find-captured-vars (body vars-alist)
+  (cond
+    ((atom body)
+     (let ((binding (assoc body vars-alist)))
+       (if binding
+         (list binding)
+         nil)))
+    ((eq (car body) 'let)
+     (find-captured-vars
+       (third body)
+       ;; let can shadow variables, producing spurious captures
+       (remove-if (lambda (var-cell)
+                    (member (car var-cell) (second body) :key #'car))
+                  vars-alist)))
+    (t (mappend (lambda (body) (find-captured-vars body vars-alist)) body))))
 
 (defbuiltin |progn| (&body body)
   (loop for cons on body

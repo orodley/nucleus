@@ -1,0 +1,6 @@
+; status-code: 12
+
+(defun main ()
+  (let* ((x 12)
+         (f (lambda () x)))
+    (set $status-code (f))))

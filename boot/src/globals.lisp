@@ -15,7 +15,14 @@
                             (list *nuc-val* *nuc-val*) nil))
 (defparameter *cons-cell-ptr* (llvm:pointer-type *cons-cell*))
 ;; PORT: change size based on target
+;; TODO: should probably be using these more often
 (defparameter *size-t* (llvm:int-type 64))
+(defparameter *uintptr* (llvm:int-type 64))
+
+(defparameter *closure*
+  (llvm:struct-type
+    (list *uintptr* (llvm:int-type 8) (llvm:pointer-type *nuc-val*))
+    nil))
 
 (defparameter *lowtag-bits* 3)
 (defparameter *exttag-bits* 5)
@@ -23,8 +30,8 @@
 (defparameter *exttag-lowtag* #b111)
 (defparameter *discrete-exttag* #b00000)
 
-(defun llvm-val<-int (int)
-  (llvm:const-int *nuc-val* (format nil "~D" int) 10))
+(defun llvm-val<-int (int &optional (bits 64))
+  (llvm:const-int (llvm:int-type bits) (format nil "~D" int) 10))
 
 ;; We use MACROLET rather than FLET as MACROLET ensures its subforms are
 ;; processed as toplevel forms and FLET doesn't.
@@ -41,7 +48,9 @@
   (defparameter *nil-type* (make-const 5))
   (defparameter *bool-type* (make-const 6))
   (defparameter *float-type* (make-const 7))
-  (defparameter *symbol-type* (make-const 8)))
+  (defparameter *symbol-type* (make-const 8))
+  (defparameter *foreign-type* (make-const 9))
+  (defparameter *string-type* (make-const 10)))
 
 (defparameter *constants*
   `((|nil| . ,*nil*)
@@ -52,4 +61,6 @@
     (|nil-t| . ,*nil-type*)
     (|bool-t| . ,*bool-type*)
     (|float-t| . ,*float-type*)
-    (|symbol-t| . ,*symbol-type*)))
+    (|symbol-t| . ,*symbol-type*)
+    (|foreign-t| . ,*foreign-type*)
+    (|string-t| . ,*string-type*)))
