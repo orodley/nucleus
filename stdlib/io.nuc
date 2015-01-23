@@ -164,3 +164,21 @@
 (defun symbol-char? (c)
   (and (not (eof? c))
        (not (member? c (list #\; 32 10 #\" #\( #\))))))
+
+;;; TODO: Once we have varargs we should define this as a variable arity
+;;; function rather than having a compiler builtin.
+(defun %format (stream-spec format-str arg-list)
+  (let ((stream (case stream-spec
+                  (true $stdout)
+                  (nil (make-string-stream ""))
+                  (default stream-spec)))
+        (len (length format-str)))
+    (upto len
+          (lambda (i)
+            (let ((c (char-at format-str i)))
+              (cond
+                ((eq? c #\~)
+                 (assert! (not (nil? arg-list)) "Not enough args to format.")
+                 (print-to-stream stream (car arg-list))
+                 (set arg-list (cdr arg-list)))
+                (true (write-char-to-stream stream c))))))))

@@ -56,13 +56,15 @@
     (or (eq? (car lizt) elem)
         (member? elem (cdr lizt)))))
 
-(defun length (lizt)
-  (%length lizt 0))
+(defun length (seq)
+  (case (type seq)
+    (cons-t (%list-length seq 0))
+    (string-t (%string-length seq))))
 
-(defun %length (lizt acc)
+(defun %list-length (lizt acc)
   (if (nil? lizt)
     acc
-    (%length (cdr lizt) (1+ acc))))
+    (%list-length (cdr lizt) (1+ acc))))
 
 (defun length-is? (lizt len)
   (cond
@@ -70,12 +72,14 @@
     ((nil? lizt) (eq? len 0))
     (true (length-is? (cdr lizt) (1- len)))))
 
+;;; TODO: make into a macro
 (defun each (func lizt)
   (if (not (nil? lizt))
     (progn
       (func (car lizt))
       (each func (cdr lizt)))))
 
+;;; TODO: make into a macro
 (defun each-cons (func lizt)
   (if (not (nil? lizt))
     (progn

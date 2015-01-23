@@ -1,2 +1,5 @@
 (defun string-eq? (s1 s2)
   (list-eq? (char-list<-string s1) (char-list<-string s2)))
+
+(extern rt_string_length 1 -> %string-length)
+(extern rt_char_at 2 -> char-at)

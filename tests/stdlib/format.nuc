@@ -1,0 +1,4 @@
+; run-stdout: foo1bar2baz3
+
+(defun main ()
+  (format true "foo~bar~baz~" 1 2 3))

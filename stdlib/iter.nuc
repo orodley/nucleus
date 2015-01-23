@@ -1,0 +1,8 @@
+(defun upto (upper-bound func)
+  (%upto 0 upper-bound func))
+
+(defun %upto (n upper-bound func)
+  (if (not (eq? n upper-bound))
+    (progn
+      (func n)
+      (%upto (1+ n) upper-bound func))))

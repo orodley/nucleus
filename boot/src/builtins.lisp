@@ -410,3 +410,6 @@
          (|if| ,operand-sym
            |true|
            (|or| ,@(rest operands)))))))
+
+(define-nuc-macro |format| (stream-spec format-str &rest args)
+  `(|%format| ,stream-spec ,format-str (|quote| ,args)))

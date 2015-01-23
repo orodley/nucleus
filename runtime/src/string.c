@@ -13,6 +13,27 @@ nuc_val rt_make_string(size_t length, char *bytes)
 	return ((nuc_val)str) | STRING_LOWTAG;
 }
 
+nuc_val rt_string_length(nuc_val string)
+{
+	CHECK(string, STRING_LOWTAG);
+	return INT_TO_NUC_VAL(((String *)REMOVE_LOWTAG(string))->length);
+}
+
+nuc_val rt_char_at(nuc_val string_val, nuc_val index_val)
+{
+	CHECK(string_val, STRING_LOWTAG);
+	CHECK(index_val, FIXNUM_LOWTAG);
+	String *string = (String *)REMOVE_LOWTAG(string_val);
+	size_t index = NUC_VAL_TO_INT(index_val);
+
+	if (index >= string->length) {
+		fprintf(stderr, "Index %zd out of bounds for string\n", index);
+		exit(1);
+	}
+
+	return INT_TO_NUC_VAL(string->bytes[index]);
+}
+
 nuc_val rt_char_list_to_string(nuc_val char_list)
 {
 	if (char_list == NIL) {
