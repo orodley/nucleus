@@ -377,13 +377,15 @@
        (|progn| ,@(cdar clauses))
        (|cond| ,@(cdr clauses)))))
 
-;;; TODO: Support 'otherwise' as a default case.
 (define-nuc-macro |case| (expr &rest clauses)
   (let ((case-sym (gensym "case")))
     `(|let| ((,case-sym ,expr))
        (|cond|
          ,@(mapcar (lambda (clause)
-                     `((|eq?| ,case-sym ,(first clause)) ,@(rest clause)))
+                     `(,(if (eq (first clause) '|default|)
+                          '|true|
+                          `(|eq?| ,case-sym ,(first clause)))
+                        ,@(rest clause)))
                    clauses)))))
 
 (define-nuc-macro |let*| (clauses &body body)

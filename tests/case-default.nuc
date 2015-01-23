@@ -1,0 +1,8 @@
+; status-code: 3
+
+(defun main ()
+  (set $status-code
+       (case 0
+         (1 1)
+         (2 2)
+         (default 3))))

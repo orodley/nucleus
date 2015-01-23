@@ -31,8 +31,8 @@
     (nil-t (write-string-to-stream stream "nil"))
     (bool-t (write-string-to-stream stream (if sexp "true" "false")))
     (symbol-t (write-string-to-stream stream (string<-symbol sexp)))
-    ;; TODO: this doesn't actually work until we support 'otherwise' or something
-    (true
+    (foreign-t (%write-addr-to-stream stream sexp))
+    (default
       (panic! "Can't print this type"))))
 
 (defun print-fixnum (stream x)
