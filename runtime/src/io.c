@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
 #include "gc.h"
@@ -53,6 +54,8 @@ nuc_val rt_write_char_to_stream(nuc_val stream_val, nuc_val char_val)
 	return c;
 }
 
+static void write_bytes_to_stream(Stream *stream, char *bytes, size_t length);
+
 nuc_val rt_write_string_to_stream(nuc_val stream_val, nuc_val string_val)
 {
 	CHECK(stream_val, FOREIGN_LOWTAG);
@@ -60,25 +63,27 @@ nuc_val rt_write_string_to_stream(nuc_val stream_val, nuc_val string_val)
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 	String *string = (String *)REMOVE_LOWTAG(string_val);
 
+	write_bytes_to_stream(stream, string->bytes, string->length);
+	return string_val;
+}
+
+static void write_bytes_to_stream(Stream *stream, char *bytes, size_t length)
+{
 	switch (stream->type) {
 	case OS:
-		fwrite(string->bytes, 1, string->length, stream->impl.os_stream);
+		fwrite(bytes, 1, length, stream->impl.os_stream);
 		break;
 	case STRING:
 	{
 		String_stream *str_stream = &stream->impl.string_stream;
-		string_stream_ensure_room_for(str_stream, string->length);
-		strncpy(str_stream->chars + str_stream->write_pos,
-				string->bytes,
-				string->length);
-		str_stream->write_pos += string->length;
+		string_stream_ensure_room_for(str_stream, length);
+		strncpy(str_stream->chars + str_stream->write_pos, bytes, length);
+		str_stream->write_pos += length;
 		break;
 	}
 	default:
 		assert(!"Not implemented");
 	}
-
-	return string_val;
 }
 
 // TODO: move to stdlib
@@ -88,6 +93,23 @@ nuc_val rt_write_string_ln_to_stream(nuc_val stream, nuc_val string)
 	rt_write_char_to_stream(stream, INT_TO_NUC_VAL('\n'));
 
 	return string;
+}
+
+nuc_val rt_write_addr_to_stream(nuc_val stream_val, nuc_val obj)
+{
+	CHECK(stream_val, FOREIGN_LOWTAG);
+	CHECK(obj, FOREIGN_LOWTAG);
+	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
+
+#define SIZE (sizeof("#<foreign 0x0000000000000000>"))
+	char fmt[] = "#<foreign 0x%016" PRIxPTR ">";
+	char out[SIZE];
+	snprintf(out, SIZE, fmt, (uintptr_t)REMOVE_LOWTAG(obj));
+
+	write_bytes_to_stream(stream, out, SIZE - 1);
+#undef SIZE
+
+	return NIL;
 }
 
 nuc_val rt_read_char_from_stream(nuc_val stream_val)

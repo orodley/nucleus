@@ -9,6 +9,7 @@ nuc_val rt_type(nuc_val val)
 	case FIXNUM_LOWTAG: return FIXNUM_TYPE;
 	case CONS_LOWTAG: return CONS_TYPE;
 	case SYMBOL_LOWTAG:  return SYMBOL_TYPE;
+	case STRING_LOWTAG: return STRING_TYPE;
 	case FOREIGN_LOWTAG: return FOREIGN_TYPE;
 	case EXTTAG_LOWTAG:
 		switch (EXTTAG(val)) {
