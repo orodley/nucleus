@@ -21,7 +21,9 @@
 
 (defparameter *closure*
   (llvm:struct-type
-    (list *uintptr* (llvm:int-type 8) (llvm:pointer-type *nuc-val*))
+    (list *uintptr*
+          (llvm:int-type 8)
+          (llvm:array-type (llvm:pointer-type *nuc-val*) 0))
     nil))
 
 (defparameter *lowtag-bits* 3)

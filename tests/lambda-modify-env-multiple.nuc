@@ -1,0 +1,15 @@
+; run-stdout: 231
+
+(defun main ()
+  (let* ((a 1)
+         (b 2)
+         (c 3)
+         (f (lambda ()
+              (let ((tmp a))
+                (set a b)
+                (set b c)
+                (set c tmp)))))
+    (f)
+    (print a)
+    (print b)
+    (print c)))

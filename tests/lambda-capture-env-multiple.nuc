@@ -1,0 +1,12 @@
+; run-stdout: 1234
+
+(defun main ()
+  (let* ((a 1)
+         (b 2)
+         (c 3)
+         (f (lambda (d)
+              (print a)
+              (print b)
+              (print c)
+              (print d))))
+    (f 4)))

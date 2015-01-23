@@ -189,38 +189,51 @@
   (let* ((func (apply #'extern-func (mangle-name name) *nuc-val*
                       (cons (llvm:pointer-type *closure*)
                             (mapcar (constantly *nuc-val*) args))))
-         (closure-sym (gensym))
-         (args (cons closure-sym args)))
+         (*current-func* func))
     (when (null body)
       (push '|nil| body))
     (map nil
          (lambda (param name)
            (setf (llvm:value-name param) (string name)))
-         (llvm:params func)
+         (subseq (llvm:params func) 1)
          args)
     (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
     (let* ((captures-array
-             (llvm:build-load
-               *builder*
-               (llvm:build-gep *builder* (elt (llvm:params func) 0)
-                               (map 'vector (lambda (n) (llvm-val<-int n 32))
-                                    (list 0 2))
-                               "get-captured-vars-from-closure")
-               ""))
+             (llvm:build-gep *builder* (elt (llvm:params func) 0)
+                             (map 'vector (lambda (n) (llvm-val<-int n 32))
+                                  (list 0 2))
+                             "get-captured-vars-from-closure"))
            (*env*
              (append
                (loop for name in captured-vars
                      for i = 0 then (1+ i)
-                     collecting (cons name (llvm:build-gep
-                                             *builder*
-                                             captures-array
-                                             (vector (llvm-val<-int i))
-                                             "get-var-from-closure")))
+                     collecting (cons name
+                                      (llvm:build-load
+                                        *builder*
+                                        (llvm:build-gep
+                                          *builder*
+                                          captures-array
+                                          (map 'vector #'llvm-val<-int (list 0 i))
+                                          "get-var-from-closure")
+                                        "")))
+               (mapcar (lambda (arg-name llvm-param)
+                         (let ((arg-on-stack
+                                 (llvm:build-alloca *builder* *nuc-val*
+                                                    (string arg-name))))
+                           (llvm:build-store *builder*
+                                             llvm-param arg-on-stack)
+                           (cons arg-name arg-on-stack)))
+                       args
+                       (subseq (llvm:params func) 1))
                *env*)))
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
             when (null (cdr cons))
               do (llvm:build-ret *builder* compiled-expr)))
+    (unless (llvm:verify-function func)
+      (llvm:dump-value func)
+      (error "ICE compiling lambda ~S (failed llvm:verify-function)~%~
+              Function has been dumped" name))
     func))
 
 (defun lookup-included-filename (includee)

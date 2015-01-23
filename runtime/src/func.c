@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <stddef.h>
-#include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include "gc.h"
@@ -21,7 +20,7 @@ nuc_val rt_make_lambda(void *func_pointer, uint8_t arity,
 	Lambda *lambda = gc_alloc(sizeof *lambda + (sizeof(nuc_val *) * num_captures));
 	lambda->function = func_pointer;
 	lambda->arity = arity;
-	memcpy(lambda->env, captured_vars, num_captures * sizeof *captured_vars);
+	memcpy(&lambda->env, captured_vars, num_captures * sizeof *captured_vars);
 
 	return ((nuc_val)lambda) | LAMBDA_LOWTAG;
 }

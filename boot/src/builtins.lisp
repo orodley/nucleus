@@ -231,20 +231,24 @@
                        "make-lambda"))))
 
 (defun find-captured-vars (body vars-alist)
-  (cond
-    ((atom body)
-     (let ((binding (assoc body vars-alist)))
-       (if binding
-         (list binding)
-         nil)))
-    ((eq (car body) 'let)
-     (find-captured-vars
-       (third body)
-       ;; let can shadow variables, producing spurious captures
-       (remove-if (lambda (var-cell)
-                    (member (car var-cell) (second body) :key #'car))
-                  vars-alist)))
-    (t (mappend (lambda (body) (find-captured-vars body vars-alist)) body))))
+  (labels
+    ((%find-captured-vars (body vars-alist)
+       (cond
+         ((atom body)
+          (let ((binding (assoc body vars-alist)))
+            (if binding
+              (list binding)
+              nil)))
+         ((eq (car body) 'let)
+          (%find-captured-vars
+            (third body)
+            ;; let can shadow variables, producing spurious captures
+            (remove-if (lambda (var-cell)
+                         (member (car var-cell) (second body) :key #'car))
+                       vars-alist)))
+         (t (mappend (lambda (body) (%find-captured-vars body vars-alist))
+                     body)))))
+    (remove-duplicates (%find-captured-vars body vars-alist))))
 
 (defbuiltin |progn| (&body body)
   (loop for cons on body
