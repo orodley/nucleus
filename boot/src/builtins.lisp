@@ -412,4 +412,4 @@
            (|or| ,@(rest operands)))))))
 
 (define-nuc-macro |format| (stream-spec format-str &rest args)
-  `(|%format| ,stream-spec ,format-str (|quote| ,args)))
+  `(|%format| ,stream-spec ,format-str (|list| ,@args)))
