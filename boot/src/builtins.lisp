@@ -306,6 +306,7 @@
     (|string| (llvm:pointer-type (llvm:int-type 8)))
     (|void| (llvm:void-type))
     ((|int| |uint| |bool|) (llvm:int-type 32))
+    ((|long| |long-long|) (llvm:int-type 64))
     (|array| (llvm:pointer-type *foreign-pointer*))))
 
 (defun c-val<-nuc-val (type val)
@@ -320,7 +321,7 @@
                      *nuc-val*)
         (list val)
         "c-val<-nuc-val"))
-    ((|int| |uint|) ; platform dependent int type
+    ((|int| |uint| |long| |long-long|) ; platform dependent int type
       (llvm::build-int-cast
         *builder*
         (llvm::build-l-shr
@@ -352,9 +353,9 @@
                   #b110))
     (|void|
       (compile-expr '|nil|))
-    ((|int| |uint|)
+    ((|int| |uint| |long| |long-long|)
       (add-lowtag
-        (llvm::build-int-cast *builder* val *nuc-val* "upcast-int-to-nuc-val")
+        (llvm::build-int-cast *builder* val *nuc-val* "cast-int-to-nuc-val")
         #b000))))
 
 ;;; The following should definitely be in the standard library, but for the
