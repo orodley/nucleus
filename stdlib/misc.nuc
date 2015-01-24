@@ -1,3 +1,4 @@
+;; TODO: make this take varags and a format string
 (extern rt_panic 1 -> panic!)
 (extern rt_type 1 -> type)
 

@@ -8,6 +8,8 @@
 (cfun LLVMAddFunction (* string *) -> *)
 (cfun LLVMGetNamedFunction (* string) -> *)
 
+(cfun LLVMConstInt (* long-long bool) -> *)
+
 (cfun LLVMAppendBasicBlock (* string) -> *)
 (cfun LLVMPositionBuilderAtEnd (* *) -> void)
 

@@ -1,11 +1,9 @@
 ; TODO: including a directory should look for 'lib' inside it
 (include "llvm/lib")
+(include "types")
 
 (defvar $builder)
 (defvar $module)
-
-(defvar $nuc-val-bits 64)
-(defvar $nuc-val (LLVMIntType $nuc-val-bits))
 
 (defun main ()
   (cond
@@ -20,7 +18,7 @@
        (close stream)
        ;; TODO: Pass process-form directly once we support that.
        (each (lambda (f) (process-form f)) forms)
-       (each (lambda (f) (compile-function f)) $functions)
+       (each (lambda (f) (compile-function (cdr f))) $functions)
        (LLVMDumpModule $module)))
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
@@ -33,7 +31,7 @@
 (defun %read-all (list-head stream)
   (let ((sexp (read-from-stream stream)))
     (cond
-      ((not (eq? sexp $eof))
+      ((not (eq? sexp EOF))
        (set-cdr list-head (cons sexp nil))
        (%read-all (cdr list-head) stream)))))
 
@@ -44,15 +42,15 @@
             (args (third form))
             (arity (length args))
             (body (cdddr form)))
-       (declare-function (string<-symbol (second form))
-                         $nuc-val
-                         (map (lambda (_) $nuc-val) (third form)))
+       (declare-function (second form)
+                         NUC-VAL
+                         (map (lambda (_) NUC-VAL) (third form)))
        (add-func (make-func name arity args body))))))
 
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction
     $module
-    name
+    (mangle-name name)
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
 ;;; TODO: Replace with a struct once they exist
@@ -64,32 +62,64 @@
 
 ;;; TODO: Replace with a hash table once that exists
 (defvar $functions nil)
+(defvar $constants nil)
+(defvar $env nil)
 
 (defun add-func (f)
   (cond
     ((not (nil? (get-func (func-name f))))
-     (write-string "Duplicate definition of function '")
-     (write-string (string<-symbol (func-name f)))
-     (write-string-ln "'")
+     (format true "Duplicate definition of function '~'" (func-name f))
+     (write-string-ln "")
      (panic! "Aborting"))
     (true
       (set $functions (cons (cons (func-name f) f) $functions)))))
 
 (defun get-func (name) (assoc name $functions))
 
-(defun compile-function (f)
-  (let ((func (LLVMGetNamedFunction $module (string<-symbol (func-name f)))))
-    (assert! (not (nil? func)) "Function should have been declared")
-    (LLVMPositionBuilderAtEnd
-      $builder
-      (LLVMAppendBasicBlock func "entry"))
-    (if (nil? (func-body func))
-      (LLVMBuildRetVoid $builder)
+(defun compile-function (func)
+  (let ((llvm-func (LLVMGetNamedFunction $module (mangle-name (func-name func)))))
+    (assert! (not (nil? llvm-func)) "Function should have been declared")
+    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
+    (let ((body (if (nil? (func-body func)) (list nil) (func-body func))))
       (each-cons (lambda (c)
                    (let ((e (compile-expr (car c))))
                      (if (nil? (cdr c))
                        (LLVMBuildRet $builder e))))
-                 (func-body f)))))
+                 body))))
 
-(defun compile-expr (e)
-  nil)
+(defun mangle-name (name)
+  (if (eq? name (quote main))
+    "main"
+    (format nil "nuc(~)" name)))
+
+(defun compile-expr (expr)
+  (case (type expr)
+    ;; TODO: limit on size
+    (fixnum-t (llvm-val<-int (<< expr LOWTAG-BITS)))
+    #+nil
+    (symbol-t (let ((const (cdr (assoc expr *constants*))))
+                (if const
+                  const
+                  (multiple-value-bind (binding bindingp) (lookup-lvalue expr)
+                    (if bindingp
+                      (llvm:build-load *builder* binding (string expr))
+                      (error "Undefined variable '~S'~%" expr))))))
+    #+nil
+    (list-t (compile-form expr))
+    #+nil
+    (string-t (llvm:build-call
+              *builder*
+              (extern-func "rt_make_string" *nuc-val* *size-t*
+                           (llvm:pointer-type (llvm:int-type 8)))
+              (list (llvm-val<-int (length expr))
+                    (llvm:build-gep
+                      *builder*
+                      (llvm:build-global-string *builder* expr "string-lit")
+                      (make-array (list 2) :initial-element (llvm-val<-int 0))
+                      "str-to-ptr"))
+              "make-literal-string"))
+    (default (println expr)
+             (panic! "Don't know how to compile this type of expression"))))
+
+(defun llvm-val<-int (x)
+  (LLVMConstInt NUC-VAL x false))

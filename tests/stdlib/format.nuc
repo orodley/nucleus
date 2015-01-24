@@ -1,4 +1,5 @@
 ; run-stdout: foo1bar2baz3
 
 (defun main ()
-  (format true "foo~bar~baz~" 1 2 3))
+  (let ((a (quote bar)))
+    (format true "foo~~~baz~" 1 a 2 3)))

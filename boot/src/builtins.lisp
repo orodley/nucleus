@@ -66,6 +66,7 @@
 (define-binary-op * llvm:build-mul)
 (define-binary-op / llvm:build-s-div)
 (define-binary-op % llvm::build-s-rem)
+(define-binary-op << llvm::build-shl)
 (define-binary-op >> llvm::build-l-shr)
 
 (defmacro define-comparison (name)

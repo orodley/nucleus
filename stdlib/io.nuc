@@ -89,7 +89,7 @@
     (panic! "Tried to back up when there was already an unread char")))
 
 ;;; When and only when EOF is reached, read returns a value eq? to this
-(defvar $eof (cons nil nil))
+(defvar EOF (cons nil nil))
 
 (defun read ()
   (read-from-stream $stdin))
@@ -111,7 +111,7 @@
        (let ((list-head (cons nil nil)))
          (read-list stream list-head)
          (cdr list-head)))
-      ((eof? c) $eof)
+      ((eof? c) EOF)
       (true
         (let ((list-head (cons c nil)))
           (read-symbol stream list-head)
@@ -181,4 +181,7 @@
                  (assert! (not (nil? arg-list)) "Not enough args to format.")
                  (print-to-stream stream (car arg-list))
                  (set arg-list (cdr arg-list)))
-                (true (write-char-to-stream stream c))))))))
+                (true (write-char-to-stream stream c))))))
+    (if (eq? stream-spec nil)
+      (string<-string-stream stream)
+      nil)))
