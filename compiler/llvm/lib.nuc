@@ -4,6 +4,7 @@
 
 (cfun LLVMModuleCreateWithNameInContext (string *) -> *)
 (cfun LLVMDumpModule (*) -> void)
+(cfun LLVMWriteBitcodeToFile (* string) -> int)
 (cfun LLVMDisposeModule (*) -> void)
 (cfun LLVMAddFunction (* string *) -> *)
 (cfun LLVMGetNamedFunction (* string) -> *)

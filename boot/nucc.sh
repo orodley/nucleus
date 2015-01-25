@@ -110,7 +110,7 @@ rm "$bc"
 
 link_flags="-lm $obj -o $output"
 if [ $link_llvm = true ]; then
-	link_flags="$link_flags `llvm-config-3.5 --ldflags --system-libs --libs core`"
+	link_flags="$link_flags `llvm-config-3.5 --ldflags --libs core bitwriter --system-libs`"
 fi
 
 # We have to use g++ as the linker when linking against LLVM

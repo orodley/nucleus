@@ -14,12 +14,14 @@
             (context (LLVMGetGlobalContext))
             (forms (read-all stream)))
        (set $module (LLVMModuleCreateWithNameInContext input-filename context))
-       (write-string-ln "")
        (close stream)
        ;; TODO: Pass process-form directly once we support that.
        (each (lambda (f) (process-form f)) forms)
        (each (lambda (f) (compile-function (cdr f))) $functions)
-       (LLVMDumpModule $module)))
+       (LLVMWriteBitcodeToFile $module "test.bc")
+       (exec "llc-3.5" (list "test.bc" "-filetype=obj" "-o" "test.o"))
+       (exec "gcc" (list "test.o"))
+       (exec "rm" (list "test.bc" "test.o"))))
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
 
