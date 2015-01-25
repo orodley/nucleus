@@ -11,3 +11,5 @@
 
 (extern rt_open 1 -> open)
 (extern rt_close 1 -> close)
+
+(extern rt_exec 2 -> exec)
