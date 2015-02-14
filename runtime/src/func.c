@@ -17,10 +17,16 @@ nuc_val rt_make_lambda(void *func_pointer, uint8_t arity,
 {
 	assert(LOWTAG(func_pointer) == 0);
 
-	Lambda *lambda = gc_alloc(sizeof *lambda + (sizeof(nuc_val *) * num_captures));
+	Lambda *lambda;
+	if (num_captures == 0) {
+		lambda = gc_alloc(sizeof *lambda + sizeof(nuc_val *));
+		*lambda->env = NULL;
+	} else {
+		lambda = gc_alloc(sizeof *lambda + (sizeof(nuc_val *) * num_captures));
+		memcpy(&lambda->env, captured_vars, num_captures * sizeof *captured_vars);
+	}
 	lambda->function = func_pointer;
 	lambda->arity = arity;
-	memcpy(&lambda->env, captured_vars, num_captures * sizeof *captured_vars);
 
 	return ((nuc_val)lambda) | LAMBDA_LOWTAG;
 }

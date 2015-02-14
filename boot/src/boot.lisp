@@ -80,6 +80,8 @@
         ; All globals are zeroed
         (llvm-val<-int 0))
       (when (= (length (cdr form)) 2)
+        ;; TODO: we could detect if the initialiser is a constant expression,
+        ;; and if so initialise it statically instead.
         (push (cons (second form) (third form)) *initialisers*))
       nil)
     (|include|
@@ -169,8 +171,6 @@
         ;; *INITIALISERS* is in reverse order, so when we process it we push
         ;; each initialiser, reversing it back to correct order
         (dolist (init *initialisers*)
-          ;; TODO: we could detect if the initialiser is a constant expression,
-          ;; and if so initialise it statically instead.
           (push (list '|set| (car init) (cdr init)) body)))
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
@@ -186,36 +186,46 @@
               Function has been dumped" name))))
 
 (defun compile-lambda (name args body captured-vars)
-  (let* ((func (apply #'extern-func (mangle-name name) *nuc-val*
-                      (cons (llvm:pointer-type *closure*)
-                            (mapcar (constantly *nuc-val*) args))))
+  (let* ((params (mapcar (constantly *nuc-val*) args))
+         ;; We only take the lambda struct as our first argument if we have
+         ;; any captured bindings. This allows us to easily deal with passing
+         ;; around static functions in lambdas.
+         ;; TODO: We could optimize further by not allocating a new closure if
+         ;; we don't capture any bindings, and instead just creating a static
+         ;; closure once at compile-time and returning it every time.
+         (func (apply #'extern-func (mangle-name name) *nuc-val*
+                      (if (null captured-vars)
+                        params
+                        (cons (llvm:pointer-type *closure*) params))))
          (*current-func* func))
     (when (null body)
       (push '|nil| body))
     (map nil
          (lambda (param name)
            (setf (llvm:value-name param) (string name)))
-         (subseq (llvm:params func) 1)
+         (if (null captured-vars)
+           (llvm:params func)
+           (subseq (llvm:params func) 1))
          args)
     (llvm:position-builder-at-end *builder* (llvm:append-basic-block func "entry"))
-    (let* ((captures-array
-             (llvm:build-gep *builder* (elt (llvm:params func) 0)
-                             (map 'vector (lambda (n) (llvm-val<-int n 32))
-                                  (list 0 2))
-                             "get-captured-vars-from-closure"))
-           (*env*
+    (let* ((*env*
              (append
                (loop for name in captured-vars
                      for i = 0 then (1+ i)
-                     collecting (cons name
-                                      (llvm:build-load
-                                        *builder*
-                                        (llvm:build-gep
-                                          *builder*
-                                          captures-array
-                                          (map 'vector #'llvm-val<-int (list 0 i))
-                                          "get-var-from-closure")
-                                        "")))
+                     collecting
+                     (cons
+                       name
+                       (llvm:build-load
+                         *builder*
+                         (llvm:build-gep
+                           *builder*
+                           (llvm:build-gep *builder* (elt (llvm:params func) 0)
+                                           (map 'vector (lambda (n) (llvm-val<-int n 32))
+                                                (list 0 2))
+                                           "get-captured-vars-from-closure")
+                           (map 'vector #'llvm-val<-int (list 0 i))
+                           "get-var-from-closure")
+                         "")))
                (mapcar (lambda (arg-name llvm-param)
                          (let ((arg-on-stack
                                  (llvm:build-alloca *builder* *nuc-val*
@@ -224,7 +234,7 @@
                                              llvm-param arg-on-stack)
                            (cons arg-name arg-on-stack)))
                        args
-                       (subseq (llvm:params func) 1))
+                       (subseq (llvm:params func) (if (null captured-vars) 0 1)))
                *env*)))
       (loop for cons on body
             for compiled-expr = (compile-expr (car cons))
@@ -257,10 +267,13 @@
     (symbol (let ((const (cdr (assoc expr *constants*))))
               (if const
                 const
-                (multiple-value-bind (binding bindingp) (lookup-lvalue expr)
-                  (if bindingp
-                    (llvm:build-load *builder* binding (string expr))
-                    (error "Undefined variable '~S'~%" expr))))))
+                (let ((func (llvm:named-function *module* (mangle-name expr))))
+                  (if (not (cffi:null-pointer-p func))
+                    (make-lambda func (length (llvm:params func)) nil)
+                    (multiple-value-bind (binding bindingp) (lookup-lvalue expr)
+                      (if bindingp
+                        (llvm:build-load *builder* binding (string expr))
+                        (error "Undefined variable '~S'~%" expr))))))))
     (list (compile-form expr))
     (string (llvm:build-call
               *builder*
@@ -273,6 +286,36 @@
                       (make-array (list 2) :initial-element (llvm-val<-int 0))
                       "str-to-ptr"))
               "make-literal-string"))))
+
+(defun make-lambda (func arity captures)
+  (let* ((type (llvm:array-type (llvm:pointer-type *nuc-val*) (length captures)))
+         (captures-array
+           (if (null captures)
+             (llvm:const-null type)
+             (llvm:build-alloca *builder* type "make-captures-array"))))
+    (loop for capture in captures
+          for i = 0 then (1+ i)
+          ;; TODO: insert-value
+          do (llvm:build-store
+               *builder*
+               (cdr capture)
+               (llvm:build-gep *builder* captures-array
+                               (map 'vector #'llvm-val<-int (list 0 i))
+                               "array-elt")))
+    (llvm:build-call
+      *builder*
+      (extern-func "rt_make_lambda" *nuc-val*
+                   *uintptr* (llvm:int-type 8)
+                   (llvm:int-type 32) *uintptr*)
+      (list (llvm:build-pointer-to-int
+              *builder* func *uintptr* "func-pointer-to-int")
+            (llvm-val<-int arity 8)
+            (llvm-val<-int (length captures) 32)
+            (if (null captures)
+              (llvm-val<-int 0)
+              (llvm:build-pointer-to-int
+                *builder* captures-array *uintptr* "array-to-int")))
+      "make-lambda")))
 
 (defun lookup-lvalue (name)
   (let ((lexical-binding (cdr (assoc name *env*)))
@@ -300,33 +343,62 @@
                           (mangle-name name)))
         (bindingp
           ;; TODO: Runtime arity check
-          (let ((closure (llvm:build-int-to-pointer
-                           *builder*
-                           (remove-lowtag
-                             (llvm:build-load *builder* binding "get-closure"))
-                           (llvm:pointer-type *closure*)
-                           "cast-nuc-val-to-closure")))
-            (llvm:build-call
-              *builder*
-              (llvm:build-int-to-pointer
+          (let* ((closure (llvm:build-int-to-pointer
+                            *builder*
+                            (remove-lowtag
+                              (llvm:build-load *builder* binding "get-closure"))
+                            (llvm:pointer-type *closure*)
+                            "cast-nuc-val-to-closure"))
+                 (func-pointer
+                   (llvm:build-load
+                     *builder*
+                     ;; TODO: build-struct-gep?
+                     (llvm:build-gep
+                       *builder*
+                       closure
+                       (map 'vector (lambda (n) (llvm-val<-int n 32)) (list 0 0))
+                       "get-func-pointer-from-closure")
+                     "load-func-pointer-from-struct"))
+                 (args (mapcar #'compile-expr args))
+                 (captures
+                   (llvm:build-gep
+                     *builder*
+                     (llvm:build-gep *builder* closure
+                                     (map 'vector (lambda (n) (llvm-val<-int n 32))
+                                          (list 0 2))
+                                     "")
+                     (map 'vector (lambda (n) (llvm-val<-int n 32))
+                          (list 0 0))
+                     ""))
+                 (first-capture (llvm:build-load *builder* captures "")))
+            (compile-if
+              (compile-expr `(|eq?| (|quote| ,(llvm:build-pointer-to-int *builder* first-capture *uintptr* ""))
+                                    (|quote| ,(llvm-val<-int 0))))
+              (llvm:build-call
+                          *builder*
+                          (llvm:build-int-to-pointer
+                            *builder*
+                            func-pointer
+                            (llvm:pointer-type
+                              (llvm:function-type
+                                *nuc-val*
+                                (loop repeat (length args) collecting *nuc-val*)))
+                            "cast-to-correct-function-type")
+                          args
+                          "call-closure")
+              (llvm:build-call
                 *builder*
-                ;; TODO: extract-value
-                (llvm:build-load
+                (llvm:build-int-to-pointer
                   *builder*
-                  (llvm:build-gep
-                           *builder*
-                           closure
-                           (map 'vector (lambda (n) (llvm-val<-int n 32)) (list 0 0))
-                           "get-func-pointer-from-closure")
-                  "load-func-pointer-from-struct")
-                (llvm:pointer-type
-                  (llvm:function-type
-                    *nuc-val*
-                    (cons (llvm:pointer-type *closure*)
-                          (loop repeat (length args) collecting *nuc-val*))))
-                "cast-to-correct-function-type")
-              (cons closure (mapcar #'compile-expr args))
-              "call-closure")))
+                  func-pointer
+                  (llvm:pointer-type
+                    (llvm:function-type
+                      *nuc-val*
+                      (cons (llvm:pointer-type *closure*)
+                            (loop repeat (length args) collecting *nuc-val*))))
+                  "cast-to-correct-function-type")
+                (cons closure args)
+                "call-closure"))))
         (t (error "Don't know how to compile form ~S" form))))))
 
 (defun read-file (filename)

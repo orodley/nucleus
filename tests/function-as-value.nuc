@@ -1,0 +1,10 @@
+; status-code: 12
+
+(defun foo (a b)
+  (+ a b))
+
+(defun call (f a b)
+  (f a b))
+
+(defun main ()
+  (set $status-code (call foo 9 3)))

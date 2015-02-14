@@ -51,6 +51,32 @@
     (llvm-val<-int (lognot (1- (ash 1 *lowtag-bits*))))
     "remove-lowtag"))
 
+;; TODO: use this in more places
+(defmacro compile-if (condition then-form else-form)
+  `(%compile-if ,condition (lambda () ,then-form) (lambda () ,else-form)))
+
+;; This takes lambdas for the THEN and ELSE forms so that we can defer
+;; evaluation to ensure any generated IR ends up in the right basic block.
+(defun %compile-if (condition then-lambda else-lambda)
+  ;; TODO: use phi
+  ;; TODO: enforce that 'condition' is a boolean at runtime
+  (let ((then-block (llvm:append-basic-block *current-func* "if-then"))
+        (else-block (llvm:append-basic-block *current-func* "if-else"))
+        (after-block (llvm:append-basic-block *current-func* "if-after"))
+        (if-value (llvm:build-alloca *builder* *nuc-val* "if-value")))
+    (flet ((build-branch (block-lambda block)
+             (llvm:position-builder *builder* block)
+             (llvm:build-store *builder* (funcall block-lambda) if-value)
+             (llvm:build-br *builder* after-block)))
+      (llvm:build-cond-br
+        *builder*
+        (llvm:build-i-cmp *builder* := condition *true* "condition-true?")
+        then-block else-block)
+      (build-branch then-lambda then-block)
+      (build-branch else-lambda else-block)
+      (llvm:position-builder *builder* after-block)
+      (llvm:build-load *builder* if-value "if-value"))))
+
 (defmacro define-binary-op (name instruction)
   `(defbuiltin ,name (&rest operands)
      (let ((operands (mapcar (lambda (expr)
@@ -118,26 +144,9 @@
   (def >=))
 
 (defbuiltin |if| (condition then-form &optional (else-form '|nil|))
-  ;; TODO: use phi
-  (let ((then-block (llvm:append-basic-block *current-func* "if-then"))
-        (else-block (llvm:append-basic-block *current-func* "if-else"))
-        (after-block (llvm:append-basic-block *current-func* "if-after"))
-        (if-value (llvm:build-alloca *builder* *nuc-val* "if-value")))
-    (flet ((build-branch (form block)
-             (llvm:position-builder *builder* block)
-             (llvm:build-store *builder* (compile-expr form) if-value)
-             (llvm:build-br *builder* after-block)))
-      (llvm:build-cond-br
-        *builder*
-        (llvm:build-i-cmp *builder* :=
-                          (compile-expr condition)
-                          *true*
-                          "condition-true?")
-        then-block else-block)
-      (build-branch then-form then-block)
-      (build-branch else-form else-block)
-      (llvm:position-builder *builder* after-block)
-      (llvm:build-load *builder* if-value "if-value"))))
+  (compile-if (compile-expr condition)
+              (compile-expr then-form)
+              (compile-expr else-form)))
 
 (defbuiltin |set| (name value)
   (let ((var (lookup-lvalue name))
@@ -204,32 +213,7 @@
          (func (compile-lambda name simple-lambda-list body (mapcar #'car captures))))
     ;; COMPILE-DEFUN will change the builders position.
     (llvm:position-builder-at-end *builder* current-block)
-    (let ((captures-array (llvm:build-alloca
-                            *builder*
-                            (llvm:array-type
-                              (llvm:pointer-type *nuc-val*)
-                              (length captures))
-                            "make-captures-array")))
-      (loop for capture in captures
-            for i = 0 then (1+ i)
-            ;; TODO: insert-value
-            do (llvm:build-store
-                 *builder*
-                 (cdr capture)
-                 (llvm:build-gep *builder* captures-array
-                                 (map 'vector #'llvm-val<-int (list 0 i))
-                                 "array-elt")))
-      (llvm:build-call *builder*
-                       (extern-func "rt_make_lambda" *nuc-val*
-                                    *uintptr* (llvm:int-type 8)
-                                    (llvm:int-type 32) *uintptr*)
-                       (list (llvm:build-pointer-to-int
-                               *builder* func *uintptr* "func-pointer-to-int")
-                             (llvm-val<-int (length simple-lambda-list) 8)
-                             (llvm-val<-int (length captures) 32)
-                             (llvm:build-pointer-to-int
-                               *builder* captures-array *uintptr* "array-to-int"))
-                       "make-lambda"))))
+    (make-lambda func (length simple-lambda-list) captures)))
 
 (defun find-captured-vars (body vars-alist)
   (labels
@@ -258,7 +242,7 @@
           return compiled))
 
 (defbuiltin |quote| (thing)
-  (etypecase thing
+  (typecase thing
     (integer (compile-expr thing))
     (null (compile-expr '|nil|))
     (cons (compile-expr `(|cons| (|quote| ,(car thing))
@@ -273,7 +257,13 @@
                                                 "intern-const")
                       (make-array (list 2) :initial-element (llvm-val<-int 0))
                       "str-to-ptr"))
-              "intern-const"))))
+              "intern-const"))
+    (t
+      ;; Assume it's a direct LLVM value. This allows us to easily compile
+      ;; builtins which need to do runtime conditionals, for example
+      ;; TODO: maybe we should have an explicit compiler internal builtin
+      ;; for this?
+      thing)))
 
 (defbuiltin |%raw-call| (name &rest args)
   (llvm:build-call
