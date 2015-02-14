@@ -2,9 +2,12 @@
 
 import collections
 import fnmatch
+import itertools
+import multiprocessing
 import os
 import subprocess
 import sys
+import time
 import uuid
 
 def main():
@@ -16,35 +19,59 @@ def main():
             for filename in fnmatch.filter(filenames, '*.nuc'):
                 tests.append(os.path.join(root, filename))
 
+    num_tests = len(tests)
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-    results = []
-    print "Running %d tests:" % len(tests)
+    print "Running %d tests:" % num_tests
 
-    for test_file in tests:
-        result = run_test(test_file)
-        sys.stdout.write(result_char(result))
-        sys.stdout.flush()
-        results.append(result)
+    # Try to keep n processes running at once, where n = the number of cpus on
+    # this machine.
+    # NOTE: we don't bother running the binaries produced in parallel, because
+    # none of the tests we have so far take a significant amount of time to run.
+    # If they start taking a while, we'll need to change this.
+    parallel_nucc_procs = multiprocessing.cpu_count()
+    running_nucc_procs = []
+    results = []
+    while len(results) != num_tests:
+        done, running_nucc_procs = partition(running_nucc_procs,
+                lambda result: result['nucc_proc'].poll() is not None)
+
+        while len(running_nucc_procs) < parallel_nucc_procs and len(tests) > 0:
+            new_test = tests.pop()
+            running_nucc_procs.append(start_compiling(new_test))
+
+        if len(done) == 0:
+            time.sleep(0.05)
+
+        for test in done:
+            result = run_test(test)
+            sys.stdout.write(result_char(result))
+            sys.stdout.flush()
+            results.append(result)
 
     print "\n"
 
     passes = sum(1 for result in results if result['passed'])
-    print "%d / %d tests passed" % (passes, len(tests))
+    print "%d / %d tests passed" % (passes, num_tests)
 
     for result in results:
         if not result['passed']:
             print "\ntest '%s' failed:\n%s" % (result['name'], result['error'])
 
-def run_test(test_file):
-    result = {'name': test_file}
+def start_compiling(test_filename):
+    result = {'name': test_filename}
 
-    with open(test_file, 'r') as f:
+    with open(test_filename, 'r') as f:
         process_header(result, f)
 
-    temp_file = "%s_%s" % (test_file, str(uuid.uuid4()))
-    nucc_proc = subprocess.Popen(["boot/nucc.sh", test_file, temp_file],
+    result['binary'] = "%s_%s" % (test_filename, str(uuid.uuid4()))
+    nucc_proc = subprocess.Popen(["boot/nucc.sh", test_filename, result['binary']],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result['nucc_proc'] = nucc_proc
+    return result
+
+def run_test(result):
+    nucc_proc = result['nucc_proc']
     result['compile-stdout'], result['compile-stderr'] = nucc_proc.communicate()
     result['compiled'] = nucc_proc.returncode == 0
     if result['expected-compile-stderr'] != '':
@@ -52,7 +79,7 @@ def run_test(test_file):
         if not result['expected-compile-stderr'] in result['compile-stderr']:
             result['passed'] = False
             if result['compiled']:
-                os.remove(temp_file)
+                os.remove(result['binary'])
                 result['error'] = "compilation succeeded when expected to fail"
             else:
                 result['error'] = "expected compile stderr matching '%s', got:\n%s" \
@@ -69,12 +96,12 @@ def run_test(test_file):
             + indent(result['compile-stderr'])
         return result
 
-    program_proc = subprocess.Popen(["./" + temp_file],
+    program_proc = subprocess.Popen(["./" + result['binary']],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     result['run-stdout'], result['run-stderr'] = \
         program_proc.communicate(result['stdin'])
     result['status-code'] = program_proc.returncode
-    os.remove(temp_file)
+    os.remove(result['binary'])
 
     if result['run-stderr'] != '':
         result['passed'] = False;
@@ -129,6 +156,17 @@ def result_char(result):
         return '.'
     else:
         return 'F'
+
+def partition(l, pred):
+    true = []
+    false = []
+    for x in l:
+        if pred(x):
+            true.append(x)
+        else:
+            false.append(x)
+
+    return true, false
 
 if __name__ == "__main__":
     main()
