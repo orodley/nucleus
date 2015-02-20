@@ -1,8 +1,6 @@
 #!/usr/bin/env python2
 
-import collections
 import fnmatch
-import itertools
 import multiprocessing
 import os
 import subprocess
