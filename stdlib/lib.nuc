@@ -1,6 +1,8 @@
 ;;;; Main file that includes the whole standard library
 
 (include "cons")
+(include "ffi")
+(include "func")
 (include "io")
 (include "iter")
 (include "math")

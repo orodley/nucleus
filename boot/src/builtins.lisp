@@ -51,6 +51,12 @@
     (llvm-val<-int (lognot (1- (ash 1 *lowtag-bits*))))
     "remove-lowtag"))
 
+(defun gc-alloc (size)
+  (llvm:build-call
+    *builder* (extern-func "gc_alloc" (llvm:pointer-type *nuc-val*) *size-t*)
+    (list (llvm-val<-int size))
+    "gc_alloc"))
+
 ;; TODO: use this in more places
 (defmacro compile-if (condition then-form else-form)
   `(%compile-if ,condition (lambda () ,then-form) (lambda () ,else-form)))
@@ -293,17 +299,24 @@
 
 (defun llvm-type<-type-spec (type)
   (ecase type
-    (* *foreign-pointer*)
+    (* *void-ptr*)
     (|string| (llvm:pointer-type (llvm:int-type 8)))
     (|void| (llvm:void-type))
     ((|int| |uint| |bool|) (llvm:int-type 32))
     ((|long| |long-long|) (llvm:int-type 64))
-    (|array| (llvm:pointer-type *foreign-pointer*))))
+    (|array| (llvm:pointer-type *void-ptr*))))
 
 (defun c-val<-nuc-val (type val)
   (ecase type
-    (* (llvm:build-int-to-pointer *builder* (remove-lowtag val)
-                                  *foreign-pointer* "foreign-pointer<-nuc-val"))
+    (*  (llvm:build-int-to-pointer
+          *builder*
+          (llvm:build-load
+            *builder*
+            (llvm:build-int-to-pointer
+              *builder* (remove-lowtag val) (llvm:pointer-type *nuc-val*) "")
+            "")
+          *void-ptr*
+          ""))
     (|string| ; char *
       (llvm:build-call
         *builder*
@@ -331,17 +344,20 @@
     (|array|
       (llvm:build-call
         *builder*
-        (extern-func "rt_list_to_array"
-                     (llvm:pointer-type *foreign-pointer*) *nuc-val*)
+        (extern-func "rt_list_to_array" (llvm-type<-type-spec type) *nuc-val*)
         (list val)
         "array<-list"))))
 
 (defun nuc-val<-c-val (type val)
   (ecase type
     (* ; opaque pointer
-      (add-lowtag (llvm:build-pointer-to-int *builder* val *nuc-val*
-                    "nuc-val<-foreign-pointer")
-                  #b110))
+      (add-lowtag
+        (let ((box (gc-alloc *ptr-bytes*)))
+          (llvm:build-store
+            *builder* (llvm:build-pointer-to-int *builder* val *nuc-val* "")
+            box)
+          box)
+        #b110))
     (|void|
       (compile-expr '|nil|))
     ((|int| |uint| |long| |long-long|)

@@ -44,3 +44,11 @@ uint64_t *rt_list_to_array(nuc_val list)
 
 	return result;
 }
+
+static void *global_null = NULL;
+
+nuc_val rt_get_null(void)
+{
+	assert(LOWTAG(&global_null) == 0);
+	return ((nuc_val)&global_null) | FOREIGN_LOWTAG;
+}

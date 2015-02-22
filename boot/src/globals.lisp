@@ -8,14 +8,13 @@
 (defvar *initialisers*)
 
 (defparameter *nuc-val* (llvm:int-type 64))
-;; The target type doesn't matter as these are opaque pointers, but we need to
-;; make sure LLVM's type checking passes
-(defparameter *foreign-pointer* (llvm:pointer-type (llvm:int-type 8)))
 (defparameter *cons-cell* (llvm:struct-type
                             (list *nuc-val* *nuc-val*) nil))
 (defparameter *cons-cell-ptr* (llvm:pointer-type *cons-cell*))
-;; PORT: change size based on target
+;; PORT: change these based on target
 ;; TODO: should probably be using these more often
+(defparameter *ptr-bytes* 8)
+(defparameter *void-ptr* (llvm:pointer-type (llvm:int-type 8)))
 (defparameter *size-t* (llvm:int-type 64))
 (defparameter *uintptr* (llvm:int-type 64))
 

@@ -1,0 +1,2 @@
+(extern rt_get_null 0 -> %get-null)
+(defvar NULL (%get-null))
