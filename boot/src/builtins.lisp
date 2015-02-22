@@ -357,6 +357,12 @@
   `(defbuiltin ,name ,ll
      (compile-expr (progn ,@body))))
 
+(define-nuc-macro |when| (condition &body body)
+  `(|if| ,condition (|progn| ,@body) |nil|))
+
+(define-nuc-macro |unless| (condition &body body)
+  `(|if| ,condition |nil| (|progn| ,@body)))
+
 (define-nuc-macro |list| (&rest args)
   (reduce (lambda (a b) `(|cons| ,a ,b)) args
           :from-end t
