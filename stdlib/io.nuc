@@ -29,6 +29,10 @@
   (print sexp)
   (write-string-ln ""))
 
+(defun plr (sexp)
+  (println sexp)
+  sexp)
+
 (defun print-to-stream (stream sexp)
   (case (type sexp)
     (fixnum-t (print-fixnum stream sexp))
@@ -167,6 +171,8 @@
 
 ;;; TODO: Once we have varargs we should define this as a variable arity
 ;;; function rather than having a compiler builtin.
+;;; TODO: Also once we have varargs we can easily create a wrapper that appends
+;;; a newline rather than doing it by default
 (defun %format (stream-spec format-str arg-list)
   (let ((stream (case stream-spec
                   (true $stdout)
@@ -182,6 +188,7 @@
                  (print-to-stream stream (car arg-list))
                  (set arg-list (cdr arg-list)))
                 (true (write-char-to-stream stream c))))))
+    (write-char-to-stream stream 10)
     (if (eq? stream-spec nil)
       (string<-string-stream stream)
       nil)))

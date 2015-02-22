@@ -1,4 +1,4 @@
-; run-stdout: foo1bar2baz3
+; run-stdout: foo1bar2baz3\n
 
 (defun main ()
   (let ((a (quote bar)))

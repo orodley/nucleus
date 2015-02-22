@@ -1,3 +1,17 @@
+;;; TODO: make into a macro
+(defun each (func lizt)
+  (if (not (nil? lizt))
+    (progn
+      (func (car lizt))
+      (each func (cdr lizt)))))
+
+;;; TODO: make into a macro
+(defun each-cons (func lizt)
+  (if (not (nil? lizt))
+    (progn
+      (func lizt)
+      (each func (cdr lizt)))))
+
 (defun upto (upper-bound func)
   (%upto 0 upper-bound func))
 

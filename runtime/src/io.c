@@ -100,11 +100,12 @@ nuc_val rt_write_addr_to_stream(nuc_val stream_val, nuc_val obj)
 	CHECK(stream_val, FOREIGN_LOWTAG);
 	CHECK(obj, FOREIGN_LOWTAG);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
+	uintptr_t foreign_ptr = *(uintptr_t *)REMOVE_LOWTAG(obj);
 
 #define SIZE (sizeof("#<foreign 0x0000000000000000>"))
 	char fmt[] = "#<foreign 0x%016" PRIxPTR ">";
 	char out[SIZE];
-	snprintf(out, SIZE, fmt, (uintptr_t)REMOVE_LOWTAG(obj));
+	snprintf(out, SIZE, fmt, foreign_ptr);
 
 	write_bytes_to_stream(stream, out, SIZE - 1);
 #undef SIZE

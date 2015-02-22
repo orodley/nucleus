@@ -1,5 +1,7 @@
 ; TODO: including a directory should look for 'lib' inside it
 (include "llvm/lib")
+
+(include "builtins")
 (include "types")
 
 (defvar $builder)
@@ -15,9 +17,12 @@
             (forms (read-all stream)))
        (set $module (LLVMModuleCreateWithNameInContext input-filename context))
        (close stream)
-       ;; TODO: Pass process-form directly once we support that.
-       (each (lambda (f) (process-form f)) forms)
+       (each process-form forms)
+       ;; TODO: use function composition when that works
        (each (lambda (f) (compile-function (cdr f))) $functions)
+       (when (LLVMVerifyModule $module LLVMPrintMessageAction NULL)
+          (LLVMDumpModule $module)
+          (panic! "ICE: Module failed LLVMVerifyModule. Module has been dumped"))
        (LLVMWriteBitcodeToFile $module "test.bc")
        (exec "llc" (list "test.bc" "-filetype=obj" "-o" "test.o"))
        (exec "gcc" (list "test.o"))
@@ -82,12 +87,16 @@
   (let ((llvm-func (LLVMGetNamedFunction $module (mangle-name (func-name func)))))
     (assert! (not (nil? llvm-func)) "Function should have been declared")
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
-    (let ((body (if (nil? (func-body func)) (list nil) (func-body func))))
-      (each-cons (lambda (c)
-                   (let ((e (compile-expr (car c))))
-                     (if (nil? (cdr c))
-                       (LLVMBuildRet $builder e))))
-                 body))))
+    (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
+           (compiled (each-cons (lambda (c)
+                                  (let ((e (compile-expr (car c))))
+                                    (if (nil? (cdr c))
+                                      (LLVMBuildRet $builder e))))
+                                body)))
+      (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
+        (LLVMDumpValue llvm-func)
+        (panic! "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
+      compiled)))
 
 (defun mangle-name (name)
   (if (eq? name (quote main))
@@ -106,8 +115,7 @@
                     (if bindingp
                       (llvm:build-load *builder* binding (string expr))
                       (error "Undefined variable '~S'~%" expr))))))
-    #+nil
-    (list-t (compile-form expr))
+    (cons-t (compile-form expr))
     #+nil
     (string-t (llvm:build-call
               *builder*
@@ -122,6 +130,15 @@
               "make-literal-string"))
     (default (println expr)
              (panic! "Don't know how to compile this type of expression"))))
+
+(defun compile-form (form)
+  (let ((special-form (get-special-form (car form))))
+    (if (not (nil? special-form))
+      (special-form  (cdr form))
+      (let ((builtin-function (get-builtin-function (car form))))
+        (cond ((not (nil? builtin-function))
+               (builtin-function (map compile-expr (cdr form))))
+              (true (panic! "Undefined function")))))))
 
 (defun llvm-val<-int (x)
   (LLVMConstInt NUC-VAL x false))

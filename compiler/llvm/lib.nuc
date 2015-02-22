@@ -17,6 +17,15 @@
 (cfun LLVMFunctionType (* array uint bool) -> *)
 (cfun LLVMIntType (uint) -> *)
 
-
+(cfun LLVMBuildAdd (* * * string) -> *)
+(cfun LLVMBuildSub (* * * string) -> *)
 (cfun LLVMBuildRetVoid (*) -> *)
 (cfun LLVMBuildRet (* *) -> *)
+
+(cfun LLVMDumpValue (*) -> void)
+(cenum
+  LLVMAbortProcessAction
+  LLVMPrintMessageAction
+  LLVMReturnStatusAction)
+(cfun LLVMVerifyModule (* uint *) -> bool)
+(cfun LLVMVerifyFunction (* uint) -> bool)

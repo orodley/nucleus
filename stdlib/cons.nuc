@@ -6,6 +6,9 @@
 (extern rt_char_list_to_string 1 -> string<-char-list)
 (extern rt_string_to_char_list 1 -> char-list<-string)
 
+(defun car (c) (car c))
+(defun cdr (c) (cdr c))
+
 (defun caar (c) (car (car c)))
 (defun cadr (c) (car (cdr c)))
 (defun cdar (c) (cdr (car c)))
@@ -58,6 +61,7 @@
 
 (defun length (seq)
   (case (type seq)
+    (nil-t 0)
     (cons-t (%list-length seq 0))
     (string-t (%string-length seq))))
 
@@ -71,20 +75,6 @@
     ((< len 0) false)
     ((nil? lizt) (eq? len 0))
     (true (length-is? (cdr lizt) (1- len)))))
-
-;;; TODO: make into a macro
-(defun each (func lizt)
-  (if (not (nil? lizt))
-    (progn
-      (func (car lizt))
-      (each func (cdr lizt)))))
-
-;;; TODO: make into a macro
-(defun each-cons (func lizt)
-  (if (not (nil? lizt))
-    (progn
-      (func lizt)
-      (each func (cdr lizt)))))
 
 (defun map (func lizt)
   (let ((list-head (cons nil nil)))

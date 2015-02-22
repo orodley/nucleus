@@ -1,0 +1,5 @@
+(defun o (f g)
+  ;; TODO: varargs
+  ;; TODO: We need to do escape analysis and heap allocate the
+  ;; references to 'f' and 'g' for this to work
+  (lambda (x) (f (g x))))

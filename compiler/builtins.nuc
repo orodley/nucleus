@@ -1,0 +1,21 @@
+(defvar $builtin-functions
+  (list
+    (cons (quote +) builtin+)
+    (cons (quote -) builtin-)))
+(defvar $special-forms nil)
+
+(defun get-special-form (name)
+  (let ((special-form (assoc name $special-forms)))
+    (if (not (nil? special-form))
+      (cdr special-form)
+      nil)))
+
+(defun get-builtin-function (name)
+  (let ((builtin-function (assoc name $builtin-functions)))
+    (if (not (nil? builtin-function))
+      (cdr builtin-function)
+      nil)))
+
+;; TODO: varargs
+(defun builtin+ (args) (LLVMBuildAdd $builder (first args) (second args) "+"))
+(defun builtin- (args) (LLVMBuildSub $builder (first args) (second args) "-"))
