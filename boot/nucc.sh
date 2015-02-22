@@ -90,27 +90,28 @@ if [ $? -ne 0 ]; then
 fi
 
 if [ $output_ir = true ]; then
-	llvm-dis-3.5 "$bc" -o "$output"
+	llvm-dis "$bc" -o "$output"
 	rm "$bc"
 	exit 0
 fi
 
 if [ $output_asm = true ]; then
-	llc-3.5 -filetype=asm "$bc" -o "$output"
+	llc -filetype=asm "$bc" -o "$output"
 	rm "$bc"
 	exit 0
 fi
 
-llvm-link-3.5 "$bc" ../runtime/nuc-runtime.bc -o "$bc"
+llvm-link "$bc" ../runtime/nuc-runtime.bc -o "$bc"
 
 obj=${input%%.*}.o
-llc-3.5 -filetype=obj "$bc" -o "$obj"
+llc -filetype=obj "$bc" -o "$obj"
 
 rm "$bc"
 
 link_flags="-lm $obj -o $output"
 if [ $link_llvm = true ]; then
-	link_flags="$link_flags `llvm-config-3.5 --ldflags --libs core bitwriter --system-libs`"
+	llvm_cmpts='core bitwriter analysis'
+	link_flags="$link_flags $(llvm-config --ldflags --libs $llvm_cmpts --system-libs)"
 fi
 
 # We have to use g++ as the linker when linking against LLVM

@@ -19,7 +19,7 @@
        (each (lambda (f) (process-form f)) forms)
        (each (lambda (f) (compile-function (cdr f))) $functions)
        (LLVMWriteBitcodeToFile $module "test.bc")
-       (exec "llc-3.5" (list "test.bc" "-filetype=obj" "-o" "test.o"))
+       (exec "llc" (list "test.bc" "-filetype=obj" "-o" "test.o"))
        (exec "gcc" (list "test.o"))
        (exec "rm" (list "test.bc" "test.o"))))
     (true 
