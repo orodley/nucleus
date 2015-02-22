@@ -17,6 +17,7 @@
 (defparameter *void-ptr* (llvm:pointer-type (llvm:int-type 8)))
 (defparameter *size-t* (llvm:int-type 64))
 (defparameter *uintptr* (llvm:int-type 64))
+(defparameter *int* (llvm:int-type 32))
 
 (defparameter *closure*
   (llvm:struct-type

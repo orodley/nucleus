@@ -11,18 +11,18 @@
              (destructuring-bind ,lambda-list ,args-sym
                ,@body)))))
 
-(defun nuc-val<-int (nuc-val)
+(defun nuc-val<-int (int)
   (llvm::build-shl
     *builder*
-    nuc-val
+    int
     (llvm-val<-int *lowtag-bits*)
     "nuc-val<-int"))
 
-(defun int<-nuc-val (int)
+(defun int<-nuc-val (nuc-val)
   ; TODO: type checking
   (llvm::build-l-shr
     *builder*
-    int
+    nuc-val
     (llvm-val<-int *lowtag-bits*)
     "int<-nuc-val"))
 
@@ -302,7 +302,7 @@
     (* *void-ptr*)
     (|string| (llvm:pointer-type (llvm:int-type 8)))
     (|void| (llvm:void-type))
-    ((|int| |uint| |bool|) (llvm:int-type 32))
+    ((|int| |uint| |bool|) *int*)
     ((|long| |long-long|) (llvm:int-type 64))
     (|array| (llvm:pointer-type *void-ptr*))))
 
@@ -328,11 +328,7 @@
     ((|int| |uint| |long| |long-long|) ; platform dependent int type
       (llvm::build-int-cast
         *builder*
-        (llvm::build-l-shr
-          *builder*
-          val
-          (llvm-val<-int *lowtag-bits*)
-          "shift-off-lowtag")
+        (int<-nuc-val val)
         (llvm-type<-type-spec type)
         "downcast-nuc-val-to-int"))
     (|bool|
@@ -361,9 +357,13 @@
     (|void|
       (compile-expr '|nil|))
     ((|int| |uint| |long| |long-long|)
-      (add-lowtag
-        (llvm::build-int-cast *builder* val *nuc-val* "cast-int-to-nuc-val")
-        #b000))))
+      (nuc-val<-int
+        (llvm::build-int-cast *builder* val *nuc-val* "cast-int-to-nuc-val")))
+    (|bool|
+      (compile-if (compile-expr `(|eq?| (|quote| ,val)
+                                        (|quote| ,(llvm-val<-int 0 32))))
+        *false*
+        *true*))))
 
 ;;; The following should definitely be in the standard library, but for the
 ;;; bootstrap compiler it's easier to just define them in the compiler than it
