@@ -10,3 +10,6 @@
 (defvar LAMBDA-LOWTAG 5)
 (defvar FOREIGN-LOWTAG 6)
 (defvar EXTTAG-LOWTAG 7)
+
+;; Architecture dependent types
+(defvar INT (LLVMIntType 32))

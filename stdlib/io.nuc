@@ -188,7 +188,12 @@
                  (print-to-stream stream (car arg-list))
                  (set arg-list (cdr arg-list)))
                 (true (write-char-to-stream stream c))))))
-    (write-char-to-stream stream 10)
+    ;; Hacky - we generally want to print a trailing newline when we're
+    ;; printing debug stuff, but not for formatting strings and such. This is a
+    ;; stopgap measure until we have a nice wrapper function that appends a
+    ;; newline.
+    (when (eq? stream-spec true)
+      (write-char-to-stream stream 10))
     (if (eq? stream-spec nil)
       (string<-string-stream stream)
       nil)))

@@ -52,3 +52,12 @@ nuc_val rt_get_null(void)
 	assert(LOWTAG(&global_null) == 0);
 	return ((nuc_val)&global_null) | FOREIGN_LOWTAG;
 }
+
+nuc_val rt_null_p(nuc_val ptr_val)
+{
+	if (LOWTAG(ptr_val) != FOREIGN_LOWTAG)
+		return FALSE;
+
+	void **ptr = (void **)REMOVE_LOWTAG(ptr_val);
+	return *ptr == NULL ? TRUE : FALSE;
+}

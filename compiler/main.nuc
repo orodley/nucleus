@@ -20,6 +20,25 @@
        (each process-form forms)
        ;; TODO: use function composition when that works
        (each (lambda (f) (compile-function (cdr f))) $functions)
+       (let ((entry-point (LLVMGetNamedFunction $module (mangle-name (quote main))))
+             (main-func (LLVMAddFunction $module "main"
+                                         (LLVMFunctionType INT nil 0 false))))
+         (when (null? entry-point)
+           (panic! "No main function defined."))
+         (LLVMPositionBuilderAtEnd $builder
+                                   (LLVMAppendBasicBlock main-func "entry"))
+         ;; TODO: static initialisation here
+         (LLVMBuildRet
+           $builder
+           (LLVMBuildIntCast
+             $builder
+             (LLVMBuildLShr
+               $builder
+               (LLVMBuildCall $builder entry-point nil 0 "enter-nucleus")
+               (llvm-val<-int LOWTAG-BITS)
+               "")
+             INT
+             "truncate-main-result")))
        (when (LLVMVerifyModule $module LLVMPrintMessageAction NULL)
           (LLVMDumpModule $module)
           (panic! "ICE: Module failed LLVMVerifyModule. Module has been dumped"))
@@ -85,7 +104,7 @@
 
 (defun compile-function (func)
   (let ((llvm-func (LLVMGetNamedFunction $module (mangle-name (func-name func)))))
-    (assert! (not (nil? llvm-func)) "Function should have been declared")
+    (assert! (not (null? llvm-func)) "Function should have been declared")
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
     (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
            (compiled (each-cons (lambda (c)
@@ -99,9 +118,7 @@
       compiled)))
 
 (defun mangle-name (name)
-  (if (eq? name (quote main))
-    "main"
-    (format nil "nuc(~)" name)))
+  (format nil "nuc(~)" name))
 
 (defun compile-expr (expr)
   (case (type expr)

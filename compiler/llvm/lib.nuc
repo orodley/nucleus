@@ -19,6 +19,9 @@
 
 (cfun LLVMBuildAdd (* * * string) -> *)
 (cfun LLVMBuildSub (* * * string) -> *)
+(cfun LLVMBuildLShr (* * * string) -> *)
+(cfun LLVMBuildIntCast (* * * string) -> *)
+(cfun LLVMBuildCall (* * array uint string) -> *)
 (cfun LLVMBuildRetVoid (*) -> *)
 (cfun LLVMBuildRet (* *) -> *)
 
