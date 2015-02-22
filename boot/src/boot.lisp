@@ -107,7 +107,16 @@
              (|%extern-call|
                ,(string name)
                ,(mapcar #'cons arg-types args)
-               ,ret-type)))))))
+               ,ret-type)))))
+    ;; TODO: should this be called 'c'enum? It's just a regular enum really.
+    (|cenum|
+      (when (null (cdr form))
+        (error "An enum must have one or more values"))
+      (let ((enum-variant-value -1))
+        (dolist (enum-variant-name (cdr form))
+          (llvm:set-initializer
+            (llvm:add-global *module* *nuc-val* (mangle-name enum-variant-name))
+            (nuc-val<-int (llvm-val<-int (incf enum-variant-value)))))))))
 
 (defun mappend (func list)
   (apply #'append (mapcar func list)))
