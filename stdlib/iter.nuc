@@ -10,7 +10,7 @@
   (if (not (nil? lizt))
     (progn
       (func lizt)
-      (each func (cdr lizt)))))
+      (each-cons func (cdr lizt)))))
 
 (defun upto (upper-bound func)
   (%upto 0 upper-bound func))
