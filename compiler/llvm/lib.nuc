@@ -8,6 +8,9 @@
 (cfun LLVMDisposeModule (*) -> void)
 (cfun LLVMAddFunction (* string *) -> *)
 (cfun LLVMGetNamedFunction (* string) -> *)
+(cfun LLVMAddGlobal (* * string) -> *)
+(cfun LLVMGetNamedGlobal (* string) -> *)
+(cfun LLVMSetInitializer (* *) -> void)
 
 (cfun LLVMConstInt (* long-long bool) -> *)
 
@@ -22,6 +25,8 @@
 (cfun LLVMBuildLShr (* * * string) -> *)
 (cfun LLVMBuildIntCast (* * * string) -> *)
 (cfun LLVMBuildCall (* * array uint string) -> *)
+(cfun LLVMBuildStore (* * * string) -> *)
+(cfun LLVMBuildLoad (* * string) -> *)
 (cfun LLVMBuildRetVoid (*) -> *)
 (cfun LLVMBuildRet (* *) -> *)
 

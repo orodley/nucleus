@@ -2,7 +2,9 @@
   (list
     (cons (quote +) builtin+)
     (cons (quote -) builtin-)))
-(defvar $special-forms nil)
+(defvar $special-forms
+  (list
+    (cons (quote set) special-form-set)))
 
 (defun get-special-form (name)
   (let ((special-form (assoc name $special-forms)))
@@ -15,6 +17,22 @@
     (if (not (nil? builtin-function))
       (cdr builtin-function)
       nil)))
+
+(defun special-form-set (context args)
+  (let* ((env (context-env context))
+         (name (first args))
+         (lvalue (get-lvalue context name))
+         (new-value (compile-expr context (second args))))
+    (if (null? lvalue)
+      (panic! "Undefined variable")
+      (LLVMBuildStore $builder new-value lvalue ""))
+    new-value))
+
+(defun get-lvalue (context name)
+  (let ((global (LLVMGetNamedGlobal $module (mangle-name name))))
+    (if (null? global)
+      nil
+      global)))
 
 ;; TODO: varargs
 (defun builtin+ (args) (LLVMBuildAdd $builder (first args) (second args) "+"))

@@ -12,4 +12,5 @@
 (defvar EXTTAG-LOWTAG 7)
 
 ;; Architecture dependent types
+;; TODO: These should probably use the LLVM target info API instead
 (defvar INT (LLVMIntType 32))
