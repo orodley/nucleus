@@ -9,9 +9,10 @@
 
 (defun main ()
   (cond
-    ((length-is? $argv 2)
+    ((not (length-is? $argv 1))
      (set $builder (LLVMCreateBuilder))
      (let* ((input-filename (second $argv))
+            (output-filename (if (length-is? $argv 2) "a.out" (third $argv)))
             (stream (open input-filename))
             (llvm-context (LLVMGetGlobalContext))
             (context (make-context nil))
@@ -46,7 +47,7 @@
           (panic! "ICE: Module failed LLVMVerifyModule. Module has been dumped"))
        (LLVMWriteBitcodeToFile $module "test.bc")
        (exec "llc" (list "test.bc" "-filetype=obj" "-o" "test.o"))
-       (exec "gcc" (list "test.o"))
+       (exec "gcc" (list "test.o" "-o" output-filename))
        (exec "rm" (list "test.bc" "test.o"))))
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
