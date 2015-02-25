@@ -45,10 +45,18 @@
        (when (LLVMVerifyModule $module LLVMPrintMessageAction NULL)
           (LLVMDumpModule $module)
           (panic! "ICE: Module failed LLVMVerifyModule. Module has been dumped"))
-       (LLVMWriteBitcodeToFile $module "test.bc")
-       (exec "llc" (list "test.bc" "-filetype=obj" "-o" "test.o"))
-       (exec "gcc" (list "test.o" "-o" output-filename))
-       (exec "rm" (list "test.bc" "test.o"))))
+       ;; TODO: not portable
+       (let ((tmp-bc-file (format nil "/tmp/~.bc" (random)))
+             (tmp-o-file (format nil "/tmp/~.o" (random))))
+         (format true "~ ~" tmp-bc-file tmp-o-file)
+         (LLVMWriteBitcodeToFile $module tmp-bc-file)
+         (unless (zero? (exec "llc" (list tmp-bc-file "-filetype=obj" "-o" tmp-o-file)))
+           (exec "rm" (list tmp-bc-file))
+           (panic! "llc failed"))
+         (unless (zero? (exec "gcc" (list tmp-o-file "-o" output-filename)))
+           (exec "rm" (list tmp-bc-file tmp-o-file))
+           (panic! "gcc failed"))
+         (exec "rm" (list tmp-bc-file tmp-o-file)))))
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
 

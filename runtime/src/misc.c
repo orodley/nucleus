@@ -1,9 +1,11 @@
 #include <assert.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
+#include <sys/time.h>
+#include <time.h>
 #include "gc.h"
 #include "nuc.h"
 
@@ -14,7 +16,7 @@ nuc_val rt_panic(nuc_val message)
 	fwrite(str->bytes, 1, str->length, stderr);
 	fputs("\")\n", stderr);
 
-	exit(-1);
+	exit(1);
 }
 
 static nuc_val argv_list;
@@ -42,4 +44,19 @@ void rt_store_argv(int32_t argc, char *argv[])
 nuc_val rt_get_argv()
 {
 	return argv_list;
+}
+
+static bool seeded_rng = false;
+
+nuc_val rt_rand()
+{
+	if (!seeded_rng) {
+		struct timeval t;
+		gettimeofday(&t, NULL);
+		srand(t.tv_usec * t.tv_sec);
+
+		seeded_rng = true;
+	}
+
+	return INT_TO_NUC_VAL(rand());
 }

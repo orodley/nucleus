@@ -27,7 +27,7 @@ typedef uint64_t nuc_val;
 #define EXTTAG_LOWTAG 7
 
 #define NUC_VAL_TO_INT(x) ((nuc_val)((x) >> LOWTAG_BITS))
-#define INT_TO_NUC_VAL(x) ((nuc_val)((x) << LOWTAG_BITS))
+#define INT_TO_NUC_VAL(x) (((nuc_val)(x)) << LOWTAG_BITS)
 
 #define EXTTAG_BITS 5
 #define EXTTAG_MASK ((nuc_val)((1 << (EXTTAG_BITS - 1)) - 1))
