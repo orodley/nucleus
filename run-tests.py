@@ -154,11 +154,16 @@ def escape_str(s):
 def indent(str):
     return '\n'.join("    " + line for line in str.split('\n'))
 
+# TODO: check if we're on a platform that doesn't support ANSI colors
+green = '\033[92m'
+red = '\033[91m'
+reset_color = '\033[0m'
+
 def result_char(result):
     if result['passed']:
-        return '.'
+        return green + '.' + reset_color
     else:
-        return 'F'
+        return red + 'F' + reset_color
 
 def partition(l, pred):
     true = []
