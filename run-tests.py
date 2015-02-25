@@ -9,10 +9,15 @@ import time
 import uuid
 
 def main():
-    if len(sys.argv) > 1:
-        tests = sys.argv[1:]
-    else:
-        tests = []
+    nucc = './nucc'
+    tests = []
+    for arg in sys.argv[1:]:
+        if arg == '-b':
+            nucc = 'boot/nucc.sh'
+        else:
+            tests.append(arg)
+
+    if tests == []:
         for root, dirnames, filenames in os.walk('tests'):
             for filename in fnmatch.filter(filenames, '*.nuc'):
                 tests.append(os.path.join(root, filename))
@@ -36,7 +41,7 @@ def main():
 
         while len(running_nucc_procs) < parallel_nucc_procs and len(tests) > 0:
             new_test = tests.pop()
-            running_nucc_procs.append(start_compiling(new_test))
+            running_nucc_procs.append(start_compiling(new_test, nucc))
 
         if len(done) == 0:
             time.sleep(0.05)
@@ -56,14 +61,14 @@ def main():
         if not result['passed']:
             print "\ntest '%s' failed:\n%s" % (result['name'], result['error'])
 
-def start_compiling(test_filename):
+def start_compiling(test_filename, nucc):
     result = {'name': test_filename}
 
     with open(test_filename, 'r') as f:
         process_header(result, f)
 
-    result['binary'] = "%s_%s" % (test_filename, str(uuid.uuid4()))
-    nucc_proc = subprocess.Popen(["boot/nucc.sh", test_filename, result['binary']],
+    result['binary'] = "%s_%s.tmp" % (test_filename, str(uuid.uuid4()))
+    nucc_proc = subprocess.Popen([nucc, test_filename, result['binary']],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     result['nucc_proc'] = nucc_proc
     return result
