@@ -10,10 +10,13 @@ import uuid
 
 def main():
     nucc = './nucc'
+    print_details = True
     tests = []
     for arg in sys.argv[1:]:
         if arg == '-b':
             nucc = 'boot/nucc.sh'
+        elif arg == '-s':
+            print_details = False
         else:
             tests.append(arg)
 
@@ -57,9 +60,11 @@ def main():
     passes = sum(1 for result in results if result['passed'])
     print "%d / %d tests passed" % (passes, num_tests)
 
-    for result in results:
-        if not result['passed']:
-            print "\ntest '%s' failed:\n%s" % (result['name'], result['error'])
+    if print_details:
+        for result in results:
+            if not result['passed']:
+                print "\ntest '%s' failed:\n%s" % \
+                        (result['name'], result['error'])
 
 def start_compiling(test_filename, nucc):
     result = {'name': test_filename}
