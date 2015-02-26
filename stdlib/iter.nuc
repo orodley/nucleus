@@ -20,3 +20,6 @@
     (progn
       (func n)
       (%upto (1+ n) upper-bound func))))
+
+(defun reverse (lizt)
+  (reduce (lambda (a b) (cons b a)) (cons nil lizt)))

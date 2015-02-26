@@ -1,0 +1,4 @@
+; run-stdout: (3 2 1)
+
+(defun main ()
+  (print (reverse (list 1 2 3))))
