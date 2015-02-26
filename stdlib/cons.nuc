@@ -107,3 +107,13 @@
   (if (nil? (cdr l1))
      (set-cdr l1 l2)
      (%append! (cdr l1) l2)))
+
+(defun reduce (func lizt)
+  (if (nil? lizt)
+    (panic! "reduce called on an empty list")
+    (%reduce func (cdr lizt) (car lizt))))
+
+(defun %reduce (func lizt acc)
+  (if (nil? lizt)
+    acc
+    (%reduce func (cdr lizt) (func acc (car lizt)))))

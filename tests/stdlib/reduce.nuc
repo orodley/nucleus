@@ -1,0 +1,4 @@
+; status-code: 6
+
+(defun main ()
+  (set $status-code (reduce + (list 1 2 3))))
