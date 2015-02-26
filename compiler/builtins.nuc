@@ -1,7 +1,8 @@
 (defvar $builtin-functions
   (list
     (cons (quote +) builtin+)
-    (cons (quote -) builtin-)))
+    (cons (quote -) builtin-)
+    (cons (quote *) builtin*)))
 (defvar $special-forms
   (list
     (cons (quote set) special-form-set)))
@@ -34,6 +35,24 @@
       nil
       global)))
 
-;; TODO: varargs
-(defun builtin+ (args) (LLVMBuildAdd $builder (first args) (second args) "+"))
-(defun builtin- (args) (LLVMBuildSub $builder (first args) (second args) "-"))
+;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
+;; is zero, and shifting is a multiplication, which distributes over addition
+;; and subtraction - shifting each operand right and then the result left is
+;; the same as not shifting at all.
+(defun builtin+ (args) (reduce (lambda (a b) (LLVMBuildAdd $builder a b "+")) args))
+(defun builtin- (args) (reduce (lambda (a b) (LLVMBuildSub $builder a b "-")) args))
+(defun builtin* (args)
+  (reduce (lambda (a b)
+            ;; Rather than shifting each operand right and the result left, we
+            ;; just deal with the extra factor of 2^LOWTAG-BITS by shifting
+            ;; the result.
+            ;; TODO: If we have type information about the upper bound of the
+            ;; operands we can batch these shifts rather than shifting every
+            ;; time. The only reason we can't is overflow, which we may be able
+            ;; to statically determine to be impossible.
+            (LLVMBuildLShr
+              $builder
+              (LLVMBuildMul $builder a b "*")
+              (llvm-val<-int LOWTAG-BITS)
+              ""))
+          args))
