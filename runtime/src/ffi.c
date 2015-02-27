@@ -19,7 +19,7 @@ uint64_t *rt_list_to_array(nuc_val list)
 {
 	if (list == NIL) {
 		uint64_t *result = malloc(sizeof *result);
-		result[0] = 0;
+		*result = 0;
 
 		return result;
 	}
@@ -27,10 +27,10 @@ uint64_t *rt_list_to_array(nuc_val list)
 	CHECK(list, CONS_LOWTAG);
 	Cons *cons = (Cons *)REMOVE_LOWTAG(list);
 	size_t len = rt_list_length(cons);
-	uint64_t *result = malloc(sizeof(*result) * (len + 1));
+	uintptr_t *result = malloc(sizeof(*result) * (len + 1));
 
 	size_t i = 0;
-	result[i++] = REMOVE_LOWTAG(cons->car);
+	result[i++] = *(uintptr_t *)REMOVE_LOWTAG(cons->car);
 
 	for (;;) {
 		nuc_val next = cons->cdr;
@@ -39,7 +39,8 @@ uint64_t *rt_list_to_array(nuc_val list)
 		
 		CHECK(next, CONS_LOWTAG);
 		cons = (Cons *)REMOVE_LOWTAG(next);
-		result[i++] = REMOVE_LOWTAG(cons->car);
+		CHECK(cons->car, FOREIGN_LOWTAG);
+		result[i++] = *(uintptr_t *)REMOVE_LOWTAG(cons->car); // unbox the pointer
 	}
 
 	return result;

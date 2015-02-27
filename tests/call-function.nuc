@@ -1,0 +1,4 @@
+; status-code: 23
+
+(defun id (x) x)
+(defun main () (set $status-code (id 23)))

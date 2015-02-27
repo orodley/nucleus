@@ -99,11 +99,11 @@
      (let* ((name (second form))
             (args (third form))
             (arity (length args))
-            (body (cdddr form)))
-       (declare-function (second form)
-                         NUC-VAL
-                         (map (lambda (_) NUC-VAL) (third form)))
-       (add-func (make-func name arity args body))))
+            (body (cdddr form))
+            (llvm-func
+              (declare-function
+                (second form) NUC-VAL (map (lambda (_) NUC-VAL) (third form)))))
+       (add-func (make-func name arity args body llvm-func))))
     ((quote defvar)
      (let ((name (second form)))
        (LLVMSetInitializer (LLVMAddGlobal $module NUC-VAL (mangle-name name))
@@ -116,11 +116,13 @@
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-func (name arity args body) (list name arity args body))
+(defun make-func (name arity args body llvm-func)
+  (list name arity args body llvm-func))
 (defun func-name (func) (first func))
 (defun func-arity (func) (second func))
 (defun func-args (func) (third func))
 (defun func-body (func) (fourth func))
+(defun func-llvm-func (func) (fifth func))
 
 ;;; TODO: Replace with a hash table once that exists
 ;;; TODO: These should go in the context, along with $module and $builder
@@ -130,6 +132,7 @@
 ;;; TODO: Replace with a struct once they exist
 (defun make-context (env) (list env))
 (defun context-env (context) (first context))
+(defun context-set-env (context new-env) (set-car context new-env))
 
 (defun add-func (f)
   (cond
@@ -140,12 +143,40 @@
     (true
       (set $functions (cons (cons (func-name f) f) $functions)))))
 
-(defun get-func (name) (assoc name $functions))
+(defun get-func (name)
+  (let ((f (assoc name $functions)))
+    (if (nil? f) nil (cdr f))))
+
+(defun llvm-params (func)
+  (let ((first-param (LLVMGetFirstParam func)))
+    (if (null? first-param)
+      nil
+      (let ((list-head (cons first-param nil)))
+        (%llvm-params func list-head)
+        list-head))))
+
+(defun %llvm-params (func list-head)
+  (let ((param (LLVMGetNextParam (car list-head))))
+    (unless (null? param)
+      (set-cdr list-head (cons param nil))
+      (%llvm-params func (cdr list-head)))))
 
 (defun compile-function (context func)
-  (let ((llvm-func (LLVMGetNamedFunction $module (mangle-name (func-name func)))))
+  (let* ((args (func-args func))
+         (env (context-env context))
+         (llvm-func (func-llvm-func func))
+         (params (llvm-params llvm-func)))
     (assert! (not (null? llvm-func)) "Function should have been declared")
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
+    ;; TODO: set LLVM param names
+    (each (lambda (arg-param)
+            (let ((arg (car arg-param))
+                  (param (cdr arg-param))
+                  (arg-on-stack (LLVMBuildAlloca $builder NUC-VAL "")))
+              (LLVMBuildStore $builder param arg-on-stack "")
+              (set env (cons (cons arg arg-on-stack) env))))
+          (zip args params))
+    (context-set-env context env)
     (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
            (compiled (each-cons (lambda (c)
                                   (let ((e (compile-expr context (car c))))
@@ -164,14 +195,12 @@
   (case (type expr)
     ;; TODO: limit on size
     (fixnum-t (llvm-val<-int (<< expr LOWTAG-BITS)))
-    #+nil
-    (symbol-t (let ((const (cdr (assoc expr *constants*))))
-                (if const
-                  const
-                  (multiple-value-bind (binding bindingp) (lookup-lvalue expr)
-                    (if bindingp
-                      (llvm:build-load *builder* binding (string expr))
-                      (error "Undefined variable '~S'~%" expr))))))
+    (symbol-t
+      ;; TODO: constants
+      (let ((binding (get-lvalue context expr)))
+        (if (nil? binding)
+          (panic! (format nil "Undefined variable '~'" expr))
+          (LLVMBuildLoad $builder binding (string<-symbol expr)))))
     (cons-t (compile-form context expr))
     #+nil
     (string-t (llvm:build-call
@@ -185,18 +214,29 @@
                       (make-array (list 2) :initial-element (llvm-val<-int 0))
                       "str-to-ptr"))
               "make-literal-string"))
-    (default (println expr)
-             (panic! "Don't know how to compile this type of expression"))))
+    (default (panic!
+               (format nil
+                       "Don't know how to compile this type of expression: ~"
+                       expr)))))
 
 (defun compile-form (context form)
   (let* ((name (car form))
+         (args (cdr form))
          (special-form (get-special-form name)))
     (if (not (nil? special-form))
-      (special-form context (cdr form))
+      (special-form context args)
       (let ((builtin-function (get-builtin-function name)))
-        (cond ((not (nil? builtin-function))
-               (builtin-function (map compile-expr (cdr form))))
-              (true (panic! (format nil "Undefined function '~'" name))))))))
+        (if (not (nil? builtin-function))
+          (builtin-function (map compile-expr args))
+          (let ((func (get-func name)))
+            (if (nil? func)
+              (panic! (format nil "Undefined function '~'" name))
+              (LLVMBuildCall
+                $builder
+                (func-llvm-func func)
+                (map compile-expr args)
+                (length args)
+                ""))))))))
 
 (defun llvm-val<-int (x)
   (LLVMConstInt NUC-VAL x false))
