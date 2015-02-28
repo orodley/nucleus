@@ -3,7 +3,8 @@
     (cons (quote +) builtin+)
     (cons (quote -) builtin-)
     (cons (quote *) builtin*)
-    (cons (quote /) builtin/)))
+    (cons (quote /) builtin/)
+    (cons (quote cons) builtin-cons)))
 (defvar $special-forms
   (list
     (cons (quote set) special-form-set)
@@ -93,3 +94,10 @@
               (llvm-val<-int LOWTAG-BITS)
               ""))
           args))
+
+(defun builtin-cons (args)
+  (LLVMBuildCall $builder
+                 (runtime-func "rt_cons" NUC-VAL (list NUC-VAL NUC-VAL))
+                 args
+                 2
+                 "cons"))
