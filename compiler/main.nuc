@@ -2,6 +2,7 @@
 (include "llvm/lib")
 
 (include "builtins")
+(include "util")
 (include "types")
 
 (defvar $builder)
@@ -81,18 +82,6 @@
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
 
-(defun read-all (stream)
-  (let ((list-head (cons nil nil)))
-    (%read-all list-head stream)
-    (cdr list-head)))
-
-(defun %read-all (list-head stream)
-  (let ((sexp (read-from-stream stream)))
-    (cond
-      ((not (eq? sexp EOF))
-       (set-cdr list-head (cons sexp nil))
-       (%read-all (cdr list-head) stream)))))
-
 (defun process-form (form)
   (case (first form)
     ((quote defun)
@@ -108,88 +97,6 @@
      (let ((name (second form)))
        (LLVMSetInitializer (LLVMAddGlobal $module NUC-VAL (mangle-name name))
                            (llvm-val<-int 0))))))
-
-(defun declare-function (name ret-type arg-types)
-  (LLVMAddFunction
-    $module
-    (mangle-name name)
-    (LLVMFunctionType ret-type arg-types (length arg-types) false)))
-
-;;; TODO: Replace with a struct once they exist
-(defun make-func (name arity args body llvm-func)
-  (list name arity args body llvm-func))
-(defun func-name (func) (first func))
-(defun func-arity (func) (second func))
-(defun func-args (func) (third func))
-(defun func-body (func) (fourth func))
-(defun func-llvm-func (func) (fifth func))
-
-;;; TODO: Replace with a hash table once that exists
-;;; TODO: These should go in the context, along with $module and $builder
-(defvar $functions nil)
-(defvar $constants nil)
-
-;;; TODO: Replace with a struct once they exist
-(defun make-context (env) (list env))
-(defun context-env (context) (first context))
-(defun context-set-env (context new-env) (set-car context new-env))
-
-(defun add-func (f)
-  (cond
-    ((not (nil? (get-func (func-name f))))
-     (format true "Duplicate definition of function '~'" (func-name f))
-     (write-string-ln "")
-     (panic! "Aborting"))
-    (true
-      (set $functions (cons (cons (func-name f) f) $functions)))))
-
-(defun get-func (name)
-  (let ((f (assoc name $functions)))
-    (if (nil? f) nil (cdr f))))
-
-(defun llvm-params (func)
-  (let ((first-param (LLVMGetFirstParam func)))
-    (if (null? first-param)
-      nil
-      (let ((list-head (cons first-param nil)))
-        (%llvm-params func list-head)
-        list-head))))
-
-(defun %llvm-params (func list-head)
-  (let ((param (LLVMGetNextParam (car list-head))))
-    (unless (null? param)
-      (set-cdr list-head (cons param nil))
-      (%llvm-params func (cdr list-head)))))
-
-(defun compile-function (context func)
-  (let* ((args (func-args func))
-         (env (context-env context))
-         (llvm-func (func-llvm-func func))
-         (params (llvm-params llvm-func)))
-    (assert! (not (null? llvm-func)) "Function should have been declared")
-    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
-    ;; TODO: set LLVM param names
-    (set context (extend-env context args params))
-    (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
-           (compiled (LLVMBuildRet $builder (compile-progn context body))))
-      (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
-        (LLVMDumpValue llvm-func)
-        (panic! "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
-      compiled)))
-
-(defun extend-env (context vars values)
-  (let ((env (context-env context)))
-    (each (lambda (name-and-value)
-            (let ((var (car name-and-value))
-                  (value (cdr name-and-value))
-                  (var-on-stack (LLVMBuildAlloca $builder NUC-VAL "")))
-              (LLVMBuildStore $builder value var-on-stack "")
-              (set env (cons (cons var var-on-stack) env))))
-          (zip vars values))
-    (make-context env)))
-
-(defun mangle-name (name)
-  (format nil "nuc(~)" name))
 
 (defun compile-expr (context expr)
   ;(format true "Compiling ~ in env ~" expr context)
@@ -238,6 +145,3 @@
                 (map compile-expr args)
                 (length args)
                 ""))))))))
-
-(defun llvm-val<-int (x)
-  (LLVMConstInt NUC-VAL x false))

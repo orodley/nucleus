@@ -12,9 +12,6 @@
 (cfun LLVMGetNamedGlobal (* string) -> *)
 (cfun LLVMSetInitializer (* *) -> void)
 
-(cfun LLVMGetFirstParam (*) -> *)
-(cfun LLVMGetNextParam (*) -> *)
-
 (cfun LLVMConstInt (* long-long bool) -> *)
 
 (cfun LLVMAppendBasicBlock (* string) -> *)
@@ -45,3 +42,22 @@
   LLVMReturnStatusAction)
 (cfun LLVMVerifyModule (* uint *) -> bool)
 (cfun LLVMVerifyFunction (* uint) -> bool)
+
+
+(cfun LLVMGetFirstParam (*) -> *)
+(cfun LLVMGetNextParam (*) -> *)
+
+(defun llvm-params (func)
+  (let ((first-param (LLVMGetFirstParam func)))
+    (if (null? first-param)
+      nil
+      (let ((list-head (cons first-param nil)))
+        (%llvm-params func list-head)
+        list-head))))
+
+(defun %llvm-params (func list-head)
+  (let ((param (LLVMGetNextParam (car list-head))))
+    (unless (null? param)
+      (set-cdr list-head (cons param nil))
+      (%llvm-params func (cdr list-head)))))
+

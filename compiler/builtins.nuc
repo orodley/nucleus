@@ -56,20 +56,6 @@
 (defun special-form-progn (context args)
   (compile-progn context args))
 
-(defun compile-progn (context forms)
-  (let ((e (compile-expr context (car forms))))
-    (if (nil? (cdr forms))
-      e
-      (compile-progn context (cdr forms)))))
-
-(defun get-lvalue (context name)
-  (let ((global (LLVMGetNamedGlobal $module (mangle-name name))))
-    (if (not (null? global))
-      global
-      (let ((lexical-binding (assoc name (context-env context))))
-        (if (nil? lexical-binding)
-          nil
-          (cdr lexical-binding))))))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition

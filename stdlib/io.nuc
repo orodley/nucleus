@@ -98,6 +98,18 @@
 (defun read ()
   (read-from-stream $stdin))
 
+(defun read-all (stream)
+  (let ((list-head (cons nil nil)))
+    (%read-all list-head stream)
+    (cdr list-head)))
+
+(defun %read-all (list-head stream)
+  (let ((sexp (read-from-stream stream)))
+    (cond
+      ((not (eq? sexp EOF))
+       (set-cdr list-head (cons sexp nil))
+       (%read-all (cdr list-head) stream)))))
+
 (defun read-from-stream (stream)
   (let ((c (%read-char stream)))
     (cond
