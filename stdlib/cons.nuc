@@ -8,6 +8,7 @@
 
 (defun car (c) (car c))
 (defun cdr (c) (cdr c))
+(defun rest (lizt) (cdr lizt))
 
 (defun caar (c) (car (car c)))
 (defun cadr (c) (car (cdr c)))
