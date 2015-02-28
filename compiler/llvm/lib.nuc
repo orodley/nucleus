@@ -19,6 +19,7 @@
 
 (cfun LLVMIntType (uint) -> *)
 (cfun LLVMPointerType (*) -> *)
+(cfun LLVMStructType (array uint bool) -> *)
 (cfun LLVMFunctionType (* array uint bool) -> *)
 
 (cfun LLVMBuildAdd (* * * string) -> *)
@@ -27,9 +28,12 @@
 (cfun LLVMBuildSDiv (* * * string) -> *)
 (cfun LLVMBuildLShr (* * * string) -> *)
 (cfun LLVMBuildShl (* * * string) -> *)
+(cfun LLVMBuildAnd (* * * string) -> *)
 (cfun LLVMBuildIntCast (* * * string) -> *)
+(cfun LLVMBuildIntToPtr (* * * string) -> *)
 (cfun LLVMBuildCall (* * array uint string) -> *)
 (cfun LLVMBuildGEP (* * array uint string) -> *)
+(cfun LLVMBuildStructGEP (* * uint string) -> *)
 (cfun LLVMBuildStore (* * * string) -> *)
 (cfun LLVMBuildLoad (* * string) -> *)
 (cfun LLVMBuildAlloca (* * string) -> *)

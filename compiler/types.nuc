@@ -1,5 +1,7 @@
 (defvar NUC-VAL-BITS 64)
 (defvar NUC-VAL (LLVMIntType NUC-VAL-BITS))
+(defvar CONS-CELL (LLVMStructType (list NUC-VAL NUC-VAL) 2 false))
+(defvar CONS-CELL-PTR (LLVMPointerType CONS-CELL))
 
 (defvar LOWTAG-BITS 3)
 

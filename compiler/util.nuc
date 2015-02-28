@@ -65,8 +65,24 @@
     (mangle-name name)
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
+(defun remove-lowtag (nuc-val)
+  (LLVMBuildAnd
+    $builder
+    nuc-val
+    ;; TODO: replace with (~ (1- (<< 1 LOWTAG-BITS)))
+    (llvm-val<-int 18446744073709551608)
+    "remove-lowtag"))
+
 (defun llvm-val<-int (x)
   (LLVMConstInt NUC-VAL x false))
+
+(defun cons<-nuc-val (nuc-val)
+  ; TODO: type checking
+  (LLVMBuildIntToPtr
+    $builder
+    (remove-lowtag nuc-val)
+    CONS-CELL-PTR
+    ""))
 
 (defun compile-progn (context forms)
   (let ((e (compile-expr context (car forms))))

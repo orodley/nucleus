@@ -4,7 +4,9 @@
     (cons (quote -) builtin-)
     (cons (quote *) builtin*)
     (cons (quote /) builtin/)
-    (cons (quote cons) builtin-cons)))
+    (cons (quote cons) builtin-cons)
+    (cons (quote car) builtin-car)
+    (cons (quote cdr) builtin-cdr)))
 (defvar $special-forms
   (list
     (cons (quote set) special-form-set)
@@ -101,3 +103,11 @@
                  args
                  2
                  "cons"))
+
+(defun builtin-car (args)
+  (let ((cons-ptr (cons<-nuc-val (first args))))
+    (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 0 "") "car")))
+
+(defun builtin-cdr (args)
+  (let ((cons-ptr (cons<-nuc-val (first args))))
+    (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")))
