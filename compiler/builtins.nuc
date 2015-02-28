@@ -2,7 +2,8 @@
   (list
     (cons (quote +) builtin+)
     (cons (quote -) builtin-)
-    (cons (quote *) builtin*)))
+    (cons (quote *) builtin*)
+    (cons (quote /) builtin/)))
 (defvar $special-forms
   (list
     (cons (quote set) special-form-set)
@@ -88,6 +89,15 @@
             (LLVMBuildLShr
               $builder
               (LLVMBuildMul $builder a b "*")
+              (llvm-val<-int LOWTAG-BITS)
+              ""))
+          args))
+(defun builtin/ (args)
+  (reduce (lambda (a b)
+            ;; The same comments in builtin* apply here
+            (LLVMBuildShl
+              $builder
+              (LLVMBuildSDiv $builder a b "*")
               (llvm-val<-int LOWTAG-BITS)
               ""))
           args))
