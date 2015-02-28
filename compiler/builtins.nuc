@@ -10,18 +10,24 @@
     (cons (quote let) special-form-let)
     (cons (quote let*) special-form-let*)
     (cons (quote progn) special-form-progn)))
+;; TODO: Write these as a more readable constant expression
+(defvar LLVM-NIL (llvm-val<-int 7))
+(defvar LLVM-TRUE (llvm-val<-int 263))
+(defvar LLVM-FALSE (llvm-val<-int 519))
+(defvar $constants
+  (list
+    (cons (quote nil) LLVM-NIL)
+    (cons (quote true) LLVM-TRUE)
+    (cons (quote false) LLVM-FALSE)))
 
 (defun get-special-form (name)
-  (let ((special-form (assoc name $special-forms)))
-    (if (not (nil? special-form))
-      (cdr special-form)
-      nil)))
+  (assoc-cdr name $special-forms))
 
 (defun get-builtin-function (name)
-  (let ((builtin-function (assoc name $builtin-functions)))
-    (if (not (nil? builtin-function))
-      (cdr builtin-function)
-      nil)))
+  (assoc-cdr name $builtin-functions))
+
+(defun get-constant (name)
+  (assoc-cdr name $constants))
 
 (defun special-form-set (context args)
   (let* ((env (context-env context))

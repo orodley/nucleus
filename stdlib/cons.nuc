@@ -93,6 +93,12 @@
     ((eq? (caar alist) kar) (car alist))
     (true (assoc kar (cdr alist)))))
 
+(defun assoc-cdr (kar alist)
+  (let ((kons (assoc kar alist)))
+    (if (nil? kons)
+      nil
+      (cdr kons))))
+
 (defun list-eq? (l1 l2)
   (cond ((nil? l1) (nil? l2))
         ((nil? l2) (nil? l1))

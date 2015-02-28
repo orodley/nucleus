@@ -10,7 +10,6 @@
 ;;; TODO: Replace with a hash table once that exists
 ;;; TODO: These should go in the context, along with $module and $builder
 (defvar $functions nil)
-(defvar $constants nil)
 
 ;;; TODO: Replace with a struct once they exist
 (defun make-context (env) (list env))
@@ -74,6 +73,12 @@
     (if (nil? (cdr forms))
       e
       (compile-progn context (cdr forms)))))
+
+(defun get-value (context name)
+  (let ((lvalue (get-lvalue context name)))
+    (if (nil? lvalue)
+      (get-constant name)
+      (LLVMBuildLoad $builder lvalue (string<-symbol name)))))
 
 (defun get-lvalue (context name)
   (let ((global (LLVMGetNamedGlobal $module (mangle-name name))))

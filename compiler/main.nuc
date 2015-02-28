@@ -1,9 +1,13 @@
-; TODO: including a directory should look for 'lib' inside it
+;;; TODO: including a directory should look for 'lib' inside it
 (include "llvm/lib")
 
+;;; TODO: currently we have to put "types" before "builtins", as there are some
+;;; static initializers in "builtins" that depend on variables in "types", and
+;;; we don't currently figure out dependencies and order the initializers
+;;; appropriately. This shouldn't be necessary later.
+(include "types")
 (include "builtins")
 (include "util")
-(include "types")
 
 (defvar $builder)
 (defvar $module)
@@ -105,10 +109,10 @@
     (fixnum-t (llvm-val<-int (<< expr LOWTAG-BITS)))
     (symbol-t
       ;; TODO: constants
-      (let ((binding (get-lvalue context expr)))
-        (if (nil? binding)
+      (let ((value (get-value context expr)))
+        (if (nil? value)
           (panic! (format nil "Undefined variable '~'" expr))
-          (LLVMBuildLoad $builder binding (string<-symbol expr)))))
+          value)))
     (cons-t (compile-form context expr))
     #+nil
     (string-t (llvm:build-call

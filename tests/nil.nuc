@@ -1,0 +1,4 @@
+; status-code: 0
+
+(defun main ()
+  nil)
