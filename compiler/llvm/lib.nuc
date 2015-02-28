@@ -31,6 +31,7 @@
 (cfun LLVMBuildAnd (* * * string) -> *)
 (cfun LLVMBuildIntCast (* * * string) -> *)
 (cfun LLVMBuildIntToPtr (* * * string) -> *)
+(cfun LLVMBuildSelect (* * * * string) -> *)
 (cfun LLVMBuildCall (* * array uint string) -> *)
 (cfun LLVMBuildGEP (* * array uint string) -> *)
 (cfun LLVMBuildStructGEP (* * uint string) -> *)
@@ -40,6 +41,19 @@
 (cfun LLVMBuildGlobalString (* string string) -> *)
 (cfun LLVMBuildRetVoid (*) -> *)
 (cfun LLVMBuildRet (* *) -> *)
+
+(cfun LLVMBuildICmp (* uint * * string) -> *)
+(cenum
+  (LLVMIntEQ 32)
+  LLVMIntNE
+  LLVMIntUGT
+  LLVMIntUGE
+  LLVMIntULT
+  LLVMIntULE
+  LLVMIntSGT
+  LLVMIntSGE
+  LLVMIntSLT
+  LLVMIntSLE)
 
 (cfun LLVMSetValueName (* string) -> void)
 (cfun LLVMDumpValue (*) -> void)
@@ -67,4 +81,3 @@
     (unless (null? param)
       (set-cdr list-head (cons param nil))
       (%llvm-params func (cdr list-head)))))
-

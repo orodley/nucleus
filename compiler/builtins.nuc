@@ -6,7 +6,8 @@
     (cons (quote /) builtin/)
     (cons (quote cons) builtin-cons)
     (cons (quote car) builtin-car)
-    (cons (quote cdr) builtin-cdr)))
+    (cons (quote cdr) builtin-cdr)
+    (cons (quote eq?) builtin-eq?)))
 (defvar $special-forms
   (list
     (cons (quote set) special-form-set)
@@ -111,3 +112,10 @@
 (defun builtin-cdr (args)
   (let ((cons-ptr (cons<-nuc-val (first args))))
     (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")))
+
+(defun builtin-eq? (args)
+  (LLVMBuildSelect $builder
+                   (LLVMBuildICmp $builder LLVMIntEQ (first args) (second args) "")
+                   LLVM-TRUE
+                   LLVM-FALSE
+                   "eq?"))
