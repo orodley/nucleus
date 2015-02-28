@@ -123,18 +123,20 @@
           (panic! (format nil "Undefined variable '~'" expr))
           value)))
     (cons-t (compile-form context expr))
-    #+nil
-    (string-t (llvm:build-call
-              *builder*
-              (extern-func "rt_make_string" *nuc-val* *size-t*
-                           (llvm:pointer-type (llvm:int-type 8)))
-              (list (llvm-val<-int (length expr))
-                    (llvm:build-gep
-                      *builder*
-                      (llvm:build-global-string *builder* expr "string-lit")
-                      (make-array (list 2) :initial-element (llvm-val<-int 0))
-                      "str-to-ptr"))
-              "make-literal-string"))
+    (string-t (LLVMBuildCall
+                $builder
+                (runtime-func "rt_make_string"
+                              NUC-VAL
+                              (list SIZE-T (LLVMPointerType (LLVMIntType 8))))
+                (list (llvm-val<-int (length expr))
+                      (LLVMBuildGEP
+                        $builder
+                        (LLVMBuildGlobalString $builder expr "")
+                        (list (llvm-val<-int 0) (llvm-val<-int 0))
+                        2
+                        "str-to-ptr"))
+                2
+                "make-string-literal"))
     (default (panic!
                (format nil
                        "Don't know how to compile this type of expression: ~"

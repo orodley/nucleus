@@ -17,8 +17,9 @@
 (cfun LLVMAppendBasicBlock (* string) -> *)
 (cfun LLVMPositionBuilderAtEnd (* *) -> void)
 
-(cfun LLVMFunctionType (* array uint bool) -> *)
 (cfun LLVMIntType (uint) -> *)
+(cfun LLVMPointerType (*) -> *)
+(cfun LLVMFunctionType (* array uint bool) -> *)
 
 (cfun LLVMBuildAdd (* * * string) -> *)
 (cfun LLVMBuildSub (* * * string) -> *)
@@ -28,9 +29,11 @@
 (cfun LLVMBuildShl (* * * string) -> *)
 (cfun LLVMBuildIntCast (* * * string) -> *)
 (cfun LLVMBuildCall (* * array uint string) -> *)
+(cfun LLVMBuildGEP (* * array uint string) -> *)
 (cfun LLVMBuildStore (* * * string) -> *)
 (cfun LLVMBuildLoad (* * string) -> *)
 (cfun LLVMBuildAlloca (* * string) -> *)
+(cfun LLVMBuildGlobalString (* string string) -> *)
 (cfun LLVMBuildRetVoid (*) -> *)
 (cfun LLVMBuildRet (* *) -> *)
 

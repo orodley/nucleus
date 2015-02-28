@@ -88,3 +88,11 @@
         (if (nil? lexical-binding)
           nil
           (cdr lexical-binding))))))
+
+(defun runtime-func (name return-type arg-types)
+  (let ((func (LLVMGetNamedFunction $module name)))
+    (if (not (null? func))
+      func
+      (LLVMAddFunction
+        $module name
+        (LLVMFunctionType return-type arg-types (length arg-types) false)))))
