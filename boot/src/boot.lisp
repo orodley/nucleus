@@ -113,10 +113,14 @@
       (when (null (cdr form))
         (error "An enum must have one or more values"))
       (let ((enum-variant-value -1))
-        (dolist (enum-variant-name (cdr form))
-          (llvm:set-initializer
-            (llvm:add-global *module* *nuc-val* (mangle-name enum-variant-name))
-            (nuc-val<-int (llvm-val<-int (incf enum-variant-value)))))))))
+        (dolist (enum-variant (cdr form))
+          (let ((name (if (consp enum-variant) (car enum-variant) enum-variant))
+                (value (if (consp enum-variant)
+                         (setf enum-variant-value (second enum-variant))
+                         (incf enum-variant-value))))
+            (llvm:set-initializer
+            (llvm:add-global *module* *nuc-val* (mangle-name name))
+            (nuc-val<-int (llvm-val<-int value)))))))))
 
 (defun mappend (func list)
   (apply #'append (mapcar func list)))
