@@ -11,14 +11,20 @@ import uuid
 def main():
     nucc = './nucc'
     print_details = True
+    be_positive = False
     tests = []
     for arg in sys.argv[1:]:
         if arg == '-b':
             nucc = 'boot/nucc.sh'
         elif arg == '-s':
             print_details = False
+        elif arg == '-p':
+            be_positive = True
         else:
             tests.append(arg)
+    if not print_details and be_positive:
+        print "Cannot specify '-s' and '-p'"
+        return
 
     if tests == []:
         for root, dirnames, filenames in os.walk('tests'):
@@ -62,9 +68,13 @@ def main():
 
     if print_details:
         for result in results:
-            if not result['passed']:
-                print "\ntest '%s' failed:\n%s" % \
-                        (result['name'], result['error'])
+            if be_positive:
+                if result['passed']:
+                    print "test '%s' passed" % result['name']
+            else:
+                if not result['passed']:
+                    print "\ntest '%s' failed:\n%s" % \
+                            (result['name'], result['error'])
 
 def start_compiling(test_filename, nucc):
     result = {'name': test_filename}
