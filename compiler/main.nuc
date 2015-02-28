@@ -75,14 +75,23 @@
                  (exec "rm" (list tmp-bc-file))
                  (unless llvm-dis-success
                    (panic! "llvm-dis failed"))))
-             (true (unless (zero? (exec "llc" (list tmp-bc-file "-filetype=obj"
-                                                    "-o" tmp-o-file)))
-                     (exec "rm" (list tmp-bc-file))
-                     (panic! "llc failed"))
-                (unless (zero? (exec "gcc" (list tmp-o-file "-o" output-filename)))
-                  (exec "rm" (list tmp-bc-file tmp-o-file))
-                  (panic! "gcc failed"))
-                (exec "rm" (list tmp-bc-file tmp-o-file))))))))
+             (true
+               ;; TODO: A more intelligent way of finding the runtime
+               (unless (zero? (exec "llvm-link" (list tmp-bc-file
+                                                      "runtime/nuc-runtime.bc"
+                                                      "-o" tmp-bc-file)))
+                 (exec "rm" (list tmp-bc-file))
+                 (panic! "llvm-link failed"))
+               (unless (zero? (exec "llc" (list tmp-bc-file "-filetype=obj"
+                                                "-o" tmp-o-file)))
+                 (exec "rm" (list tmp-bc-file))
+                 (panic! "llc failed"))
+               (unless (zero? (exec "gcc" (list "-lm"
+                                                tmp-o-file
+                                                "-o" output-filename)))
+                 (exec "rm" (list tmp-bc-file tmp-o-file))
+                 (panic! "gcc failed"))
+               (exec "rm" (list tmp-bc-file tmp-o-file))))))))
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
 
