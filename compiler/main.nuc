@@ -192,6 +192,7 @@
   (format nil "nuc(~)" name))
 
 (defun compile-expr (context expr)
+  ;(format true "Compiling ~ in env ~" expr context)
   (case (type expr)
     ;; TODO: limit on size
     (fixnum-t (llvm-val<-int (<< expr LOWTAG-BITS)))

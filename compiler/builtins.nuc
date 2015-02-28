@@ -6,7 +6,9 @@
 (defvar $special-forms
   (list
     (cons (quote set) special-form-set)
-    (cons (quote let) special-form-let)))
+    (cons (quote let) special-form-let)
+    (cons (quote let*) special-form-let*)
+    (cons (quote progn) special-form-progn)))
 
 (defun get-special-form (name)
   (let ((special-form (assoc name $special-forms)))
@@ -41,6 +43,17 @@
                       (map second bindings)))
          (new-context (extend-env context names values)))
     (compile-progn new-context body)))
+
+;; TODO: make into a macro
+(defun special-form-let* (context args)
+  (compile-expr context
+                (if (nil? (first args))
+                  (cons (quote progn) (rest args))
+                  (list (quote let) (list (caar args))
+                        (cons (quote let*) (cons (cdar args) (rest args)))))))
+
+(defun special-form-progn (context args)
+  (compile-progn context args))
 
 (defun compile-progn (context forms)
   (let ((e (compile-expr context (car forms))))
