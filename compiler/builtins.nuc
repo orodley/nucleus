@@ -82,11 +82,13 @@
       (LLVMBuildICmp $builder LLVMIntEQ condition LLVM-TRUE "")
       then-block
       else-block)
-    (let ((then-value (%build-branch context then then-block after-block))
-          (else-value (%build-branch context else else-block after-block)))
+    (let* ((then-value (%build-branch context then then-block after-block))
+           (then-resultant-block (LLVMGetInsertBlock $builder))
+           (else-value (%build-branch context else else-block after-block))
+           (else-resultant-block (LLVMGetInsertBlock $builder)))
       (LLVMPositionBuilderAtEnd $builder after-block)
-      (llvm-phi $builder NUC-VAL (list (cons then-value then-block)
-                                       (cons else-value else-block))))))
+      (llvm-phi $builder NUC-VAL (list (cons then-value then-resultant-block)
+                                       (cons else-value else-resultant-block))))))
 
 (defun %build-branch (context expr branch-block after-block)
   (LLVMPositionBuilderAtEnd $builder branch-block)
