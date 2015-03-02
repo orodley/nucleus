@@ -44,7 +44,8 @@ static const char *lowtag_name(int lowtag)
 void rt_check_type(nuc_val val, int type_tag, const char *file, const char *func, int line)
 {
 	if (LOWTAG(val) != type_tag) {
-		printf("Wrong type given! Expected %s, got %s.\nError occured at "
+		fprintf(stderr,
+				"Wrong type given! Expected %s, got %s.\nError occured at "
 				"%s:%d in %s\n", lowtag_name(type_tag),
 				lowtag_name((int)LOWTAG(val)), file, line, func);
 		exit(1);
