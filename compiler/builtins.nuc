@@ -18,6 +18,7 @@
     (cons (quote let) special-form-let)
     (cons (quote progn) special-form-progn)
     (cons (quote if) special-form-if)
+    (cons (quote quote) special-form-quote)
 
     ;; TODO: make these into macros
     (cons (quote let*) special-form-let*)
@@ -111,6 +112,25 @@
                   (list (quote if) (caar clauses)
                         (cons (quote progn) (cdar clauses))
                         (cons (quote cond) (cdr clauses))))))
+
+(defun special-form-quote (context args)
+  (let ((to-quote (first args)))
+    (case (type to-quote)
+      ;; TODO: merge all self-evaluating cases into once once 'case' supports
+      ;; multiple values in the same clause
+      (fixnum-t (compile-expr context to-quote))
+      (nil-t LLVM-NIL)
+      (cons-t (compile-expr context (list (quote cons)
+                                          (list (quote quote) (car to-quote))
+                                          (list (quote quote) (cdr to-quote)))))
+      (symbol-t (LLVMBuildCall
+                  $builder
+                  (runtime-func "rt_intern_symbol" NUC-VAL
+                                (list (LLVMPointerType (LLVMIntType 8))))
+                  (list (global-string (string<-symbol to-quote)))
+                  1
+                  "intern-const"))
+      (default (panic! (format nil "Don't know how to quote '~'" to-quote))))))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition

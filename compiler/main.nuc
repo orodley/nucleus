@@ -144,13 +144,7 @@
                 (runtime-func "rt_make_string"
                               NUC-VAL
                               (list SIZE-T (LLVMPointerType (LLVMIntType 8))))
-                (list (llvm-val<-int (length expr))
-                      (LLVMBuildGEP
-                        $builder
-                        (LLVMBuildGlobalString $builder expr "")
-                        (list (llvm-val<-int 0) (llvm-val<-int 0))
-                        2
-                        "str-to-ptr"))
+                (list (llvm-val<-int (length expr)) (global-string expr))
                 2
                 "make-string-literal"))
     (default (panic!

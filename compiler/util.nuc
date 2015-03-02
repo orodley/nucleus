@@ -100,3 +100,11 @@
       (LLVMAddFunction
         $module name
         (LLVMFunctionType return-type arg-types (length arg-types) false)))))
+
+(defun global-string (str)
+  (LLVMBuildGEP
+    $builder
+    (LLVMBuildGlobalString $builder str "")
+    (list (llvm-val<-int 0) (llvm-val<-int 0))
+    2
+    "str-to-ptr"))
