@@ -12,9 +12,12 @@
   (list
     (cons (quote set) special-form-set)
     (cons (quote let) special-form-let)
-    (cons (quote let*) special-form-let*)
     (cons (quote progn) special-form-progn)
-    (cons (quote if) special-form-if)))
+    (cons (quote if) special-form-if)
+
+    ;; TODO: make these into macros
+    (cons (quote let*) special-form-let*)
+    (cons (quote cond) special-form-cond)))
 ;; TODO: Write these as a more readable constant expression
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
@@ -95,6 +98,15 @@
   (let ((compiled (compile-expr context expr)))
     (LLVMBuildBr $builder after-block)
     compiled))
+
+(defun special-form-cond (context clauses)
+  (compile-expr context
+                (if (nil? clauses)
+                  (quote nil)
+                  ;; TODO: Life without quasiquote is painful
+                  (list (quote if) (caar clauses)
+                        (cons (quote progn) (cdar clauses))
+                        (cons (quote cond) (cdr clauses))))))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition

@@ -15,6 +15,7 @@
 (cfun LLVMConstInt (* long-long bool) -> *)
 
 (cfun LLVMAppendBasicBlock (* string) -> *)
+(cfun LLVMGetInsertBlock (*) -> *)
 (cfun LLVMPositionBuilderAtEnd (* *) -> void)
 (cfun LLVMAddIncoming (* array array uint) -> void)
 
