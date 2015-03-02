@@ -12,9 +12,12 @@
 (defvar $functions nil)
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-context (env) (list env))
+(defun make-context (env current-func) (list env current-func))
 (defun context-env (context) (first context))
+(defun context-current-func (context) (second context))
 (defun context-set-env (context new-env) (set-car context new-env))
+(defun context-set-current-func (context new-func)
+  (set-car (cdr context) new-func))
 
 (defun add-func (f)
   (cond
@@ -32,24 +35,9 @@
 (defun mangle-name (name)
   (format nil "nuc(~)" name))
 
-(defun compile-function (context func)
-  (let* ((args (func-args func))
-         (env (context-env context))
-         (llvm-func (func-llvm-func func))
-         (params (llvm-params llvm-func)))
-    (assert! (not (null? llvm-func)) "Function should have been declared")
-    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
-    ;; TODO: set LLVM param names
-    (set context (extend-env context args params))
-    (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
-           (compiled (LLVMBuildRet $builder (compile-progn context body))))
-      (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
-        (LLVMDumpValue llvm-func)
-        (panic! "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
-      compiled)))
-
 (defun extend-env (context vars values)
-  (let ((env (context-env context)))
+  (let ((env (context-env context))
+        (current-func (context-current-func context)))
     (each (lambda (name-and-value)
             (let ((var (car name-and-value))
                   (value (cdr name-and-value))
@@ -57,7 +45,7 @@
               (LLVMBuildStore $builder value var-on-stack "")
               (set env (cons (cons var var-on-stack) env))))
           (zip vars values))
-    (make-context env)))
+    (make-context env current-func)))
 
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction

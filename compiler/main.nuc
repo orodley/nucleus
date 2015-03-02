@@ -9,8 +9,8 @@
 (include "builtins")
 (include "util")
 
-(defvar $builder)
 (defvar $module)
+(defvar $builder)
 
 (defun main ()
   (cond
@@ -30,7 +30,7 @@
                                  (third non-flag-args)))
               (stream (open input-filename))
               (llvm-context (LLVMGetGlobalContext))
-              (context (make-context nil))
+              (context (make-context nil nil))
               (forms (read-all stream)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
@@ -110,6 +110,23 @@
      (let ((name (second form)))
        (LLVMSetInitializer (LLVMAddGlobal $module NUC-VAL (mangle-name name))
                            (llvm-val<-int 0))))))
+
+(defun compile-function (context func)
+  (let* ((args (func-args func))
+         (env (context-env context))
+         (llvm-func (func-llvm-func func))
+         (params (llvm-params llvm-func)))
+    (assert! (not (null? llvm-func)) "Function should have been declared")
+    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
+    ;; TODO: set LLVM param names
+    (set context (extend-env context args params))
+    (context-set-current-func context func)
+    (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
+           (compiled (LLVMBuildRet $builder (compile-progn context body))))
+      (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
+        (LLVMDumpValue llvm-func)
+        (panic! "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
+      compiled)))
 
 (defun compile-expr (context expr)
   ;(format true "Compiling ~ in env ~" expr context)

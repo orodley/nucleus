@@ -16,6 +16,7 @@
 
 (cfun LLVMAppendBasicBlock (* string) -> *)
 (cfun LLVMPositionBuilderAtEnd (* *) -> void)
+(cfun LLVMAddIncoming (* array array uint) -> void)
 
 (cfun LLVMIntType (uint) -> *)
 (cfun LLVMPointerType (*) -> *)
@@ -35,6 +36,9 @@
 (cfun LLVMBuildCall (* * array uint string) -> *)
 (cfun LLVMBuildGEP (* * array uint string) -> *)
 (cfun LLVMBuildStructGEP (* * uint string) -> *)
+(cfun LLVMBuildBr (* *) -> *)
+(cfun LLVMBuildCondBr (* * * *) -> *)
+(cfun LLVMBuildPhi (* * string) -> *)
 (cfun LLVMBuildStore (* * * string) -> *)
 (cfun LLVMBuildLoad (* * string) -> *)
 (cfun LLVMBuildAlloca (* * string) -> *)
@@ -81,3 +85,8 @@
     (unless (null? param)
       (set-cdr list-head (cons param nil))
       (%llvm-params func (cdr list-head)))))
+
+(defun llvm-phi (builder phi-type pairs)
+  (let ((phi (LLVMBuildPhi builder phi-type "")))
+    (LLVMAddIncoming phi (map car pairs) (map cdr pairs) (length pairs))
+    phi))

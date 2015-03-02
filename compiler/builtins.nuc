@@ -13,7 +13,8 @@
     (cons (quote set) special-form-set)
     (cons (quote let) special-form-let)
     (cons (quote let*) special-form-let*)
-    (cons (quote progn) special-form-progn)))
+    (cons (quote progn) special-form-progn)
+    (cons (quote if) special-form-if)))
 ;; TODO: Write these as a more readable constant expression
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
@@ -58,6 +59,7 @@
 ;; TODO: make into a macro
 (defun special-form-let* (context args)
   (compile-expr context
+                ;; TODO: Life without quasiquote is painful
                 (if (nil? (first args))
                   (cons (quote progn) (rest args))
                   (list (quote let) (list (caar args))
@@ -66,6 +68,31 @@
 (defun special-form-progn (context args)
   (compile-progn context args))
 
+(defun special-form-if (context args)
+  ;; TODO: Enforce that 'condition' is a boolean at runtime
+  (let* ((condition (compile-expr context (first args)))
+         (then (second args))
+         (else (third args))
+         (current-func (func-llvm-func (context-current-func context)))
+         (then-block (LLVMAppendBasicBlock current-func "then"))
+         (else-block (LLVMAppendBasicBlock current-func "else"))
+         (after-block (LLVMAppendBasicBlock current-func "after")))
+    (LLVMBuildCondBr
+      $builder
+      (LLVMBuildICmp $builder LLVMIntEQ condition LLVM-TRUE "")
+      then-block
+      else-block)
+    (let ((then-value (%build-branch context then then-block after-block))
+          (else-value (%build-branch context else else-block after-block)))
+      (LLVMPositionBuilderAtEnd $builder after-block)
+      (llvm-phi $builder NUC-VAL (list (cons then-value then-block)
+                                       (cons else-value else-block))))))
+
+(defun %build-branch (context expr branch-block after-block)
+  (LLVMPositionBuilderAtEnd $builder branch-block)
+  (let ((compiled (compile-expr context expr)))
+    (LLVMBuildBr $builder after-block)
+    compiled))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition
