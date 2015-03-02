@@ -4,6 +4,10 @@
     (cons (quote -) builtin-)
     (cons (quote *) builtin*)
     (cons (quote /) builtin/)
+    (cons (quote <) builtin<)
+    (cons (quote <=) builtin<=)
+    (cons (quote >) builtin>)
+    (cons (quote >=) builtin>=)
     (cons (quote cons) builtin-cons)
     (cons (quote car) builtin-car)
     (cons (quote cdr) builtin-cdr)
@@ -114,6 +118,7 @@
 ;; the same as not shifting at all.
 (defun builtin+ (args) (reduce (lambda (a b) (LLVMBuildAdd $builder a b "+")) args))
 (defun builtin- (args) (reduce (lambda (a b) (LLVMBuildSub $builder a b "-")) args))
+
 (defun builtin* (args)
   (reduce (lambda (a b)
             ;; Rather than shifting each operand right and the result left, we
@@ -139,12 +144,22 @@
               ""))
           args))
 
+(defun comparison (llvm-cmp operands)
+  (LLVMBuildSelect
+    $builder
+    ;; Don't bother removing the lowtag, as it doesn't affect ordering
+    (LLVMBuildICmp $builder llvm-cmp (first operands) (second operands) "")
+    LLVM-TRUE
+    LLVM-FALSE
+    ""))
+(defun builtin< (args) (comparison LLVMIntSLT args))
+(defun builtin<= (args) (comparison LLVMIntSLE args))
+(defun builtin> (args) (comparison LLVMIntSGT args))
+(defun builtin>= (args) (comparison LLVMIntSGE args))
+
 (defun builtin-cons (args)
-  (LLVMBuildCall $builder
-                 (runtime-func "rt_cons" NUC-VAL (list NUC-VAL NUC-VAL))
-                 args
-                 2
-                 "cons"))
+  (LLVMBuildCall
+    $builder (runtime-func "rt_cons" NUC-VAL (list NUC-VAL NUC-VAL)) args 2 "cons"))
 
 (defun builtin-car (args)
   (let ((cons-ptr (cons<-nuc-val (first args))))
