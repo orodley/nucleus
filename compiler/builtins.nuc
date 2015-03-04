@@ -23,6 +23,7 @@
     ;; TODO: make these into macros
     (cons (quote let*) special-form-let*)
     (cons (quote cond) special-form-cond)
+    (cons (quote case) special-form-case)
     (cons (quote and) special-form-and)
     (cons (quote or) special-form-or)))
 ;; TODO: Write these as a more readable constant expression
@@ -114,6 +115,22 @@
                   (list (quote if) (caar clauses)
                         (cons (quote progn) (cdar clauses))
                         (cons (quote cond) (cdr clauses))))))
+
+(defun special-form-case (context args)
+  (let ((expr (first args))
+        (clauses (rest args))
+        (case-sym (gensym)))
+    ;; TODO: Life without quasiquote is painful
+    (compile-expr
+      context
+      (list (quote let) (list (list case-sym expr))
+            (cons (quote cond)
+                  (map (lambda (clause)
+                         (cons (if (eq? (first clause) (quote default))
+                                 (quote true)
+                                 (list (quote eq?) case-sym (first clause)))
+                               (rest clause)))
+                       clauses))))))
 
 (defun special-form-quote (context args)
   (let ((to-quote (first args)))
