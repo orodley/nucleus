@@ -22,7 +22,9 @@
 
     ;; TODO: make these into macros
     (cons (quote let*) special-form-let*)
-    (cons (quote cond) special-form-cond)))
+    (cons (quote cond) special-form-cond)
+    (cons (quote and) special-form-and)
+    (cons (quote or) special-form-or)))
 ;; TODO: Write these as a more readable constant expression
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
@@ -131,6 +133,30 @@
                   1
                   "intern-const"))
       (default (panic! (format nil "Don't know how to quote '~'" to-quote))))))
+
+(defun special-form-and (context operands)
+  (compile-expr context
+                (if (nil? operands)
+                  (quote true)
+                  (let ((operand-sym (gensym)))
+                    ;; TODO: Life without quasiquote is painful
+                    (list (quote let)
+                          (list (list operand-sym (first operands)))
+                          (list (quote if) operand-sym
+                                (cons (quote and) (rest operands))
+                                (quote false)))))))
+
+(defun special-form-or (context operands)
+  (compile-expr context
+                (if (nil? operands)
+                  (quote false)
+                  (let ((operand-sym (gensym)))
+                    ;; TODO: Life without quasiquote is painful
+                    (list (quote let)
+                          (list (list operand-sym (first operands)))
+                          (list (quote if) operand-sym
+                                (cons (quote or) (rest operands))
+                                (quote true)))))))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition
