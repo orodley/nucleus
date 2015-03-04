@@ -10,3 +10,9 @@
     (panic! message)))
 
 (extern rt_rand 0 -> random)
+
+(defvar $gensym-counter 0)
+
+(defun gensym ()
+  (symbol<-string
+    (format nil "GENSYM-~" (set $gensym-counter (1+ $gensym-counter)))))
