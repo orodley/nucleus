@@ -37,7 +37,7 @@
                                  (third non-flag-args)))
               (stream (open input-filename))
               (llvm-context (LLVMGetGlobalContext))
-              (context (make-context nil nil))
+              (context (make-context nil))
               (forms (read-all stream)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
@@ -56,7 +56,7 @@
            (each (lambda (init)
                    (let ((var (car init))
                          (expr (cdr init)))
-                     (LLVMBuildStore $builder (compile-expr context expr) var "")))
+                     (LLVMBuildStore $builder (compile-expr context expr) var)))
                  $initialisers)
            (LLVMBuildCall $builder entry-point nil 0 "")
            (LLVMBuildRet
@@ -144,7 +144,6 @@
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
     ;; TODO: set LLVM param names
     (set context (extend-env context args params))
-    (context-set-current-func context func)
     (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
            (compiled (LLVMBuildRet $builder (compile-progn context body))))
       (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)

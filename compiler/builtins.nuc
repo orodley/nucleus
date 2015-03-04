@@ -19,6 +19,7 @@
     (cons (quote progn) special-form-progn)
     (cons (quote if) special-form-if)
     (cons (quote quote) special-form-quote)
+    (cons (quote lambda) special-form-lambda)
 
     ;; TODO: make these into macros
     (cons (quote let*) special-form-let*)
@@ -52,7 +53,7 @@
          (new-value (compile-expr context (second args))))
     (if (null? lvalue)
       (panic! "Undefined variable")
-      (LLVMBuildStore $builder new-value lvalue ""))
+      (LLVMBuildStore $builder new-value lvalue))
     new-value))
 
 (defun special-form-progn (context args)
@@ -84,7 +85,7 @@
   (let* ((condition (compile-expr context (first args)))
          (then (second args))
          (else (third args))
-         (current-func (func-llvm-func (context-current-func context)))
+         (current-func (LLVMGetBasicBlockParent (LLVMGetInsertBlock $builder)))
          (then-block (LLVMAppendBasicBlock current-func "then"))
          (else-block (LLVMAppendBasicBlock current-func "else"))
          (after-block (LLVMAppendBasicBlock current-func "after")))
@@ -174,6 +175,37 @@
                           (list (quote if) operand-sym
                                 (cons (quote or) (rest operands))
                                 (quote true)))))))
+
+(defvar $lambda-counter 0)
+(defun special-form-lambda (context args-and-body)
+  (let* ((args (first args-and-body))
+         (body (second args-and-body))
+         (name (symbol<-string
+                 (format nil "lambda_~" (set $lambda-counter
+                                             (1+ $lambda-counter)))))
+         (current-block (LLVMGetInsertBlock $builder))
+         (captures (find-captured-vars context body))
+         (func (compile-lambda context name args body (map car captures))))
+    ;; compile-lambda will change the builders position.
+    (LLVMPositionBuilderAtEnd $builder current-block)
+    (make-lambda func (length args) captures)))
+
+(defun find-captured-vars (context body)
+  (unique (%find-captured-vars context body nil)))
+
+(defun %find-captured-vars (context sexpr to-ignore)
+  (cond
+    ((atom? sexpr)
+     (if (member? sexpr to-ignore)
+       nil
+       (let ((binding (get-lvalue context sexpr)))
+         (if (nil? binding) nil (list (cons sexpr binding))))))
+    ((or (eq? (car sexpr) (quote let)) (eq? (car sexpr) (quote let*)))
+     ;; let/let* can shadow variables, producing spurious captures
+     (%find-captured-vars context
+                          (third sexpr)
+                          (append! (map car (second sexpr)) to-ignore)))
+    (true (mappend (lambda (e) (%find-captured-vars context e to-ignore)) sexpr))))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition

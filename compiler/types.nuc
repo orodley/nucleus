@@ -1,7 +1,21 @@
+;; Architecture dependent types
+;; TODO: These should probably use the LLVM target info API instead
+(defvar INT (LLVMIntType 32))
+(defvar SIZE-T (LLVMIntType 64))
+(defvar UINTPTR (LLVMIntType 64))
+
+;; NOTE: Currently the whole tagging scheme is completely based on this, so
+;; changing it here isn't enough
 (defvar NUC-VAL-BITS 64)
+
 (defvar NUC-VAL (LLVMIntType NUC-VAL-BITS))
 (defvar CONS-CELL (LLVMStructType (list NUC-VAL NUC-VAL) 2 false))
 (defvar CONS-CELL-PTR (LLVMPointerType CONS-CELL))
+(defvar CLOSURE
+  (LLVMStructType
+    (list UINTPTR (LLVMIntType 8) (LLVMArrayType (LLVMPointerType NUC-VAL) 0))
+    3
+    false))
 
 (defvar LOWTAG-BITS 3)
 
@@ -12,8 +26,3 @@
 (defvar LAMBDA-LOWTAG 5)
 (defvar FOREIGN-LOWTAG 6)
 (defvar EXTTAG-LOWTAG 7)
-
-;; Architecture dependent types
-;; TODO: These should probably use the LLVM target info API instead
-(defvar INT (LLVMIntType 32))
-(defvar SIZE-T (LLVMIntType 64))

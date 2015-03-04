@@ -105,6 +105,19 @@
         (true (and (eq? (car l1) (car l2))
                    (list-eq? (cdr l1) (cdr l2))))))
 
+(defun copy-list (lizt)
+  (let ((list-head (cons nil nil)))
+    (%copy-list lizt list-head)
+    (cdr list-head)))
+
+(defun %copy-list (lizt list-head)
+  (unless (nil? lizt)
+    (set-cdr list-head (cons (car lizt) nil))
+    (%copy-list (cdr lizt) (cdr list-head))))
+
+(defun append (l1 l2)
+  (append! (copy-list l1) (copy-list l2)))
+
 (defun append! (l1 l2)
   (%append! l1 l2)
   l1)
@@ -113,6 +126,11 @@
   (if (nil? (cdr l1))
      (set-cdr l1 l2)
      (%append! (cdr l1) l2)))
+
+(defun mappend (func lizt)
+  (if (nil? lizt)
+    nil
+    (reduce append (map func lizt))))
 
 (defun reduce (func lizt)
   (if (nil? lizt)
@@ -133,3 +151,35 @@
   (unless (or (nil? l1) (nil? l2))
     (set-cdr list-head (cons (cons (car l1) (car l2)) nil))
     (%zip (cdr list-head) (cdr l1) (cdr l2))))
+
+;; TODO: make this faster using a hash table once those exist
+(defun unique (lizt)
+  (%unique lizt nil))
+
+(defun %unique (lizt acc)
+  (if (nil? lizt)
+    acc
+    (%unique (cdr lizt) (if (member? (car lizt) (cdr lizt))
+                          acc
+                          (cons (car lizt) acc)))))
+
+(defun reverse (lizt)
+  (reduce (lambda (a b) (cons b a)) (cons nil lizt)))
+
+(defun repeat (times thing)
+  (%repeat times thing nil))
+
+(defun %repeat (times thing acc)
+  (if (zero? times)
+    nil
+    (%repeat (1- times) thing (cons thing acc))))
+
+(defun range (top)
+  (let ((list-head (cons nil nil)))
+    (%range top 0 list-head)
+    (cdr list-head)))
+
+(defun %range (top current list-head)
+  (unless (eq? top current)
+    (set-cdr list-head (cons current nil))
+    (%range top (1+ current) (cdr list-head))))

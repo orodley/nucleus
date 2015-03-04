@@ -5,6 +5,9 @@
 (defun not (bool)
   (if bool false true))
 
+(defun atom? (sexpr)
+  (not (cons? sexpr)))
+
 (defun assert! (condition message)
   (if (not condition)
     (panic! message)))
