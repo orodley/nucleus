@@ -8,6 +8,9 @@
 (defun - (a b) (- a b))
 (defun * (a b) (* a b))
 
+(defun int? (x)
+  (eq? (type x) fixnum-t))
+
 (defun zero? (x)
   (eq? x 0))
 
