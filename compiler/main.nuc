@@ -42,7 +42,7 @@
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
          (close stream)
-         (set forms (cons (quote (defvar $status-code)) forms))
+         (set forms (cons (quote (defvar $status-code 0)) forms))
          (each process-form forms)
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
@@ -53,7 +53,11 @@
              (panic! "No main function defined."))
            (LLVMPositionBuilderAtEnd $builder
                                      (LLVMAppendBasicBlock main-func "entry"))
-           ;; TODO: static initialisation here
+           (each (lambda (init)
+                   (let ((var (car init))
+                         (expr (cdr init)))
+                     (LLVMBuildStore $builder (compile-expr context expr) var "")))
+                 $initialisers)
            (LLVMBuildCall $builder entry-point nil 0 "")
            (LLVMBuildRet
              $builder
@@ -122,11 +126,14 @@
        (add-func (make-func name arity args body llvm-func))))
     ((quote defvar)
      (let* ((name (second form))
-            (initialiser (if (length-is? form 3) (third form) 0))
+            (value (if (length-is? form 3) (third form) nil))
+            (init (llvm-val<-int (if (int? value)
+                                   (<< value LOWTAG-BITS)
+                                   0)))
             (var (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
-       (unless (int? initialiser)
-         (panic! "Cannot initialise a global with a non-constant"))
-       (LLVMSetInitializer var (llvm-val<-int (<< initialiser LOWTAG-BITS)))))))
+       (LLVMSetInitializer var init)
+       (unless (int? value)
+         (add-initialiser var value))))))
 
 (defun compile-function (context func)
   (let* ((args (func-args func))

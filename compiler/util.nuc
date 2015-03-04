@@ -28,9 +28,12 @@
     (true
       (set $functions (cons (cons (func-name f) f) $functions)))))
 
-(defun get-func (name)
-  (let ((f (assoc name $functions)))
-    (if (nil? f) nil (cdr f))))
+(defun get-func (name) (assoc-cdr name $functions))
+
+(defvar $initialisers nil)
+
+(defun add-initialiser (var init)
+  (set $initialisers (cons (cons var init) $initialisers)))
 
 (defun mangle-name (name)
   (format nil "nuc(~)" name))

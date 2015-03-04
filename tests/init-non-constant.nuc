@@ -1,0 +1,6 @@
+; status-code: 23
+
+(defvar foo (cons nil 23))
+
+(defun main ()
+  (set $status-code (cdr foo)))
