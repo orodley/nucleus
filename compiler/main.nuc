@@ -17,12 +17,19 @@
     ((not (length-is? $argv 1))
      (set $builder (LLVMCreateBuilder))
      (let ((non-flag-args nil)
-           (output-llvm-ir false))
+           (output-llvm-ir false)
+           (output-asm false))
        (each (lambda (arg)
-               (if (string-eq? arg "-ir")
-                 (set output-llvm-ir true)
-                 (set non-flag-args (cons arg non-flag-args))))
+               (cond
+                 ((string-eq? arg "-ir")
+                  (set output-llvm-ir true))
+                 ((string-eq? arg "-asm")
+                  (set output-asm true))
+                 (true
+                   (set non-flag-args (cons arg non-flag-args)))))
              $argv)
+       (when (and output-llvm-ir output-asm)
+         (panic! "Cannot specify both of '-ir' and '-asm'"))
        (set non-flag-args (reverse non-flag-args))
        (let* ((input-filename (second non-flag-args))
               (output-filename (if (length-is? non-flag-args 2)
@@ -59,7 +66,7 @@
                  (llvm-val<-int LOWTAG-BITS)
                  "")
                INT
-               "truncate-main-result")))
+               "truncate-status-code")))
          (when (LLVMVerifyModule $module LLVMPrintMessageAction NULL)
            (LLVMDumpModule $module)
            (panic! "ICE: Module failed LLVMVerifyModule. Module has been dumped"))
@@ -75,6 +82,13 @@
                  (exec "rm" (list tmp-bc-file))
                  (unless llvm-dis-success
                    (panic! "llvm-dis failed"))))
+             (output-asm
+               (let ((llc-success (zero? (exec "llc"
+                                               (list tmp-bc-file "-filetype=asm"
+                                                     "-o" output-filename)))))
+                 (exec "rm" (list tmp-bc-file))
+                 (unless llc-success
+                   (panic! "llc failed"))))
              (true
                ;; TODO: A more intelligent way of finding the runtime
                (unless (zero? (exec "llvm-link" (list tmp-bc-file
