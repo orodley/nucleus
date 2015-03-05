@@ -144,8 +144,8 @@
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
     ;; TODO: set LLVM param names
     (set context (extend-env context args params))
-    (let* ((body (if (nil? (func-body func)) (list nil) (func-body func)))
-           (compiled (LLVMBuildRet $builder (compile-progn context body))))
+    (let ((compiled (LLVMBuildRet $builder
+                                  (compile-progn context (func-body func)))))
       (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
         (LLVMDumpValue llvm-func)
         (panic! "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
