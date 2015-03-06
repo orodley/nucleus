@@ -26,7 +26,8 @@
     (cons (quote cond) special-form-cond)
     (cons (quote case) special-form-case)
     (cons (quote and) special-form-and)
-    (cons (quote or) special-form-or)))
+    (cons (quote or) special-form-or)
+    (cons (quote %raw-call) special-form-%raw-call)))
 ;; TODO: Write these as a more readable constant expression
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
@@ -189,6 +190,18 @@
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
     (make-lambda func (length args) captures)))
+
+(defun special-form-%raw-call (context name-and-args)
+  (let ((name (first name-and-args))
+        (args (rest name-and-args)))
+    (LLVMBuildCall
+      $builder
+      ;; deliberately DON'T mangle
+      (runtime-func name NUC-VAL (map (lambda (_) NUC-VAL) args))
+      ;; TODO: compile-all
+      (map (lambda (e) (compile-expr context e)) args)
+      (length args)
+      "%raw-call")))
 
 (defun find-captured-vars (context body)
   (unique (%find-captured-vars context body nil)))

@@ -51,7 +51,7 @@
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction
     $module
-    (mangle-name name)
+    name
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
 (defun get-value (context name)
@@ -117,7 +117,7 @@
          ;; TODO: We could optimize further by not allocating a new closure if
          ;; we don't capture any bindings, and instead just creating a static
          ;; closure once at compile-time and returning it every time.
-         (func (declare-function name NUC-VAL
+         (func (declare-function (mangle-name name) NUC-VAL
                                  (if (nil? captured-vars)
                                    params
                                    (cons (LLVMPointerType CLOSURE 0) params)))))

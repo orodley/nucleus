@@ -43,7 +43,7 @@
                         input-filename llvm-context))
          (close stream)
          (set forms (cons (quote (defvar $status-code 0)) forms))
-         (each process-form forms)
+         (each process-toplevel-form forms)
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
                               $module (mangle-name (quote main))))
@@ -113,7 +113,8 @@
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
 
-(defun process-form (form)
+(defun process-toplevel-form (form)
+  (format true "(process-toplevel-form ~)" form)
   (case (first form)
     ((quote defun)
      (let* ((name (second form))
@@ -122,7 +123,8 @@
             (body (cdddr form))
             (llvm-func
               (declare-function
-                (second form) NUC-VAL (map (lambda (_) NUC-VAL) (third form)))))
+                (mangle-name (second form)) NUC-VAL
+                (map (lambda (_) NUC-VAL) (third form)))))
        (add-func (make-func name arity args body llvm-func))))
     ((quote defvar)
      (let* ((name (second form))
@@ -133,7 +135,21 @@
             (var (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
        (LLVMSetInitializer var init)
        (unless (int? value)
-         (add-initialiser var value))))))
+         (add-initialiser var value))))
+    ((quote extern)
+      (unless (length-is? (cdr form) 4)
+        (panic! (format
+                  nil
+                  "Invalid number of arguments to 'extern' (got ~, expected 4)"
+                  (length (cdr form)))))
+      ;; TODO: possibly better to do this directly?
+      (process-toplevel-form
+        (let ((args (map (lambda (_) (gensym)) (repeat (third form) nil))))
+          ;; TODO: Life without quasiquote is painful
+          (list (quote defun) (fifth form) args
+                ;; TODO: we should make the name be a symbol - change this once
+                ;; we're bootstrapped
+                (cons (quote %raw-call) (cons (second form) args))))))))
 
 (defun compile-function (context func)
   (let* ((args (func-args func))
