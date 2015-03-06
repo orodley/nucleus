@@ -1,0 +1,4 @@
+; status-code: 1
+
+(defun main ()
+  (set $status-code ((lambda () 1))))

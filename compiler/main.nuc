@@ -189,8 +189,7 @@
               (LLVMBuildCall $builder (func-llvm-func func)
                              (map (lambda (e) (compile-expr context e)) args)
                              (length args) "")
-              ;; TODO: get-value -> compile-expr
-              (let ((value (get-value context name)))
+              (let ((value (compile-expr context name)))
                 (if (not (nil? value))
                   ;; Calling a closure pointer
                   (call-closure context value args)
