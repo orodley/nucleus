@@ -114,7 +114,6 @@
       (write-string-ln "Usage: nucc <input filename>"))))
 
 (defun process-toplevel-form (form)
-  (format true "(process-toplevel-form ~)" form)
   (case (first form)
     ((quote defun)
      (let* ((name (second form))
@@ -149,7 +148,21 @@
           (list (quote defun) (fifth form) args
                 ;; TODO: we should make the name be a symbol - change this once
                 ;; we're bootstrapped
-                (cons (quote %raw-call) (cons (second form) args))))))))
+                (cons (quote %raw-call) (cons (second form) args))))))
+    ((quote cfun)
+     (unless (length-is? (cdr form) 4)
+       (panic! (format
+                 nil
+                 "Invalid number of arguments to 'cfun' (got ~, expected 4)"
+                 (length (cdr form)))))
+     (let* ((name (second form))
+            (arg-types (third form))
+            (ret-type (fifth form))
+            (args (map (lambda (_) (gensym)) arg-types )))
+       (process-toplevel-form
+         ;; TODO: Life without quasiquote is painful
+         (list (quote defun) name args
+               (list (quote %c-call) (string<-symbol name) (zip arg-types args) ret-type)))))))
 
 (defun compile-function (context func)
   (let* ((args (func-args func))

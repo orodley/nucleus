@@ -1,6 +1,9 @@
 ;; Architecture dependent types
 ;; TODO: These should probably use the LLVM target info API instead
+(defvar PTR-BYTES 8)
 (defvar INT (LLVMIntType 32))
+(defvar LONG (LLVMIntType 64))
+(defvar LONG-LONG (LLVMIntType 64))
 (defvar SIZE-T (LLVMIntType 64))
 (defvar UINTPTR (LLVMIntType 64))
 

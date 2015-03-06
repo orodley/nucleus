@@ -28,6 +28,7 @@
 (cfun LLVMStructType (array uint bool) -> *)
 (cfun LLVMArrayType (* uint) -> *)
 (cfun LLVMFunctionType (* array uint bool) -> *)
+(cfun LLVMVoidType () -> *)
 
 (cfun LLVMBuildAdd (* * * string) -> *)
 (cfun LLVMBuildSub (* * * string) -> *)
@@ -36,6 +37,7 @@
 (cfun LLVMBuildLShr (* * * string) -> *)
 (cfun LLVMBuildShl (* * * string) -> *)
 (cfun LLVMBuildAnd (* * * string) -> *)
+(cfun LLVMBuildOr (* * * string) -> *)
 (cfun LLVMBuildIntCast (* * * string) -> *)
 (cfun LLVMBuildIntToPtr (* * * string) -> *)
 (cfun LLVMBuildPtrToInt (* * * string) -> *)

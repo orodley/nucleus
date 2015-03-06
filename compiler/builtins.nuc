@@ -27,7 +27,8 @@
     (cons (quote case) special-form-case)
     (cons (quote and) special-form-and)
     (cons (quote or) special-form-or)
-    (cons (quote %raw-call) special-form-%raw-call)))
+    (cons (quote %raw-call) special-form-%raw-call)
+    (cons (quote %c-call) special-form-%c-call)))
 ;; TODO: Write these as a more readable constant expression
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
@@ -203,22 +204,25 @@
       (length args)
       "%raw-call")))
 
-(defun find-captured-vars (context body)
-  (unique (%find-captured-vars context body nil)))
-
-(defun %find-captured-vars (context sexpr to-ignore)
-  (cond
-    ((atom? sexpr)
-     (if (member? sexpr to-ignore)
-       nil
-       (let ((binding (get-lvalue context sexpr)))
-         (if (nil? binding) nil (list (cons sexpr binding))))))
-    ((or (eq? (car sexpr) (quote let)) (eq? (car sexpr) (quote let*)))
-     ;; let/let* can shadow variables, producing spurious captures
-     (%find-captured-vars context
-                          (cddr sexpr)
-                          (append! (map car (second sexpr)) to-ignore)))
-    (true (mappend (lambda (e) (%find-captured-vars context e to-ignore)) sexpr))))
+(defun special-form-%c-call (context name-args-alist-return-type)
+  (let ((name (first name-args-alist-return-type))
+        (args-alist (second name-args-alist-return-type))
+        (return-type (third name-args-alist-return-type)))
+    (nuc-val<-c-val
+      return-type
+      (LLVMBuildCall
+        $builder
+        (runtime-func
+          name
+          (llvm-type<-type-spec return-type)
+          (map (lambda (entry) (llvm-type<-type-spec (car entry))) args-alist))
+        (map (lambda (entry) (c-val<-nuc-val
+                               (car entry) (compile-expr context (cdr entry))))
+             args-alist)
+        (length args-alist)
+        (if (eq? return-type (quote void))
+          ""
+          "%c-call")))))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition
