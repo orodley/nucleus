@@ -143,7 +143,7 @@
     (assert! (not (null? llvm-func)) "Function should have been declared")
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
     ;; TODO: set LLVM param names
-    (set context (extend-env context args params))
+    (set context (extend-env-with-values context args params))
     (let ((compiled (LLVMBuildRet $builder
                                   (compile-progn context (func-body func)))))
       (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
@@ -152,7 +152,6 @@
       compiled)))
 
 (defun compile-expr (context expr)
-  ;(format true "Compiling ~ in env ~" expr context)
   (case (type expr)
     ;; TODO: limit on size
     (fixnum-t (llvm-val<-int (<< expr LOWTAG-BITS)))
@@ -166,7 +165,7 @@
                 $builder
                 (runtime-func "rt_make_string"
                               NUC-VAL
-                              (list SIZE-T (LLVMPointerType (LLVMIntType 8))))
+                              (list SIZE-T (LLVMPointerType (LLVMIntType 8) 0)))
                 (list (llvm-val<-int (length expr)) (global-string expr))
                 2
                 "make-string-literal"))
@@ -185,11 +184,14 @@
         (if (not (nil? builtin-function))
           (builtin-function (map (lambda (arg) (compile-expr context arg)) args))
           (let ((func (get-func name)))
-            (if (nil? func)
-              (panic! (format nil "Undefined function '~'" name))
-              (LLVMBuildCall
-                $builder
-                (func-llvm-func func)
-                (map compile-expr args)
-                (length args)
-                ""))))))))
+            (if (not (nil? func))
+              ;; Calling a static function
+              (LLVMBuildCall $builder (func-llvm-func func)
+                             (map (lambda (e) (compile-expr context e)) args)
+                             (length args) "")
+              ;; TODO: get-value -> compile-expr
+              (let ((value (get-value context name)))
+                (if (not (nil? value))
+                  ;; Calling a closure pointer
+                  (call-closure context value args)
+                  (panic! (format nil "Undefined function '~'" name)))))))))))

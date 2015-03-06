@@ -19,9 +19,7 @@
 (defun add-func (f)
   (cond
     ((not (nil? (get-func (func-name f))))
-     (format true "Duplicate definition of function '~'" (func-name f))
-     (write-string-ln "")
-     (panic! "Aborting"))
+     (panic! (format nil "Duplicate definition of function '~'" (func-name f))))
     (true
       (set $functions (cons (cons (func-name f) f) $functions)))))
 
@@ -35,16 +33,20 @@
 (defun mangle-name (name)
   (format nil "nuc(~)" name))
 
-(defun extend-env (context vars values)
+(defun extend-env-with-values (context names values)
   (let ((env (context-env context)))
     (each (lambda (name-and-value)
-            (let ((var (car name-and-value))
-                  (value (cdr name-and-value))
-                  (var-on-stack (LLVMBuildAlloca $builder NUC-VAL "")))
+            (let* ((name (car name-and-value))
+                   (value (cdr name-and-value))
+                   (var-on-stack (LLVMBuildAlloca $builder NUC-VAL
+                                                  (string<-symbol name))))
               (LLVMBuildStore $builder value var-on-stack)
-              (set env (cons (cons var var-on-stack) env))))
-          (zip vars values))
+              (set env (cons (cons name var-on-stack) env))))
+          (zip names values))
     (make-context env)))
+
+(defun extend-env-with-pointers (context names ptrs)
+  (make-context (append (zip names ptrs) (context-env context))))
 
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction
@@ -54,18 +56,23 @@
 
 (defun get-value (context name)
   (let ((lvalue (get-lvalue context name)))
-    (if (nil? lvalue)
-      (get-constant name)
-      (LLVMBuildLoad $builder lvalue (string<-symbol name)))))
+    (if (not (nil? lvalue))
+      (LLVMBuildLoad $builder lvalue (string<-symbol name))
+      (let ((const (get-constant name)))
+        (if (not (nil? const))
+          const
+          (let ((func (get-func name)))
+            (if (not (nil? func))
+              (make-lambda (func-llvm-func func)
+                           (LLVMCountParams (func-llvm-func func))
+                           nil)
+              nil)))))))
 
 (defun get-lvalue (context name)
   (let ((global (LLVMGetNamedGlobal $module (mangle-name name))))
     (if (not (null? global))
       global
-      (let ((lexical-binding (assoc name (context-env context))))
-        (if (nil? lexical-binding)
-          nil
-          (cdr lexical-binding))))))
+      (assoc-cdr name (context-env context)))))
 
 (defun remove-lowtag (nuc-val)
   (LLVMBuildAnd
@@ -75,6 +82,7 @@
     (llvm-val<-int 18446744073709551608)
     "remove-lowtag"))
 
+;; TODO: rename these 3
 (defun llvm-val<-int (x)
   (LLVMConstInt NUC-VAL x false))
 
@@ -109,58 +117,126 @@
          ;; TODO: We could optimize further by not allocating a new closure if
          ;; we don't capture any bindings, and instead just creating a static
          ;; closure once at compile-time and returning it every time.
-         (func (declare-function (mangle-name name)
-                                 NUC-VAL
+         (func (declare-function name NUC-VAL
                                  (if (nil? captured-vars)
                                    params
-                                   (cons (LLVMPointerType CLOSURE) params)))))
+                                   (cons (LLVMPointerType CLOSURE 0) params)))))
     ;; TODO: set LLVM param names
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock func "entry"))
     (let* ((params (llvm-params func))
            (new-context
-             (extend-env
-               context
-               (append
+             (extend-env-with-values
+               (extend-env-with-pointers
+                 context
                  captured-vars
-                 args)
-               (append!
-                 (map
-                   (lambda (i-name)
-                     (let ((i (car i-name))
-                           (name (cdr i-name)))
-                       (LLVMBuildLoad
-                         $builder
-                         (LLVMBuildGEP
-                           $builder
-                           (LLVMBuildGEP $builder (first params)
-                                         (map llvm-val<-int32 (list 0 2))
-                                         2
-                                         "")
-                           (map llvm-val<-int (list 0 i))
-                           2
-                           "get-var-from-closure")
-                         "")))
-                   (zip captured-vars (range (length captured-vars))))
-                 (map (lambda (arg-name-llvm-param)
-                        (let* ((arg-name (car arg-name-llvm-param))
-                               (llvm-param (cdr arg-name-llvm-param))
-                               (arg-on-stack
-                                 (LLVMBuildAlloca $builder NUC-VAL
-                                                  (string<-symbol arg-name))))
-                          (LLVMBuildStore $builder llvm-param arg-on-stack)
-                          arg-on-stack))
-                      (zip args
-                           (if (nil? captured-vars)
-                             (llvm-params func)
-                             (cdr (llvm-params func)))))))))
-      (LLVMBuildRet $builder (compile-progn context body)))
+                 (map (lambda (i-name)
+                        (let ((i (car i-name))
+                              (name (cdr i-name)))
+                          (LLVMBuildLoad
+                            $builder
+                            (LLVMBuildGEP
+                              $builder
+                              (LLVMBuildGEP $builder (first params)
+                                            (map llvm-val<-int32 (list 0 2))
+                                            2
+                                            "")
+                              (map llvm-val<-int (list 0 i))
+                              2
+                              "get-var-from-closure")
+                            "")))
+                      (zip (range (length captured-vars)) captured-vars)))
+               args
+               (if (nil? captured-vars)
+                 (llvm-params func)
+                 (cdr (llvm-params func))))))
+      (LLVMBuildRet $builder (compile-progn new-context body)))
     (when (LLVMVerifyFunction func LLVMPrintMessageAction)
       (LLVMDumpValue func)
       (panic! (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name)))
     func))
 
+(defun call-closure (context nuc-val args)
+  (let* ((closure (LLVMBuildIntToPtr
+                    $builder (remove-lowtag nuc-val) (LLVMPointerType CLOSURE 0) ""))
+         (func-pointer
+           (LLVMBuildLoad
+             $builder
+             ;; TODO: BuildStructGEP?
+             (LLVMBuildGEP
+               $builder
+               closure
+               (map llvm-val<-int32 (list 0 0))
+               2
+               "")
+             "load-func-pointer-from-struct"))
+         (current-func (get-current-func $builder))
+         (args (map (lambda (e) (compile-expr context e)) args))
+         (args-len (length args))
+         (captures
+           (LLVMBuildGEP
+             $builder
+             (LLVMBuildGEP $builder closure (map llvm-val<-int32 (list 0 2)) 2 "")
+             (map llvm-val<-int32 (list 0 0))
+             2
+             ""))
+         (first-capture (LLVMBuildLoad $builder captures "")))
+    ;; TODO: This is a case where a "declare in current scope" special form
+    ;; could be really useful - a bunch of assignments interspersed with
+    ;; side-effecting calls
+    (let ((then-block (LLVMAppendBasicBlock current-func "doesn't-take-closure"))
+          (else-block (LLVMAppendBasicBlock current-func "takes-closure"))
+          (after-block (LLVMAppendBasicBlock current-func "after-call")))
+      (LLVMBuildCondBr
+        $builder
+        (LLVMBuildICmp $builder LLVMIntEQ
+                       (LLVMBuildPtrToInt $builder first-capture UINTPTR "")
+                       (llvm-val<-int 0) "")
+        then-block
+        else-block)
+      (LLVMPositionBuilderAtEnd $builder then-block)
+      (let ((then-result (LLVMBuildCall
+                           $builder
+                           (LLVMBuildIntToPtr
+                             $builder
+                             func-pointer
+                             (LLVMPointerType
+                               (LLVMFunctionType
+                                 NUC-VAL
+                                 (repeat args-len NUC-VAL)
+                                 args-len
+                                 false)
+                               0)
+                             "cast-to-correct-function-type")
+                           args
+                           args-len
+                           "call-closure")))
+        (LLVMBuildBr $builder after-block)
+        (LLVMPositionBuilderAtEnd $builder else-block)
+        (let ((else-result
+                (LLVMBuildCall
+                  $builder
+                  (LLVMBuildIntToPtr
+                    $builder
+                    func-pointer
+                    (LLVMPointerType
+                      (LLVMFunctionType
+                        NUC-VAL
+                        (cons (LLVMPointerType CLOSURE 0)
+                              (repeat args-len NUC-VAL))
+                        (1+ args-len)
+                        false)
+                      0)
+                    "cast-to-correct-function-type")
+                  (cons closure args)
+                  (1+ args-len)
+                  "call-closure")))
+          (LLVMBuildBr $builder after-block)
+          (LLVMPositionBuilderAtEnd $builder after-block)
+          (llvm-phi $builder NUC-VAL (list (cons then-result then-block)
+                                           (cons else-result else-block))))))))
+
 (defun make-lambda (func arity captures)
-  (let* ((ary-type (LLVMArrayType (LLVMPointerType NUC-VAL) (length captures)))
+  (let* ((ary-type (LLVMArrayType (LLVMPointerType NUC-VAL 0) (length captures)))
          (captures-array
            (if (nil? captures)
              (LLVMConstNull ary-type)

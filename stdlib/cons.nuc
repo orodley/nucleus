@@ -106,9 +106,11 @@
                    (list-eq? (cdr l1) (cdr l2))))))
 
 (defun copy-list (lizt)
-  (let ((list-head (cons nil nil)))
-    (%copy-list lizt list-head)
-    (cdr list-head)))
+  (if (nil? lizt)
+    nil
+    (let ((list-head (cons nil nil)))
+      (%copy-list lizt list-head)
+      (cdr list-head))))
 
 (defun %copy-list (lizt list-head)
   (unless (nil? lizt)
@@ -119,8 +121,12 @@
   (append! (copy-list l1) (copy-list l2)))
 
 (defun append! (l1 l2)
-  (%append! l1 l2)
-  l1)
+  (cond
+    ((nil? l1) l2)
+    ((nil? l2) l1)
+    (true
+      (%append! l1 l2)
+      l1)))
 
 (defun %append! (l1 l2)
   (if (nil? (cdr l1))
@@ -171,7 +177,7 @@
 
 (defun %repeat (times thing acc)
   (if (zero? times)
-    nil
+    acc
     (%repeat (1- times) thing (cons thing acc))))
 
 (defun range (top)

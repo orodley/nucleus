@@ -20,9 +20,11 @@
 (cfun LLVMGetBasicBlockParent (*) -> *)
 (cfun LLVMPositionBuilderAtEnd (* *) -> void)
 (cfun LLVMAddIncoming (* array array uint) -> void)
+(defun get-current-func (builder)
+  (LLVMGetBasicBlockParent (LLVMGetInsertBlock builder)))
 
 (cfun LLVMIntType (uint) -> *)
-(cfun LLVMPointerType (*) -> *)
+(cfun LLVMPointerType (* uint) -> *)
 (cfun LLVMStructType (array uint bool) -> *)
 (cfun LLVMArrayType (* uint) -> *)
 (cfun LLVMFunctionType (* array uint bool) -> *)
@@ -76,6 +78,7 @@
 
 (cfun LLVMGetFirstParam (*) -> *)
 (cfun LLVMGetNextParam (*) -> *)
+(cfun LLVMCountParams (*) -> uint)
 
 (defun llvm-params (func)
   (let ((first-param (LLVMGetFirstParam func)))
