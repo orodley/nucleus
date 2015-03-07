@@ -182,9 +182,8 @@
        (context-set-file context included-file)
        (let* ((file (open included-file))
               (forms (read-all file)))
-         (format true "Processing all forms from ~ (FILE * = ~): ~" included-file file forms)
          (close file)
-         (each (lambda (form) (format true "Processing ~" form) (process-toplevel-form context form)) forms))
+         (each (lambda (form) (process-toplevel-form context form)) forms))
        (context-set-file context including-file)))
     (default
       (panic! (format nil "Invalid top-level form '~'" (first form))))))
