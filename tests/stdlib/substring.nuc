@@ -1,0 +1,6 @@
+; run-stdout: abcdefg
+
+(defun main ()
+  (write-string (substring "abXXX" 0 2))
+  (write-string (substring "XXcdeXXX" 2 5))
+  (write-string (substring "XXXfg" 3 5)))

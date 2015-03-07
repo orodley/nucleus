@@ -1,0 +1,4 @@
+; run-stdout: /foo/bar/baz/quux
+
+(defun main ()
+  (write-string (join-path "/foo/bar" "baz/quux")))

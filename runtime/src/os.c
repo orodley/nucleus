@@ -1,5 +1,8 @@
 #include <alloca.h>
+#include <libgen.h>
 #include <stddef.h>
+#include <string.h>
+#include <stdio.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -44,4 +47,30 @@ nuc_val rt_exec(nuc_val path_val, nuc_val arg_list)
 	int status;
 	waitpid(pid, &status, 0);
 	return INT_TO_NUC_VAL(status);
+}
+
+nuc_val rt_current_dir()
+{
+	char buf[1024];
+	if (getcwd(buf, 1024) == NULL)
+		return NIL;
+
+	return rt_make_string(strlen(buf), buf);
+}
+
+nuc_val rt_file_exists(nuc_val path_val)
+{
+	CHECK(path_val, STRING_LOWTAG);
+	String *path = (String *)REMOVE_LOWTAG(path_val);
+
+	return access(path->bytes, F_OK) == 0 ? TRUE : FALSE;
+}
+
+nuc_val rt_dirname(nuc_val path_val)
+{
+	CHECK(path_val, STRING_LOWTAG);
+	String *path = (String *)REMOVE_LOWTAG(path_val);
+
+	char *dir = dirname(path->bytes);
+	return rt_make_string(strlen(dir), dir);
 }

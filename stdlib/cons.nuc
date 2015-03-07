@@ -63,13 +63,13 @@
 (defun length (seq)
   (case (type seq)
     (nil-t 0)
-    (cons-t (%list-length seq 0))
-    (string-t (%string-length seq))))
+    (cons-t (list-length seq 0))
+    (string-t (string-length seq))))
 
-(defun %list-length (lizt acc)
+(defun list-length (lizt acc)
   (if (nil? lizt)
     acc
-    (%list-length (cdr lizt) (1+ acc))))
+    (list-length (cdr lizt) (1+ acc))))
 
 (defun length-is? (lizt len)
   (cond

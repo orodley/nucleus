@@ -6,9 +6,10 @@
 
 nuc_val rt_make_string(size_t length, char *bytes)
 {
-	String *str = gc_alloc(sizeof *str + length);
+	String *str = gc_alloc(sizeof *str + length + 1);
 	str->length = length;
 	strncpy(str->bytes, bytes, length);
+	str->bytes[length] = '\0';
 
 	return ((nuc_val)str) | STRING_LOWTAG;
 }
@@ -73,6 +74,7 @@ nuc_val rt_string_to_char_list(nuc_val string)
 		return NIL;
 
 	Cons *cons = gc_alloc(sizeof *cons);
+	Cons *head = cons;
 	cons->car = INT_TO_NUC_VAL(str->bytes[0]);
 	for (size_t i = 1; i < str->length; i++) {
 		Cons *next = gc_alloc(sizeof *cons);
@@ -80,7 +82,21 @@ nuc_val rt_string_to_char_list(nuc_val string)
 		cons->cdr = ((nuc_val)next) | CONS_LOWTAG;
 		cons = next;
 	}
-
 	cons->cdr = NIL;
-	return ((nuc_val)cons) | CONS_LOWTAG;
+
+	return ((nuc_val)head) | CONS_LOWTAG;
+}
+
+nuc_val rt_substring(nuc_val str_val, nuc_val start_val, nuc_val end_val)
+{
+	CHECK(str_val, STRING_LOWTAG);
+	CHECK(start_val, FIXNUM_LOWTAG);
+	CHECK(end_val, FIXNUM_LOWTAG);
+	String *str = (String *)REMOVE_LOWTAG(str_val);
+	size_t start = NUC_VAL_TO_INT(start_val);
+	size_t end = NUC_VAL_TO_INT(end_val);
+
+	size_t length = end - start;
+	char *bytes = str->bytes + start;
+	return rt_make_string(length, bytes);
 }

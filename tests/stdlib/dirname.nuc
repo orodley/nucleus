@@ -1,0 +1,4 @@
+; run-stdout: /foo/bar
+
+(defun main ()
+  (write-string (dirname "/foo/bar/baz")))

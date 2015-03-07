@@ -1,0 +1,5 @@
+; status-code: 2
+
+(defun main ()
+  (set $status-code (+ (if (string-starts-with? "foobar" "foo") 1 0)
+                       (if (string-starts-with? "barfoo" "foo") 0 1))))

@@ -1,0 +1,16 @@
+(defun absolute-path? (path)
+  (eq? (char-at path 0) 47))
+
+(defun join-path (part1 part2)
+  ;; TODO: this function should be varargs
+  (string-concat
+    (string-concat (string-trim-right part1 "/") "/")
+    (string-trim-left part2 "/")))
+
+;; TODO: the second argument should default to the current directory
+(defun ensure-absolute (path base)
+  (if (absolute-path? path)
+    path
+    (ensure-absolute (join-path base path) (current-dir))))
+
+(extern rt_dirname 1 -> dirname)

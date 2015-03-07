@@ -1,5 +1,52 @@
+;; TODO: I think the convention should be "str" instead of "string" to make it
+;; less verbose
+
 (defun string-eq? (s1 s2)
+  ;; TODO: iterate instead of consing up huge lists needlessly
   (list-eq? (char-list<-string s1) (char-list<-string s2)))
 
-(extern rt_string_length 1 -> %string-length)
+(extern rt_string_length 1 -> string-length)
 (extern rt_char_at 2 -> char-at)
+;; TODO: should we have a substring function that doesn't copy?
+(extern rt_substring 3 -> substring)
+
+(defun string-concat (str1 str2)
+  ;; TODO: make this not be a performance disaster
+  ;; TODO: should be varargs
+  (string<-char-list (append (char-list<-string str1)
+                             (char-list<-string str2))))
+
+(defun string-starts-with? (str prefix)
+  ;; TODO: make this not be a performance disaster
+  (let ((str-len (string-length str))
+        (prefix-len (string-length prefix)))
+    (and (>= str-len prefix-len)
+         (string-eq? (substring str 0 prefix-len) prefix))))
+
+(defun string-ends-with? (str suffix)
+  ;; TODO: make this not be a performance disaster
+  (let ((str-len (string-length str))
+        (suffix-len (string-length suffix)))
+    (and (>= str-len suffix-len)
+         (string-eq? (substring str (- str-len suffix-len) str-len) suffix))))
+
+(defun string-strip-prefix (str prefix)
+  (if (string-starts-with? str prefix)
+    (substring str 0 (string-length prefix))
+    str))
+
+(defun string-trim-left (str chars)
+  (let ((char-bag (if (eq? (type chars) string-t)
+                    (char-list<-string chars)
+                    chars)))
+    (if (member? (char-at str 0) char-bag)
+      (string-trim-left (substring str 1 (string-length str)) char-bag)
+      str)))
+
+(defun string-trim-right (str chars)
+  (let ((char-bag (if (eq? (type chars) string-t)
+                    (char-list<-string chars)
+                    chars)))
+    (if (member? (char-at str (1- (string-length str))) char-bag)
+      (string-trim-right (substring str 0 (1- (string-length str))) char-bag)
+      str)))

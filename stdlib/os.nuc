@@ -13,3 +13,6 @@
 (extern rt_close 1 -> close)
 
 (extern rt_exec 2 -> exec)
+
+(extern rt_current_dir 0 -> current-dir)
+(extern rt_file_exists 1 -> file-exists?)
