@@ -12,9 +12,11 @@
 (defvar $functions nil)
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-context (env) (list env))
+(defun make-context (env file) (list env file))
 (defun context-env (context) (first context))
+(defun context-file (context) (second context))
 (defun context-set-env (context new-env) (set-car context new-env))
+(defun context-set-file (context new-file) (set-car (cdr context) new-file))
 
 (defun add-func (f)
   (cond
@@ -34,7 +36,8 @@
   (format nil "nuc(~)" name))
 
 (defun extend-env-with-values (context names values)
-  (let ((env (context-env context)))
+  (let ((env (context-env context))
+        (file (context-file context)))
     (each (lambda (name-and-value)
             (let* ((name (car name-and-value))
                    (value (cdr name-and-value))
@@ -43,10 +46,11 @@
               (LLVMBuildStore $builder value var-on-stack)
               (set env (cons (cons name var-on-stack) env))))
           (zip names values))
-    (make-context env)))
+    (make-context env file)))
 
 (defun extend-env-with-pointers (context names ptrs)
-  (make-context (append (zip names ptrs) (context-env context))))
+  (make-context (append (zip names ptrs) (context-env context))
+                (context-file context)))
 
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction

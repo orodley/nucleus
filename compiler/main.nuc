@@ -35,15 +35,15 @@
               (output-filename (if (length-is? non-flag-args 2)
                                  "a.out"
                                  (third non-flag-args)))
-              (stream (open input-filename))
+              (file (open input-filename))
               (llvm-context (LLVMGetGlobalContext))
-              (context (make-context nil))
-              (forms (read-all stream)))
+              (context (make-context nil (ensure-absolute input-filename (current-dir))))
+              (forms (read-all file)))
+         (close file)
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
-         (close stream)
          (set forms (cons (quote (defvar $status-code 0)) forms))
-         (each process-toplevel-form forms)
+         (each (lambda (form) (process-toplevel-form context form)) forms)
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
                               $module (mangle-name (quote main))))
@@ -113,7 +113,7 @@
     (true 
       (write-string-ln "Usage: nucc <input filename>"))))
 
-(defun process-toplevel-form (form)
+(defun process-toplevel-form (context form)
   (case (first form)
     ((quote defun)
      (let* ((name (second form))
@@ -143,6 +143,7 @@
                   (length (cdr form)))))
       ;; TODO: possibly better to do this directly?
       (process-toplevel-form
+        context
         (let ((args (map (lambda (_) (gensym)) (repeat (third form) nil))))
           ;; TODO: Life without quasiquote is painful
           (list (quote defun) (fifth form) args
@@ -160,9 +161,33 @@
             (ret-type (fifth form))
             (args (map (lambda (_) (gensym)) arg-types )))
        (process-toplevel-form
+         context
          ;; TODO: Life without quasiquote is painful
          (list (quote defun) name args
-               (list (quote %c-call) (string<-symbol name) (zip arg-types args) ret-type)))))))
+               (list (quote %c-call) (string<-symbol name) (zip arg-types args) ret-type)))))
+    ((quote include)
+     (unless (length-is? (cdr form) 1)
+       (panic! (format
+                 nil
+                 "Invalid number of arguments to 'include' (got ~, expected 1)"
+                 (length (cdr form)))))
+     (let* ((including-file (context-file context))
+            (filename (if (string-ends-with? (second form) ".nuc")
+                        (second form)
+                        (string-concat (second form) ".nuc")))
+            (included-file (ensure-absolute filename
+                                            (dirname including-file))))
+       (unless (file-exists? included-file)
+         (panic! (format nil "Could not find included file ~" (second form))))
+       (context-set-file context included-file)
+       (let* ((file (open included-file))
+              (forms (read-all file)))
+         (format true "Processing all forms from ~ (FILE * = ~): ~" included-file file forms)
+         (close file)
+         (each (lambda (form) (format true "Processing ~" form) (process-toplevel-form context form)) forms))
+       (context-set-file context including-file)))
+    (default
+      (panic! (format nil "Invalid top-level form '~'" (first form))))))
 
 (defun compile-function (context func)
   (let* ((args (func-args func))
