@@ -282,8 +282,8 @@
     2
     "str-to-ptr"))
 
-(defun find-captured-vars (context body)
-  (unique (%find-captured-vars context body nil)))
+(defun find-captured-vars (context body args)
+  (unique (%find-captured-vars context body args)))
 
 (defun %find-captured-vars (context sexpr to-ignore)
   (cond

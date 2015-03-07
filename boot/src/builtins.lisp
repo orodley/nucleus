@@ -215,7 +215,9 @@
 (defbuiltin |lambda| (simple-lambda-list &body body)
   (let* ((name (intern (format nil "lambda_~D" (1- (incf *lambda-counter*)))))
          (current-block (llvm:insertion-block *builder*))
-         (captures (find-captured-vars body *env*))
+         (captures (remove-if (lambda (var-cell)
+                                (member (car var-cell) simple-lambda-list))
+                              (find-captured-vars body *env*)))
          (func (compile-lambda name simple-lambda-list body (mapcar #'car captures))))
     ;; COMPILE-DEFUN will change the builders position.
     (llvm:position-builder-at-end *builder* current-block)

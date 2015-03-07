@@ -1,0 +1,7 @@
+; status-code: 7
+
+(defun main ()
+  (let* ((a 1)
+         (b 2)
+         (f (lambda (a) (let ((b 3)) (+ a b)))))
+    (set $status-code (f 4))))

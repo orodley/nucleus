@@ -186,7 +186,7 @@
                  (format nil "lambda_~" (set $lambda-counter
                                              (1+ $lambda-counter)))))
          (current-block (LLVMGetInsertBlock $builder))
-         (captures (find-captured-vars context body))
+         (captures (find-captured-vars context body args))
          (func (compile-lambda context name args body (map car captures))))
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
