@@ -233,12 +233,17 @@
               (list binding)
               nil)))
          ((or (eq (car body) '|let|) (eq (car body) '|let*|))
-          (%find-captured-vars
-            (third body)
-            ;; let can shadow variables, producing spurious captures
-            (remove-if (lambda (var-cell)
-                         (member (car var-cell) (second body) :key #'car))
-                       vars-alist)))
+          (let ((vars-alist
+                  ;; let can shadow variables, producing spurious captures
+                  (remove-if
+                    (lambda (var-cell)
+                      (member (car var-cell) (second body) :key #'car))
+                    vars-alist)))
+            (append
+              (mappend (lambda (clause)
+                         (%find-captured-vars (second clause) vars-alist))
+                       (second body))
+              (%find-captured-vars (third body) vars-alist))))
          (t (mappend (lambda (body) (%find-captured-vars body vars-alist))
                      body)))))
     (remove-duplicates (%find-captured-vars body vars-alist))))
