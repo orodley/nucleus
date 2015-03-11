@@ -71,6 +71,11 @@ nuc_val rt_dirname(nuc_val path_val)
 	CHECK(path_val, STRING_LOWTAG);
 	String *path = (String *)REMOVE_LOWTAG(path_val);
 
-	char *dir = dirname(path->bytes);
+	// dirname can modify its input
+	char path_copy[path->length + 1];
+	strncpy(path_copy, path->bytes, path->length);
+	path_copy[path->length] = '\0';
+
+	char *dir = dirname(path_copy);
 	return rt_make_string(strlen(dir), dir);
 }
