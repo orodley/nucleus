@@ -162,7 +162,9 @@
       (true
         (back-up-char c)
         (let ((next (read-from-stream stream)))
-          (set-cdr list-head (cons next nil))
+          (set-cdr list-head (if (eq? next (symbol<-string "."))
+                               (read-from-stream stream)
+                               (cons next nil)))
           (read-list stream (cdr list-head)))))))
 
 (defun read-symbol (stream list-head)
@@ -174,6 +176,7 @@
       (true
         (back-up-char c)))))
 
+;; TODO: this should check for the nucleus EOF, not the C one
 (defun eof? (c)
   (< c 0))
 
