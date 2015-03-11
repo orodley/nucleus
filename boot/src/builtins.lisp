@@ -232,7 +232,7 @@
             (if binding
               (list binding)
               nil)))
-         ((eq (car body) 'let)
+         ((or (eq (car body) '|let|) (eq (car body) '|let*|))
           (%find-captured-vars
             (third body)
             ;; let can shadow variables, producing spurious captures
@@ -289,8 +289,7 @@
       (apply #'extern-func
              name
              (llvm-type<-type-spec return-type)
-             (mapcar (lambda (entry)
-                       (llvm-type<-type-spec (car entry)))
+             (mapcar (lambda (entry) (llvm-type<-type-spec (car entry)))
                      args-alist))
       (mapcar (lambda (entry) (c-val<-nuc-val (car entry)
                                               (compile-expr (cdr entry))))
