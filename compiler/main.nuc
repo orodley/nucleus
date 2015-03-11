@@ -245,7 +245,9 @@
       (special-form context args)
       (let ((builtin-function (get-builtin-function name)))
         (if (not (nil? builtin-function))
-          (builtin-function (map (lambda (arg) (compile-expr context arg)) args))
+          (builtin-function context (map (lambda (arg)
+                                           (compile-expr context arg))
+                                         args))
           (let ((func (get-func name)))
             (if (not (nil? func))
               ;; Calling a static function

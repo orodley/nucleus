@@ -90,6 +90,8 @@ def start_compiling(test_filename, nucc):
 
 def run_test(result):
     nucc_proc = result['nucc_proc']
+    # TODO: This seems to hang forever if nucc produces loads of output (like
+    # if we have some debugging stuff in there.
     result['compile-stdout'], result['compile-stderr'] = nucc_proc.communicate()
     result['compiled'] = nucc_proc.returncode == 0
     if result['expected-compile-stderr'] != '':

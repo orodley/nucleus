@@ -5,10 +5,6 @@
     (cons (quote *) builtin*)
     (cons (quote %) builtin%)
     (cons (quote /) builtin/)
-    (cons (quote <) builtin<)
-    (cons (quote <=) builtin<=)
-    (cons (quote >) builtin>)
-    (cons (quote >=) builtin>=)
     (cons (quote cons) builtin-cons)
     (cons (quote car) builtin-car)
     (cons (quote cdr) builtin-cdr)
@@ -25,6 +21,13 @@
     ;; TODO: these should just be regular functions once we have varargs
     (cons (quote format) special-form-format)
     (cons (quote list) special-form-list)
+
+    ;; TODO: these should be regular functions which call into some internal
+    ;; compiler primitive once we have varargs
+    (cons (quote <) special-form-<)
+    (cons (quote <=) special-form-<=)
+    (cons (quote >) special-form->)
+    (cons (quote >=) special-form->=)
 
     ;; TODO: make these into macros
     (cons (quote let*) special-form-let*)
@@ -278,14 +281,37 @@
       ;; TODO: Life without quasiquote is painful
       (list (quote if) condition (cons (quote progn) body)))))
 
+(defun comparison (context cmp llvm-cmp operands)
+  (if (length-is? operands 2)
+    (LLVMBuildSelect
+      $builder
+      ;; Don't bother removing the lowtag, as it doesn't affect ordering
+      (LLVMBuildICmp $builder llvm-cmp
+                     (compile-expr context (first operands))
+                     (compile-expr context (second operands))
+                     "")
+      LLVM-TRUE
+      LLVM-FALSE
+      "")
+    ;; TODO: Life without quasiquote is painful
+    (compile-expr context (list (quote and)
+                                (list cmp
+                                      (first operands)
+                                      (second operands))
+                                (cons cmp (cdr operands))))))
+(defun special-form-< (context args) (comparison context (quote <) LLVMIntSLT args))
+(defun special-form-<= (context args) (comparison context (quote <=) LLVMIntSLE args))
+(defun special-form-> (context args) (comparison context (quote >) LLVMIntSGT args))
+(defun special-form->= (context args) (comparison context (quote >=) LLVMIntSGE args))
+
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition
 ;; and subtraction - shifting each operand right and then the result left is
 ;; the same as not shifting at all.
-(defun builtin+ (args) (reduce (lambda (a b) (LLVMBuildAdd $builder a b "+")) args))
-(defun builtin- (args) (reduce (lambda (a b) (LLVMBuildSub $builder a b "-")) args))
+(defun builtin+ (context args) (reduce (lambda (a b) (LLVMBuildAdd $builder a b "+")) args))
+(defun builtin- (context args) (reduce (lambda (a b) (LLVMBuildSub $builder a b "-")) args))
 
-(defun builtin* (args)
+(defun builtin* (context args)
   (reduce (lambda (a b)
             ;; Rather than shifting each operand right and the result left, we
             ;; just deal with the extra factor of 2^LOWTAG-BITS by shifting
@@ -300,7 +326,7 @@
               (llvm-val<-int LOWTAG-BITS)
               ""))
           args))
-(defun builtin% (args)
+(defun builtin% (context args)
   (reduce (lambda (a b)
             ;; The same comments in builtin* apply here
             (LLVMBuildLShr
@@ -309,7 +335,7 @@
               (llvm-val<-int LOWTAG-BITS)
               ""))
           args))
-(defun builtin/ (args)
+(defun builtin/ (context args)
   (reduce (lambda (a b)
             ;; The same comments in builtin* apply here
             (LLVMBuildShl
@@ -319,32 +345,19 @@
               ""))
           args))
 
-(defun comparison (llvm-cmp operands)
-  (LLVMBuildSelect
-    $builder
-    ;; Don't bother removing the lowtag, as it doesn't affect ordering
-    (LLVMBuildICmp $builder llvm-cmp (first operands) (second operands) "")
-    LLVM-TRUE
-    LLVM-FALSE
-    ""))
-(defun builtin< (args) (comparison LLVMIntSLT args))
-(defun builtin<= (args) (comparison LLVMIntSLE args))
-(defun builtin> (args) (comparison LLVMIntSGT args))
-(defun builtin>= (args) (comparison LLVMIntSGE args))
-
-(defun builtin-cons (args)
+(defun builtin-cons (context args)
   (LLVMBuildCall
     $builder (runtime-func "rt_cons" NUC-VAL (list NUC-VAL NUC-VAL)) args 2 "cons"))
 
-(defun builtin-car (args)
+(defun builtin-car (context args)
   (let ((cons-ptr (cons<-nuc-val (first args))))
     (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 0 "") "car")))
 
-(defun builtin-cdr (args)
+(defun builtin-cdr (context args)
   (let ((cons-ptr (cons<-nuc-val (first args))))
     (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")))
 
-(defun builtin-eq? (args)
+(defun builtin-eq? (context args)
   (LLVMBuildSelect $builder
                    (LLVMBuildICmp $builder LLVMIntEQ (first args) (second args) "")
                    LLVM-TRUE
