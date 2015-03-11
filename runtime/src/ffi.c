@@ -62,3 +62,14 @@ nuc_val rt_null_p(nuc_val ptr_val)
 	void **ptr = (void **)REMOVE_LOWTAG(ptr_val);
 	return *ptr == NULL ? TRUE : FALSE;
 }
+
+nuc_val rt_ptr_eq(nuc_val p1, nuc_val p2)
+{
+	CHECK(p1, FOREIGN_LOWTAG);
+	CHECK(p2, FOREIGN_LOWTAG);
+
+	void *ptr1 = *(void **)REMOVE_LOWTAG(p1);
+	void *ptr2 = *(void **)REMOVE_LOWTAG(p2);
+
+	return ptr1 == ptr2 ? TRUE : FALSE;
+}

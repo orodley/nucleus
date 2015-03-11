@@ -2,3 +2,5 @@
 (defvar NULL (%get-null))
 
 (extern rt_null_p 1 -> null?)
+
+(extern rt_ptr_eq 2 -> ptr-eq?)
