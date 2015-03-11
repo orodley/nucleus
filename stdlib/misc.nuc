@@ -8,6 +8,9 @@
 (defun atom? (sexpr)
   (not (cons? sexpr)))
 
+(defun symbol? (thing)
+  (eq? (type thing) symbol-t))
+
 (defun assert! (condition message)
   (if (not condition)
     (panic! message)))
@@ -18,4 +21,4 @@
 
 (defun gensym ()
   (symbol<-string
-    (format nil "GENSYM-~" (set $gensym-counter (1+ $gensym-counter)))))
+    (format nil "GENSYM-~" (set $gensym-counter (+ 1 $gensym-counter)))))

@@ -52,7 +52,7 @@
   (if (< x 10)
     (write-char-to-stream stream (+ x 48))
     (let* ((ndigits (ceiling (log10 (float<-int x))))
-           (multiplier (expt 10 (1- ndigits))))
+           (multiplier (expt 10 (- ndigits 1))))
       (write-char-to-stream stream (+ (/ x multiplier) 48))
       (print-fixnum stream (- x (* (/ x multiplier) multiplier))))))
 

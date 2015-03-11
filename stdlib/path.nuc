@@ -3,6 +3,7 @@
 
 (defun join-path (part1 part2)
   ;; TODO: this function should be varargs
+  ;; TODO: handle '.' and '..'?
   (string-concat
     (string-concat (string-trim-right part1 "/") "/")
     (string-trim-left part2 "/")))

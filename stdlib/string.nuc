@@ -1,6 +1,9 @@
 ;; TODO: I think the convention should be "str" instead of "string" to make it
 ;; less verbose
 
+(defun string? (thing)
+  (eq? (type thing) string-t))
+
 (defun string-eq? (s1 s2)
   ;; TODO: iterate instead of consing up huge lists needlessly
   (list-eq? (char-list<-string s1) (char-list<-string s2)))
@@ -47,6 +50,6 @@
   (let ((char-bag (if (eq? (type chars) string-t)
                     (char-list<-string chars)
                     chars)))
-    (if (member? (char-at str (1- (string-length str))) char-bag)
-      (string-trim-right (substring str 0 (1- (string-length str))) char-bag)
+    (if (member? (char-at str (- (string-length str) 1)) char-bag)
+      (string-trim-right (substring str 0 (- (string-length str) 1)) char-bag)
       str)))

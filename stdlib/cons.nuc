@@ -54,6 +54,9 @@
 (defun nil? (x)
   (eq? x nil))
 
+(defun list? (x)
+  (or (cons? x) (nil? x)))
+
 (defun member? (elem lizt)
   (if (nil? lizt)
     false
@@ -69,13 +72,20 @@
 (defun list-length (lizt acc)
   (if (nil? lizt)
     acc
-    (list-length (cdr lizt) (1+ acc))))
+    (list-length (cdr lizt) (+ 1 acc))))
 
 (defun length-is? (lizt len)
   (cond
     ((< len 0) false)
     ((nil? lizt) (eq? len 0))
-    (true (length-is? (cdr lizt) (1- len)))))
+    (true (length-is? (cdr lizt) (- len 1)))))
+
+(defun length>= (lizt len)
+  (cond
+    ((< len 0) false)
+    ((nil? lizt) (eq? len 0))
+    ((eq? len 0) true)
+    (true (length>= (cdr lizt) (- len 1)))))
 
 (defun map (func lizt)
   (let ((list-head (cons nil nil)))
@@ -83,6 +93,8 @@
     (cdr list-head)))
 
 (defun %map (list-head func lizt)
+  (when (and (not (cons? lizt)) (not (nil? lizt)))
+    (panic! "Bad object passed into %map!"))
   (when (not (nil? lizt))
     (set-cdr list-head (cons (func (car lizt)) nil))
     (%map (cdr list-head) func (cdr lizt))))
@@ -178,7 +190,7 @@
 (defun %repeat (times thing acc)
   (if (zero? times)
     acc
-    (%repeat (1- times) thing (cons thing acc))))
+    (%repeat (- times 1) thing (cons thing acc))))
 
 (defun range (top)
   (let ((list-head (cons nil nil)))
@@ -188,4 +200,4 @@
 (defun %range (top current list-head)
   (unless (eq? top current)
     (set-cdr list-head (cons current nil))
-    (%range top (1+ current) (cdr list-head))))
+    (%range top (+ 1 current) (cdr list-head))))
