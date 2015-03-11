@@ -198,8 +198,8 @@
                     (list (quote let)
                           (list (list operand-sym (first operands)))
                           (list (quote if) operand-sym
-                                (cons (quote or) (rest operands))
-                                (quote true)))))))
+                                (quote true)
+                                (cons (quote or) (rest operands))))))))
 
 (defvar $lambda-counter 0)
 (defun special-form-lambda (context args-and-body)

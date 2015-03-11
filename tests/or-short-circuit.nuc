@@ -2,6 +2,6 @@
 
 (defun main ()
   (or
-    (progn (write-char #\a) false)
-    (progn (write-char #\b) true)
+    (progn (write-char 97) false)
+    (progn (write-char 98) true)
     (progn (write-char (/ 1 0)) true)))
