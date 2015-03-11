@@ -251,9 +251,13 @@
           (let ((func (get-func name)))
             (if (not (nil? func))
               ;; Calling a static function
-              (LLVMBuildCall $builder (func-llvm-func func)
-                             (map (lambda (e) (compile-expr context e)) args)
-                             (length args) "")
+              (let ((llvm-func (func-llvm-func func)))
+                (if (eq? (LLVMCountParams llvm-func) (length args))
+                  (LLVMBuildCall $builder llvm-func
+                                 (map (lambda (e) (compile-expr context e)) args)
+                                 (length args) "")
+                  (panic!  (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
+                                   name (length args) (LLVMCountParams llvm-func)))))
               (let ((value (compile-expr context name)))
                 (if (not (nil? value))
                   ;; Calling a closure pointer
