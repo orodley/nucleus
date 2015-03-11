@@ -80,7 +80,7 @@
 
 (defun remove-lowtag (nuc-val)
   (LLVMBuildAnd $builder nuc-val
-                ;; TODO: replace with (~ (1- (<< 1 LOWTAG-BITS)))
+                ;; TODO: replace with (~ (- (<< 1 LOWTAG-BITS) 1))
                 (llvm-val<-int 18446744073709551608) "remove-lowtag"))
 
 (defun add-lowtag (nuc-val tag)
@@ -230,12 +230,12 @@
                         NUC-VAL
                         (cons (LLVMPointerType CLOSURE 0)
                               (repeat args-len NUC-VAL))
-                        (1+ args-len)
+                        (+ 1 args-len)
                         false)
                       0)
                     "cast-to-correct-function-type")
                   (cons closure args)
-                  (1+ args-len)
+                  (+ 1 args-len)
                   "call-closure")))
           (LLVMBuildBr $builder after-block)
           (LLVMPositionBuilderAtEnd $builder after-block)
@@ -305,7 +305,7 @@
                   (second sexpr))
          (%find-captured-vars context (cddr sexpr) to-ignore))))
     (true (mappend (lambda (e) (%find-captured-vars context e to-ignore)) sexpr))))
- 
+
 (defun llvm-type<-type-spec (type-spec)
   (case type-spec
     ((quote *) UINTPTR)

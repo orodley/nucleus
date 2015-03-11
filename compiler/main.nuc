@@ -16,9 +16,11 @@
   (cond
     ((not (length-is? $argv 1))
      (set $builder (LLVMCreateBuilder))
-     (let ((non-flag-args nil)
-           (output-llvm-ir false)
-           (output-asm false))
+     (let* ((nucc-dir (dirname (ensure-absolute (first $argv) (current-dir))))
+            (stdlib (join-path nucc-dir "stdlib/lib.nuc"))
+            (non-flag-args nil)
+            (output-llvm-ir false)
+            (output-asm false))
        (each (lambda (arg)
                (cond
                  ((string-eq? arg "-ir")
@@ -27,19 +29,24 @@
                   (set output-asm true))
                  (true
                    (set non-flag-args (cons arg non-flag-args)))))
-             $argv)
+             (rest $argv))
        (when (and output-llvm-ir output-asm)
          (panic! "Cannot specify both of '-ir' and '-asm'"))
        (set non-flag-args (reverse non-flag-args))
-       (let* ((input-filename (ensure-absolute (second non-flag-args) (current-dir)))
-              (output-filename (if (length-is? non-flag-args 2)
+       (let* ((input-filename (ensure-absolute (first non-flag-args) (current-dir)))
+              (output-filename (if (length-is? non-flag-args 1)
                                  "a.out"
-                                 (third non-flag-args)))
+                                 (second non-flag-args)))
               (llvm-context (LLVMGetGlobalContext))
               (context (make-context nil nil)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
          (process-toplevel-form context (quote (defvar $status-code 0)))
+         ;; TODO: we should have a flag to not include the standard library, and
+         ;; then enable it on all tests that don't need standard library functions.
+         ;; That way, if the standard library is broken, only the tests that
+         ;; actually use it break.
+         (process-file context stdlib)
          (process-file context input-filename)
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
@@ -107,21 +114,23 @@
                  (exec "rm" (list tmp-bc-file tmp-o-file))
                  (panic! "gcc failed"))
                (exec "rm" (list tmp-bc-file tmp-o-file))))))))
-    (true 
+    (true
       (write-string-ln "Usage: nucc <input filename>"))))
 
 (defun process-toplevel-form (context form)
   (case (first form)
     ((quote defun)
-     (let* ((name (second form))
-            (args (third form))
-            (arity (length args))
-            (body (cdddr form))
-            (llvm-func
-              (declare-function
-                (mangle-name (second form)) NUC-VAL
-                (map (lambda (_) NUC-VAL) (third form)))))
-       (add-func (make-func name arity args body llvm-func))))
+     (unless (length>= form 3)
+       (panic! (format nil "Malformed 'defun' form: ~" form)))
+     (let ((name (second form))
+           (args (third form))
+           (body (cdddr form)))
+       (unless (and (symbol? name) (list? args))
+         (panic! (format nil "Malformed 'defun' form: ~" form)))
+       (let ((llvm-func (declare-function
+                          (mangle-name (second form)) NUC-VAL
+                          (map (lambda (_) NUC-VAL) (third form)))))
+         (add-func (make-func name (length args) args body llvm-func)))))
     ((quote defvar)
      (let* ((name (second form))
             (value (if (length-is? form 3) (third form) nil))

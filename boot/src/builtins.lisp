@@ -243,7 +243,7 @@
               (mappend (lambda (clause)
                          (%find-captured-vars (second clause) vars-alist))
                        (second body))
-              (%find-captured-vars (third body) vars-alist))))
+              (%find-captured-vars (cddr body) vars-alist))))
          (t (mappend (lambda (body) (%find-captured-vars body vars-alist))
                      body)))))
     (remove-duplicates (%find-captured-vars body vars-alist))))

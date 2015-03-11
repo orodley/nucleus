@@ -3,6 +3,7 @@
     (cons (quote +) builtin+)
     (cons (quote -) builtin-)
     (cons (quote *) builtin*)
+    (cons (quote %) builtin%)
     (cons (quote /) builtin/)
     (cons (quote <) builtin<)
     (cons (quote <=) builtin<=)
@@ -21,6 +22,10 @@
     (cons (quote quote) special-form-quote)
     (cons (quote lambda) special-form-lambda)
 
+    ;; TODO: these should just be regular functions once we have varargs
+    (cons (quote format) special-form-format)
+    (cons (quote list) special-form-list)
+
     ;; TODO: make these into macros
     (cons (quote let*) special-form-let*)
     (cons (quote cond) special-form-cond)
@@ -28,16 +33,34 @@
     (cons (quote and) special-form-and)
     (cons (quote or) special-form-or)
     (cons (quote %raw-call) special-form-%raw-call)
-    (cons (quote %c-call) special-form-%c-call)))
-;; TODO: Write these as a more readable constant expression
+    (cons (quote %c-call) special-form-%c-call)
+    (cons (quote when) special-form-when)
+    (cons (quote unless) special-form-unless)))
+;; TODO: Write these as more readable constant expressions
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
 (defvar LLVM-FALSE (llvm-val<-int 519))
+(defvar LLVM-FIXNUM-T (llvm-val<-int 775))
+(defvar LLVM-CONS-T (llvm-val<-int 1031))
+(defvar LLVM-NIL-T (llvm-val<-int 1287))
+(defvar LLVM-BOOL-T (llvm-val<-int 1543))
+(defvar LLVM-FLOAT-T (llvm-val<-int 1799))
+(defvar LLVM-SYMBOL-T (llvm-val<-int 2055))
+(defvar LLVM-FOREIGN-T (llvm-val<-int 2311))
+(defvar LLVM-STRING-T (llvm-val<-int 2567))
 (defvar $constants
   (list
     (cons (quote nil) LLVM-NIL)
     (cons (quote true) LLVM-TRUE)
-    (cons (quote false) LLVM-FALSE)))
+    (cons (quote false) LLVM-FALSE)
+    (cons (quote fixnum-t) LLVM-FIXNUM-T)
+    (cons (quote cons-t) LLVM-CONS-T)
+    (cons (quote nil-t) LLVM-NIL-T)
+    (cons (quote bool-t) LLVM-BOOL-T)
+    (cons (quote float-t) LLVM-FLOAT-T)
+    (cons (quote symbol-t) LLVM-SYMBOL-T)
+    (cons (quote foreign-t) LLVM-FOREIGN-T)
+    (cons (quote string-t) LLVM-STRING-T)))
 
 (defun get-special-form (name)
   (assoc-cdr name $special-forms))
@@ -86,7 +109,7 @@
   ;; TODO: Enforce that 'condition' is a boolean at runtime
   (let* ((condition (compile-expr context (first args)))
          (then (second args))
-         (else (third args))
+         (else (if (length-is? args 2) (quote nil) (third args)))
          (current-func (get-current-func $builder))
          (then-block (LLVMAppendBasicBlock current-func "then"))
          (else-block (LLVMAppendBasicBlock current-func "else"))
@@ -184,7 +207,7 @@
          (body (cdr args-and-body))
          (name (symbol<-string
                  (format nil "lambda_~" (set $lambda-counter
-                                             (1+ $lambda-counter)))))
+                                             (+ 1 $lambda-counter)))))
          (current-block (LLVMGetInsertBlock $builder))
          (captures (find-captured-vars context body args))
          (func (compile-lambda context name args body (map car captures))))
@@ -198,7 +221,7 @@
     (LLVMBuildCall
       $builder
       ;; deliberately DON'T mangle
-      (runtime-func name NUC-VAL (map (lambda (_) NUC-VAL) args))
+      (runtime-func (string<-symbol name) NUC-VAL (map (lambda (_) NUC-VAL) args))
       ;; TODO: compile-all
       (map (lambda (e) (compile-expr context e)) args)
       (length args)
@@ -224,6 +247,37 @@
           ""
           "%c-call")))))
 
+(defun special-form-format (context args)
+  (compile-expr
+    context
+    ;; TODO: Life without quasiquote is painful
+    (list (quote %format) (first args) (second args)
+          (cons (quote list) (cdddr args)))))
+
+(defun special-form-list (context args)
+  (if (nil? args)
+    LLVM-NIL
+    (compile-expr
+      context
+      ;; TODO: Life without quasiquote is painful
+      (list (quote cons) (first args) (cons (quote list) (rest args))))))
+
+(defun special-form-unless (context args)
+  (let ((condition (first args))
+        (body (rest args)))
+    (compile-expr
+      context
+      ;; TODO: Life without quasiquote is painful
+      (list (quote if) condition (quote nil) (cons (quote progn) body)))))
+
+(defun special-form-when (context args)
+  (let ((condition (first args))
+        (body (rest args)))
+    (compile-expr
+      context
+      ;; TODO: Life without quasiquote is painful
+      (list (quote if) condition (cons (quote progn) body)))))
+
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition
 ;; and subtraction - shifting each operand right and then the result left is
@@ -243,6 +297,15 @@
             (LLVMBuildLShr
               $builder
               (LLVMBuildMul $builder a b "*")
+              (llvm-val<-int LOWTAG-BITS)
+              ""))
+          args))
+(defun builtin% (args)
+  (reduce (lambda (a b)
+            ;; The same comments in builtin* apply here
+            (LLVMBuildLShr
+              $builder
+              (LLVMBuildSRem $builder a b "*")
               (llvm-val<-int LOWTAG-BITS)
               ""))
           args))

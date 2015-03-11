@@ -180,7 +180,7 @@ nuc_val rt_close(nuc_val stream_val)
 
 // TODO: We should probably use the string stream buffer as a circular buffer
 
-#define MINIMUM_INITIAL_STRING_STREAM_SIZE 32
+#define MINIMUM_INITIAL_STRING_STREAM_SIZE 4
 #define STRING_STREAM_GROWTH_FACTOR 2
 
 nuc_val rt_make_string_stream(nuc_val initial_contents_val)
@@ -217,8 +217,7 @@ nuc_val rt_string_stream_to_string(nuc_val stream_val)
 
 static void string_stream_ensure_room_for(String_stream *stream, size_t size)
 {
-	int diff = stream->write_pos + size - stream->capacity;
-	if (diff > 0)
+	if (stream->write_pos + size < stream->capacity)
 		return;
 
 	size_t required_size = ((stream->write_pos - stream->read_pos) + size);
@@ -238,4 +237,6 @@ static void string_stream_ensure_room_for(String_stream *stream, size_t size)
 	stream->write_pos = stream->write_pos - stream->read_pos;
 	stream->read_pos = 0;
 	stream->chars = new_buf;
+
+	assert(stream->write_pos + size < stream->capacity);
 }
