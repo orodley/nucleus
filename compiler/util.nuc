@@ -298,9 +298,12 @@
          (if (nil? binding) nil (list (cons sexpr binding))))))
     ((or (eq? (car sexpr) (quote let)) (eq? (car sexpr) (quote let*)))
      ;; let/let* can shadow variables, producing spurious captures
-     (%find-captured-vars context
-                          (cddr sexpr)
-                          (append! (map car (second sexpr)) to-ignore)))
+     (let ((to-ignore (append! (map car (second sexpr)) to-ignore)))
+       (append!
+         (mappend (lambda (clause)
+                    (%find-captured-vars context (second clause) to-ignore))
+                  (second sexpr))
+         (%find-captured-vars context (cddr sexpr) to-ignore))))
     (true (mappend (lambda (e) (%find-captured-vars context e to-ignore)) sexpr))))
  
 (defun llvm-type<-type-spec (type-spec)
