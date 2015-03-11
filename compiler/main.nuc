@@ -133,7 +133,7 @@
          (add-func (make-func name (length args) args body llvm-func)))))
     ((quote defvar)
      (let* ((name (second form))
-            (value (if (length-is? form 3) (third form) nil))
+            (value (if (length-is? form 3) (third form) (quote nil)))
             (init (llvm-val<-int (if (int? value)
                                    (<< value LOWTAG-BITS)
                                    0)))
