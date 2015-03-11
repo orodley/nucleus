@@ -1,4 +1,4 @@
 ; run-stdout: foobar
 
 (defun main ()
-  (write-string (string<-char-list (list #\f #\o #\o #\b #\a #\r))))
+  (write-string (string<-char-list (list 102 111 111 98 97 114))))

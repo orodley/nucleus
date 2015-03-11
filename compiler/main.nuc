@@ -61,7 +61,7 @@
                    (let ((var (car init))
                          (expr (cdr init)))
                      (LLVMBuildStore $builder (compile-expr context expr) var)))
-                 $initialisers)
+                 (reverse $initialisers))
            (LLVMBuildCall $builder entry-point nil 0 "")
            (LLVMBuildRet
              $builder
