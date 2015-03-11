@@ -255,7 +255,7 @@
     context
     ;; TODO: Life without quasiquote is painful
     (list (quote %format) (first args) (second args)
-          (cons (quote list) (cdddr args)))))
+          (cons (quote list) (cddr args)))))
 
 (defun special-form-list (context args)
   (if (nil? args)
