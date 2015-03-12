@@ -95,16 +95,25 @@ if [ $output_ir = true ]; then
 	exit 0
 fi
 
+llvm-link "$bc" ../runtime/nuc-runtime.bc -o "$bc"
+
+# We have to optimize with '-Oz' before we optimize with '-O3' using llc below.
+# If we don't, it doesn't perform TCO in a few places that are crucial for nucc
+# not to stack overflow, e.g.: read-list.
+# The reason it doesn't easily find the opportunity for TCO is that there are
+# several 'br's and 'phi's between the tail call and the 'ret', so I guess the
+# simplification of the block structure performed by '-Oz' allows the more
+# aggressive TCO pass in '-O3' to find it. This is all speculation though.
+opt -Oz "$bc" -o "$bc"
+
 if [ $output_asm = true ]; then
-	llc -filetype=asm "$bc" -o "$output"
+	llc -O3 -filetype=asm "$bc" -o "$output"
 	rm "$bc"
 	exit 0
 fi
 
-llvm-link "$bc" ../runtime/nuc-runtime.bc -o "$bc"
-
 obj=${input%%.*}.o
-llc -filetype=obj "$bc" -o "$obj"
+llc -O3 -filetype=obj "$bc" -o "$obj"
 
 rm "$bc"
 

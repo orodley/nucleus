@@ -3,6 +3,8 @@
 *.ll
 *.bc
 
+*.o
+
 *.[sS]
 a.out
 nucc
