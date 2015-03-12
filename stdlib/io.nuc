@@ -116,7 +116,7 @@
       ((eq? c 59)
        (skip-comment stream)
        (read-from-stream stream))
-      ((or (eq? c 32) (eq? c 10)) ; ' ' or '\n'
+      ((whitespace? c)
        (read-from-stream stream))
       ((eq? c 34)
        (let ((list-head (cons nil nil)))
@@ -158,14 +158,14 @@
 (defun read-list (stream list-head)
   (let ((c (%read-char stream)))
     (cond
+      ((whitespace? c) (read-list stream list-head))
       ((eq? c 41) nil)
-      (true
-        (back-up-char c)
-        (let ((next (read-from-stream stream)))
-          (set-cdr list-head (if (eq? next (symbol<-string "."))
-                               (read-from-stream stream)
-                               (cons next nil)))
-          (read-list stream (cdr list-head)))))))
+      (true (back-up-char c)
+            (let ((next (read-from-stream stream)))
+              (set-cdr list-head (if (eq? next (symbol<-string "."))
+                                   (read-from-stream stream)
+                                   (cons next nil))))
+            (read-list stream (cdr list-head))))))
 
 (defun read-symbol (stream list-head)
   (let ((c (%read-char stream)))
@@ -183,6 +183,10 @@
 (defun symbol-char? (c)
   (and (not (eof? c))
        (not (member? c (list 59 32 10 34 40 41)))))
+
+(defun whitespace? (c)
+  ;; ' ' or '\n' or '\t' 
+  (or (eq? c 32) (eq? c 10) (eq? c 9)))
 
 ;;; TODO: Once we have varargs we should define this as a variable arity
 ;;; function rather than having a compiler builtin.
