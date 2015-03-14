@@ -13,6 +13,7 @@
 (cfun LLVMSetInitializer (* *) -> void)
 
 (cfun LLVMConstInt (* long-long bool) -> *)
+(cfun LLVMConstIntOfString (* string uint8) -> *)
 (cfun LLVMConstNull (*) -> *)
 
 (cfun LLVMAppendBasicBlock (* string) -> *)

@@ -51,6 +51,7 @@
 (defvar LLVM-SYMBOL-T (llvm-val<-int 2055))
 (defvar LLVM-FOREIGN-T (llvm-val<-int 2311))
 (defvar LLVM-STRING-T (llvm-val<-int 2567))
+(defvar LLVM-LAMBDA-T (llvm-val<-int 2823))
 (defvar $constants
   (list
     (cons (quote nil) LLVM-NIL)
@@ -63,7 +64,8 @@
     (cons (quote float-t) LLVM-FLOAT-T)
     (cons (quote symbol-t) LLVM-SYMBOL-T)
     (cons (quote foreign-t) LLVM-FOREIGN-T)
-    (cons (quote string-t) LLVM-STRING-T)))
+    (cons (quote string-t) LLVM-STRING-T)
+    (cons (quote lambda-t) LLVM-LAMBDA-T)))
 
 (defun get-special-form (name)
   (assoc-cdr name $special-forms))
@@ -83,9 +85,6 @@
       (panic! "Undefined variable")
       (LLVMBuildStore $builder new-value lvalue))
     new-value))
-
-(defun special-form-progn (context args)
-  (compile-progn context args))
 
 (defun special-form-let (context args)
   (let* ((bindings (first args))

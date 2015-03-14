@@ -35,6 +35,9 @@
 (defun mangle-name (name)
   (format nil "nuc(~)" name))
 
+;; TODO: write this properly
+(defun << (x y) (* x (expt 2 y)))
+
 (defun extend-env-with-values (context names values)
   (let ((env (context-env context))
         (file (context-file context)))
@@ -80,8 +83,11 @@
 
 (defun remove-lowtag (nuc-val)
   (LLVMBuildAnd $builder nuc-val
-                ;; TODO: replace with (~ (- (<< 1 LOWTAG-BITS) 1))
-                (llvm-val<-int 18446744073709551608) "remove-lowtag"))
+                ;; This is (~ (- (<< 1 LOWTAG-BITS) 1)).
+                ;; We can't write that directly as it exceeds the 61-bit limit
+                ;; of nucleus fixnums
+                (LLVMConstIntOfString (LLVMIntType 64) "fffffffffffffff8" 16)
+                "remove-lowtag"))
 
 (defun add-lowtag (nuc-val tag)
   (LLVMBuildOr $builder
@@ -104,7 +110,7 @@
 
 (defun gc-alloc (size)
   (LLVMBuildCall
-    $builder (runtime-func "gc_alloc" (LLVMPointerType NUC-VAL 0) SIZE-T)
+    $builder (runtime-func "gc_alloc" (LLVMPointerType NUC-VAL 0) (list SIZE-T))
     (list (llvm-val<-int size)) 1 "gc_alloc"))
 
 (defun compile-progn (context forms)
@@ -312,6 +318,7 @@
     ((quote string) (LLVMPointerType (LLVMIntType 8) 0))
     ((quote void) (LLVMVoidType))
     ((quote int) INT) ((quote uint) INT) ((quote bool) INT)
+    ((quote uint8) (LLVMIntType 8))
     ((quote long) LONG)
     ((quote long-long) LONG-LONG)
     ((quote array) (LLVMPointerType UINTPTR 0))
@@ -334,12 +341,13 @@
        $builder
        (runtime-func "rt_nuc_str_to_c_str" (LLVMPointerType (LLVMIntType 8) 0) (list NUC-VAL))
        (list val) 1 "c-val<-nuc-val"))
-    ((member? type-spec (list (quote int) (quote uint) (quote long) (quote long-long)))
+    ((member? type-spec (list (quote int) (quote uint) (quote long)
+                              (quote long-long) (quote uint8)))
      (LLVMBuildIntCast
        $builder
        (int<-nuc-val val)
-       (llvm-type<-type-spec type)
-       "downcast-nuc-val-to-int"))
+       (llvm-type<-type-spec type-spec)
+       "cast-nuc-val"))
     ((eq? type-spec (quote bool))
       (LLVMBuildIntCast
         $builder
@@ -349,7 +357,7 @@
     ((eq? type-spec (quote array))
      (LLVMBuildCall
        $builder
-       (runtime-func "rt_list_to_array" (llvm-type<-type-spec type) (list NUC-VAL))
+       (runtime-func "rt_list_to_array" (llvm-type<-type-spec type-spec) (list NUC-VAL))
        (list val)
        1
        "array<-list"))
@@ -364,11 +372,11 @@
           box)
         6))
     ((eq? type-spec (quote void)) LLVM-NIL)
-    ((member? type-spec
-              (list (quote int) (quote uint) (quote long) (quote long-long)))
+    ((member? type-spec (list (quote int) (quote uint) (quote long)
+                              (quote long-long) (quote uint8)))
      (nuc-val<-int
        (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
     ((eq? type-spec (quote bool))
      (LLVMBuildSelect $builder
                       (LLVMBuildICmp $builder LLVMIntEQ val (llvm-val<-int32 0) "")
-                      LLVM-TRUE LLVM-FALSE ""))))
+                      LLVM-FALSE LLVM-TRUE ""))))

@@ -53,6 +53,7 @@ typedef uint64_t nuc_val;
 #define SYMBOL_TYPE MAKE_DISCRETE(8)
 #define FOREIGN_TYPE MAKE_DISCRETE(9)
 #define STRING_TYPE MAKE_DISCRETE(10)
+#define LAMBDA_TYPE MAKE_DISCRETE(11)
 
 typedef union Float_converter
 {

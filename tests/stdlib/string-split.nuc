@@ -1,0 +1,7 @@
+; run-stdout: foo\nbar\nfoo\nbar\nfoobar\n
+
+(defun main ()
+  (each write-string-ln (string-split "foo bar " " "))
+  (each write-string-ln (string-split "" " "))
+  (each write-string-ln (string-split " foo   bar" " "))
+  (each write-string-ln (string-split "foobar" " ")))

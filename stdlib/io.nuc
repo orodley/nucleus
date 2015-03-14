@@ -42,6 +42,7 @@
       (write-char-to-stream stream 34)
       (write-string-to-stream stream sexp)
       (write-char-to-stream stream 34))
+    (lambda-t (write-string-to-stream stream "#<lambda>"))
     (nil-t (write-string-to-stream stream "nil"))
     (bool-t (write-string-to-stream stream (if sexp "true" "false")))
     (foreign-t (%write-addr-to-stream stream sexp))

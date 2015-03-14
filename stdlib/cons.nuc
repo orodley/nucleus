@@ -95,9 +95,23 @@
 (defun %map (list-head func lizt)
   (when (and (not (cons? lizt)) (not (nil? lizt)))
     (panic! "Bad object passed into %map!"))
-  (when (not (nil? lizt))
+  (unless (nil? lizt)
     (set-cdr list-head (cons (func (car lizt)) nil))
     (%map (cdr list-head) func (cdr lizt))))
+
+(defun filter (func lizt)
+  (let ((list-head (cons nil nil)))
+    (%filter list-head func lizt)
+    (cdr list-head)))
+
+(defun %filter (list-head func lizt)
+  (unless (nil? lizt)
+    (%filter
+      (cond ((func (first lizt))
+             (set-cdr list-head (cons (first lizt) nil))
+             (cdr list-head))
+            (true list-head))
+      func (cdr lizt))))
 
 (defun assoc (kar alist)
   (cond

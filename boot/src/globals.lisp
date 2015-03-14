@@ -52,7 +52,8 @@
   (defparameter *float-type* (make-const 7))
   (defparameter *symbol-type* (make-const 8))
   (defparameter *foreign-type* (make-const 9))
-  (defparameter *string-type* (make-const 10)))
+  (defparameter *string-type* (make-const 10))
+  (defparameter *lambda-type* (make-const 11)))
 
 (defparameter *constants*
   `((|nil| . ,*nil*)
@@ -65,4 +66,5 @@
     (|float-t| . ,*float-type*)
     (|symbol-t| . ,*symbol-type*)
     (|foreign-t| . ,*foreign-type*)
-    (|string-t| . ,*string-type*)))
+    (|string-t| . ,*string-type*)
+    (|lambda-t| . ,*lambda-type*)))

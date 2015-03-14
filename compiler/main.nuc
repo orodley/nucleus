@@ -12,27 +12,43 @@
 (defvar $module)
 (defvar $builder)
 
+(defun parse-args (args)
+  (let ((parsed (%parse-args args (list nil))))
+    (cons (reverse (car parsed)) (cdr parsed))))
+
+(defun %parse-args (args acc)
+  (if (nil? args)
+    acc
+    (let ((arg (first args)))
+      (cond
+        ((or (string-eq? arg "-ir") (string-eq? arg "-asm"))
+         (set-cdr acc (cons (cons arg true) (cdr acc))))
+        ((string-eq? arg "-link")
+         (when (nil? (cdr args)) (panic! "'-link' must be followed by linker args"))
+         (set-cdr acc (cons (cons arg (second args)) (cdr acc)))
+         (set args (cdr args)))
+        (true
+          (set-car acc (cons arg (car acc)))))
+      (%parse-args (cdr args) acc))))
+
+(defun get-arg (args arg-name default)
+  (cond ((nil? args) default)
+        ((string-eq? (car (first args)) arg-name) (cdr (first args)))
+        (true (get-arg (rest args) arg-name default))))
+
 (defun main ()
   (cond
     ((not (length-is? $argv 1))
      (set $builder (LLVMCreateBuilder))
      (let* ((nucc-dir (dirname (ensure-absolute (first $argv) (current-dir))))
             (stdlib (join-path nucc-dir "stdlib/lib.nuc"))
-            (non-flag-args nil)
-            (output-llvm-ir false)
-            (output-asm false))
-       (each (lambda (arg)
-               (cond
-                 ((string-eq? arg "-ir")
-                  (set output-llvm-ir true))
-                 ((string-eq? arg "-asm")
-                  (set output-asm true))
-                 (true
-                   (set non-flag-args (cons arg non-flag-args)))))
-             (rest $argv))
+            (parsed-args (parse-args (rest $argv)))
+            (non-flag-args (car parsed-args))
+            (output-llvm-ir (get-arg parsed-args "-ir" false))
+            (output-asm (get-arg parsed-args "-asm" false))
+            (linker-args (string-split (get-arg parsed-args "-link" "") (list 10 32))))
        (when (and output-llvm-ir output-asm)
          (panic! "Cannot specify both of '-ir' and '-asm'"))
-       (set non-flag-args (reverse non-flag-args))
        (let* ((input-filename (ensure-absolute (first non-flag-args) (current-dir)))
               (output-filename (if (length-is? non-flag-args 1)
                                  "a.out"
@@ -51,12 +67,22 @@
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
                               $module (mangle-name (quote main))))
-               (main-func (LLVMAddFunction $module "main"
-                                           (LLVMFunctionType INT nil 0 false))))
+               (main-func (LLVMAddFunction
+                            $module "main"
+                            (LLVMFunctionType
+                              INT
+                              (list INT (LLVMPointerType (LLVMPointerType (LLVMIntType 8) 0) 0))
+                              2 false))))
            (when (null? entry-point)
              (panic! "No main function defined."))
            (LLVMPositionBuilderAtEnd $builder
                                      (LLVMAppendBasicBlock main-func "entry"))
+           ;; Store args in $argv
+           (LLVMBuildCall
+             $builder
+             (runtime-func "rt_store_argv" (LLVMVoidType)
+                           (list INT (LLVMPointerType (LLVMPointerType (LLVMIntType 8) 0) 0)))
+             (llvm-params main-func) 2 "")
            (each (lambda (init)
                    (let ((var (car init))
                          (expr (cdr init)))
@@ -108,11 +134,12 @@
                                                 "-o" tmp-o-file)))
                  (exec "rm" (list tmp-bc-file))
                  (panic! "llc failed"))
-               (unless (zero? (exec "gcc" (list "-lm"
-                                                tmp-o-file
-                                                "-o" output-filename)))
+               (unless (zero? (exec "g++" (append (list "-lm"
+                                                        tmp-o-file
+                                                        "-o" output-filename)
+                                                  linker-args)))
                  (exec "rm" (list tmp-bc-file tmp-o-file))
-                 (panic! "gcc failed"))
+                 (panic! "g++ failed"))
                (exec "rm" (list tmp-bc-file tmp-o-file))))))))
     (true
       (write-string-ln "Usage: nucc <input filename>"))))
@@ -142,20 +169,20 @@
        (unless (int? value)
          (add-initialiser var value))))
     ((quote extern)
-      (unless (length-is? (cdr form) 4)
-        (panic! (format
-                  nil
-                  "Invalid number of arguments to 'extern' (got ~, expected 4)"
-                  (length (cdr form)))))
-      ;; TODO: possibly better to do this directly?
-      (process-toplevel-form
-        context
-        (let ((args (map (lambda (_) (gensym)) (repeat (third form) nil))))
-          ;; TODO: Life without quasiquote is painful
-          (list (quote defun) (fifth form) args
-                ;; TODO: we should make the name be a symbol - change this once
-                ;; we're bootstrapped
-                (cons (quote %raw-call) (cons (second form) args))))))
+     (unless (length-is? (cdr form) 4)
+       (panic! (format
+                 nil
+                 "Invalid number of arguments to 'extern' (got ~, expected 4)"
+                 (length (cdr form)))))
+     ;; TODO: possibly better to do this directly?
+     (process-toplevel-form
+       context
+       (let ((args (map (lambda (_) (gensym)) (repeat (third form) nil))))
+         ;; TODO: Life without quasiquote is painful
+         (list (quote defun) (fifth form) args
+               ;; TODO: we should make the name be a symbol - change this once
+               ;; we're bootstrapped
+               (cons (quote %raw-call) (cons (second form) args))))))
     ((quote cfun)
      (unless (length-is? (cdr form) 4)
        (panic! (format
@@ -184,6 +211,23 @@
             (included-file (ensure-absolute filename
                                             (dirname including-file))))
        (process-file context included-file)))
+    ;; TODO: should this be called 'c'enum? It's just a regular enum really.
+    ((quote cenum)
+     (when (nil? (cdr form))
+       (panic! "An enum must have one or more values"))
+     ;; TODO: support negative integer literals
+     (let ((enum-variant-value (- 0 1)))
+       (each
+         (lambda (enum-variant)
+           (let ((name (if (cons? enum-variant) (car enum-variant) enum-variant))
+                 (value (set enum-variant-value
+                             (if (cons? enum-variant)
+                               (second enum-variant)
+                               (+ 1 enum-variant-value)))))
+             (LLVMSetInitializer
+               (LLVMAddGlobal $module NUC-VAL (mangle-name name))
+               (nuc-val<-int (llvm-val<-int value)))))
+         (cdr form))))
     (default
       (panic! (format nil "Invalid top-level form '~'" (first form))))))
 

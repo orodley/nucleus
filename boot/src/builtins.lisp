@@ -310,6 +310,7 @@
     (|void| (llvm:void-type))
     ((|int| |uint| |bool|) *int*)
     ((|long| |long-long|) (llvm:int-type 64))
+    (|uint8| (llvm:int-type 8))
     (|array| (llvm:pointer-type *void-ptr*))))
 
 (defun c-val<-nuc-val (type val)
@@ -331,7 +332,7 @@
                      *nuc-val*)
         (list val)
         "c-val<-nuc-val"))
-    ((|int| |uint| |long| |long-long|) ; platform dependent int type
+    ((|int| |uint| |long| |long-long| |uint8|)
       (llvm::build-int-cast
         *builder*
         (int<-nuc-val val)
@@ -362,7 +363,7 @@
         #b110))
     (|void|
       (compile-expr '|nil|))
-    ((|int| |uint| |long| |long-long|)
+    ((|int| |uint| |long| |long-long| |uint8|)
       (nuc-val<-int
         (llvm::build-int-cast *builder* val *nuc-val* "cast-int-to-nuc-val")))
     (|bool|

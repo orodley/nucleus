@@ -10,6 +10,7 @@ nuc_val rt_type(nuc_val val)
 	case CONS_LOWTAG: return CONS_TYPE;
 	case SYMBOL_LOWTAG:  return SYMBOL_TYPE;
 	case STRING_LOWTAG: return STRING_TYPE;
+	case LAMBDA_LOWTAG: return LAMBDA_TYPE;
 	case FOREIGN_LOWTAG: return FOREIGN_TYPE;
 	case EXTTAG_LOWTAG:
 		switch (EXTTAG(val)) {
@@ -24,6 +25,7 @@ nuc_val rt_type(nuc_val val)
 		}
 	}
 
+	printf("Got an invalid lowtag '%d'\n", (int)LOWTAG(val));
 	assert(!"This should never be reached");
 }
 
