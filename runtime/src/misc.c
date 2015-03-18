@@ -12,9 +12,7 @@
 nuc_val rt_panic(nuc_val message)
 {
 	String *str = (String *)REMOVE_LOWTAG(message);
-	fputs("(panic! \"", stderr);
-	fwrite(str->bytes, 1, str->length, stderr);
-	fputs("\")\n", stderr);
+	fprintf(stderr, "Panic!: %.*s\n", (int)str->length, str->bytes);
 
 	exit(1);
 }
