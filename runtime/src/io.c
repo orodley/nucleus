@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <stdio.h>
 #include <string.h>
@@ -156,7 +157,16 @@ nuc_val rt_get_stdout()
 nuc_val rt_open(nuc_val string)
 {
 	char *filename = rt_nuc_str_to_c_str(string);
-	return os_stream_to_stream(fopen(filename, "r"));
+	FILE *fp = fopen(filename, "r");
+	if (fp == NULL) {
+		int open_err = errno;
+		fprintf(stderr, "Panic!: Error opening file \"%s\": ", filename);
+		errno = open_err;
+		perror("");
+
+		exit(1);
+	}
+	return os_stream_to_stream(fp);
 }
 
 nuc_val rt_close(nuc_val stream_val)

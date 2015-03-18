@@ -41,7 +41,8 @@
     ((not (length-is? $argv 1))
      (set $builder (LLVMCreateBuilder))
      (let* ((nucc-dir (dirname (ensure-absolute (first $argv) (current-dir))))
-            (stdlib (join-path nucc-dir "stdlib/lib.nuc"))
+            (stdlib-same-dir (join-path nucc-dir "stdlib/lib.nuc"))
+            (stdlib-parent-dir (join-path (join-path nucc-dir "..") "stdlib/lib.nuc"))
             (parsed-args (parse-args (rest $argv)))
             (non-flag-args (car parsed-args))
             (output-llvm-ir (get-arg parsed-args "-ir" false))
@@ -62,8 +63,8 @@
          ;; then enable it on all tests that don't need standard library functions.
          ;; That way, if the standard library is broken, only the tests that
          ;; actually use it break.
-         (process-file context stdlib)
-         (process-file context input-filename)
+         (process-file context (list stdlib-same-dir stdlib-parent-dir))
+         (process-file context (list input-filename))
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
                               $module (mangle-name (quote main))))
@@ -210,7 +211,7 @@
                         (string-concat (second form) ".nuc")))
             (included-file (ensure-absolute filename
                                             (dirname including-file))))
-       (process-file context included-file)))
+       (process-file context (list included-file))))
     ;; TODO: should this be called 'c'enum? It's just a regular enum really.
     ((quote cenum)
      (when (nil? (cdr form))
@@ -231,16 +232,20 @@
     (default
       (panic! (format nil "Invalid top-level form '~'" (first form))))))
 
-(defun process-file (context filename)
-  (unless (file-exists? filename)
-    (panic! (format nil "Could not find file ~" filename)))
-  (let ((old-file (context-file context)))
-    (context-set-file context filename)
-    (let* ((file (open filename))
-           (forms (read-all file)))
-      (close file)
-      (each (lambda (form) (process-toplevel-form context form)) forms))
-    (context-set-file context old-file)))
+(defun process-file (context filename-and-backups)
+  (let ((filename (first filename-and-backups)))
+    (cond
+      ((file-exists? filename)
+       (let ((old-file (context-file context)))
+         (context-set-file context filename)
+         (let* ((file (open filename))
+                (forms (read-all file)))
+           (close file)
+           (each (lambda (form) (process-toplevel-form context form)) forms))
+         (context-set-file context old-file)))
+      ((nil? (cdr filename-and-backups))
+       (panic! (format nil "Could not find file ~" filename)))
+      (true (process-file context (rest filename-and-backups))))))
 
 (defun compile-function (context func)
   (let* ((args (func-args func))
