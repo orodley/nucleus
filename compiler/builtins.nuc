@@ -82,7 +82,7 @@
          (lvalue (get-lvalue context name))
          (new-value (compile-expr context (second args))))
     (if (null? lvalue)
-      (panic! "Undefined variable")
+      (fail! context "Undefined variable")
       (LLVMBuildStore $builder new-value lvalue))
     new-value))
 
@@ -177,7 +177,7 @@
                   (list (global-string (string<-symbol to-quote)))
                   1
                   "intern-const"))
-      (default (panic! (format nil "Don't know how to quote '~'" to-quote))))))
+      (default (fail! context (format nil "Don't know how to quote '~'" to-quote))))))
 
 (defun special-form-and (context operands)
   (compile-expr context
@@ -239,9 +239,10 @@
         $builder
         (runtime-func
           name
-          (llvm-type<-type-spec return-type)
-          (map (lambda (entry) (llvm-type<-type-spec (car entry))) args-alist))
+          (llvm-type<-type-spec context return-type)
+          (map (lambda (entry) (llvm-type<-type-spec context (car entry))) args-alist))
         (map (lambda (entry) (c-val<-nuc-val
+                               context
                                (car entry) (compile-expr context (cdr entry))))
              args-alist)
         (length args-alist)

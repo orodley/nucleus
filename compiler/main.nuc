@@ -55,7 +55,7 @@
                                  "a.out"
                                  (second non-flag-args)))
               (llvm-context (LLVMGetGlobalContext))
-              (context (make-context nil nil)))
+              (context (make-context nil nil nil)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
          (process-toplevel-form context (quote (defvar $status-code 0)))
@@ -149,16 +149,16 @@
   (case (first form)
     ((quote defun)
      (unless (length>= form 3)
-       (panic! (format nil "Malformed 'defun' form: ~" form)))
+       (fail! context (format nil "Malformed 'defun' form: ~" form)))
      (let ((name (second form))
            (args (third form))
            (body (cdddr form)))
        (unless (and (symbol? name) (list? args))
-         (panic! (format nil "Malformed 'defun' form: ~" form)))
+         (fail! context (format nil "Malformed 'defun' form: ~" form)))
        (let ((llvm-func (declare-function
                           (mangle-name (second form)) NUC-VAL
                           (map (lambda (_) NUC-VAL) (third form)))))
-         (add-func (make-func name (length args) args body llvm-func)))))
+         (add-func context (make-func name (length args) args body llvm-func)))))
     ((quote defvar)
      (let* ((name (second form))
             (value (if (length-is? form 3) (third form) (quote nil)))
@@ -171,10 +171,12 @@
          (add-initialiser var value))))
     ((quote extern)
      (unless (length-is? (cdr form) 4)
-       (panic! (format
-                 nil
-                 "Invalid number of arguments to 'extern' (got ~, expected 4)"
-                 (length (cdr form)))))
+       (fail!
+         context
+         (format
+           nil
+           "Invalid number of arguments to 'extern' (got ~, expected 4)"
+           (length (cdr form)))))
      ;; TODO: possibly better to do this directly?
      (process-toplevel-form
        context
@@ -186,10 +188,9 @@
                (cons (quote %raw-call) (cons (second form) args))))))
     ((quote cfun)
      (unless (length-is? (cdr form) 4)
-       (panic! (format
-                 nil
-                 "Invalid number of arguments to 'cfun' (got ~, expected 4)"
-                 (length (cdr form)))))
+       (fail!
+         context (format nil "Invalid number of arguments to 'cfun' (got ~, expected 4)"
+                         (length (cdr form)))))
      (let* ((name (second form))
             (arg-types (third form))
             (ret-type (fifth form))
@@ -201,10 +202,9 @@
                (list (quote %c-call) (string<-symbol name) (zip arg-types args) ret-type)))))
     ((quote include)
      (unless (length-is? (cdr form) 1)
-       (panic! (format
-                 nil
-                 "Invalid number of arguments to 'include' (got ~, expected 1)"
-                 (length (cdr form)))))
+       (fail!
+         context (format nil "Invalid number of arguments to 'include' (got ~, expected 1)"
+                         (length (cdr form)))))
      (let* ((including-file (context-file context))
             (filename (if (string-ends-with? (second form) ".nuc")
                         (second form)
@@ -215,7 +215,7 @@
     ;; TODO: should this be called 'c'enum? It's just a regular enum really.
     ((quote cenum)
      (when (nil? (cdr form))
-       (panic! "An enum must have one or more values"))
+       (fail! context "An enum must have one or more values"))
      ;; TODO: support negative integer literals
      (let ((enum-variant-value (- 0 1)))
        (each
@@ -230,7 +230,7 @@
                (nuc-val<-int (llvm-val<-int value)))))
          (cdr form))))
     (default
-      (panic! (format nil "Invalid top-level form '~'" (first form))))))
+      (fail! context (format nil "Invalid top-level form '~'" (first form))))))
 
 (defun process-file (context filename-and-backups)
   (let ((filename (first filename-and-backups)))
@@ -244,7 +244,7 @@
            (each (lambda (form) (process-toplevel-form context form)) forms))
          (context-set-file context old-file)))
       ((nil? (cdr filename-and-backups))
-       (panic! (format nil "Could not find file ~" filename)))
+       (fail! context (format nil "Could not find file ~" filename)))
       (true (process-file context (rest filename-and-backups))))))
 
 (defun compile-function (context func)
@@ -256,11 +256,12 @@
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
     ;; TODO: set LLVM param names
     (set context (extend-env-with-values context args params))
+    (context-set-func context func)
     (let ((compiled (LLVMBuildRet $builder
                                   (compile-progn context (func-body func)))))
       (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
         (LLVMDumpValue llvm-func)
-        (panic! "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
+        (fail! context "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
       compiled)))
 
 (defun compile-expr (context expr)
@@ -270,7 +271,7 @@
     (symbol-t
       (let ((value (get-value context expr)))
         (if (nil? value)
-          (panic! (format nil "Undefined variable '~'" expr))
+          (fail! context (format nil "Undefined variable '~'" expr))
           value)))
     (cons-t (compile-form context expr))
     (string-t (LLVMBuildCall
@@ -281,10 +282,9 @@
                 (list (llvm-val<-int (length expr)) (global-string expr))
                 2
                 "make-string-literal"))
-    (default (panic!
-               (format nil
-                       "Don't know how to compile this type of expression: ~"
-                       expr)))))
+    (default (fail! context
+                    (format nil "Don't know how to compile this type of expression: ~"
+                            expr)))))
 
 (defun compile-form (context form)
   (let* ((name (car form))
@@ -305,10 +305,11 @@
                   (LLVMBuildCall $builder llvm-func
                                  (map (lambda (e) (compile-expr context e)) args)
                                  (length args) "")
-                  (panic!  (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
-                                   name (length args) (LLVMCountParams llvm-func)))))
+                  (fail! context
+                         (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
+                                 name (length args) (LLVMCountParams llvm-func)))))
               (let ((value (compile-expr context name)))
                 (if (not (nil? value))
                   ;; Calling a closure pointer
                   (call-closure context value args)
-                  (panic! (format nil "Undefined function '~'" name)))))))))))
+                  (fail! context (format nil "Undefined function '~'" name)))))))))))

@@ -12,16 +12,25 @@
 (defvar $functions nil)
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-context (env file) (list env file))
+(defun make-context (env file func) (list env file func))
 (defun context-env (context) (first context))
 (defun context-file (context) (second context))
+(defun context-func (context) (third context))
 (defun context-set-env (context new-env) (set-car context new-env))
 (defun context-set-file (context new-file) (set-car (cdr context) new-file))
+(defun context-set-func (context new-func) (set-car (cddr context) new-func))
 
-(defun add-func (f)
+(defun fail! (context message)
+  (let* ((func (context-func context))
+         (str (if (nil? func)
+                "toplevel form"
+                (format nil "function ~" (func-name func)))))
+    (panic! (format nil "Error compiling ~: ~" str message))))
+
+(defun add-func (context f)
   (cond
     ((not (nil? (get-func (func-name f))))
-     (panic! (format nil "Duplicate definition of function '~'" (func-name f))))
+     (fail! context (format nil "Duplicate definition of function '~'" (func-name f))))
     (true
       (set $functions (cons (cons (func-name f) f) $functions)))))
 
@@ -40,7 +49,8 @@
 
 (defun extend-env-with-values (context names values)
   (let ((env (context-env context))
-        (file (context-file context)))
+        (file (context-file context))
+        (func (context-func context)))
     (each (lambda (name-and-value)
             (let* ((name (car name-and-value))
                    (value (cdr name-and-value))
@@ -49,11 +59,11 @@
               (LLVMBuildStore $builder value var-on-stack)
               (set env (cons (cons name var-on-stack) env))))
           (zip names values))
-    (make-context env file)))
+    (make-context env file func)))
 
 (defun extend-env-with-pointers (context names ptrs)
   (make-context (append (zip names ptrs) (context-env context))
-                (context-file context)))
+                (context-file context) (context-func context)))
 
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction
@@ -123,7 +133,8 @@
       (%compile-progn context (cdr forms)))))
 
 (defun compile-lambda (context name args body captured-vars)
-  (let* ((params (repeat (length args) NUC-VAL))
+  (let* ((old-func (context-func context))
+         (params (repeat (length args) NUC-VAL))
          ;; We only take the lambda struct as our first argument if we have
          ;; any captured bindings. This allows us to easily deal with passing
          ;; around static functions in lambdas.
@@ -134,6 +145,7 @@
                                  (if (nil? captured-vars)
                                    params
                                    (cons (LLVMPointerType CLOSURE 0) params)))))
+    (context-set-func context (make-func name (length args) args body func))
     ;; TODO: set LLVM param names
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock func "entry"))
     (let* ((params (llvm-params func))
@@ -165,7 +177,8 @@
       (LLVMBuildRet $builder (compile-progn new-context body)))
     (when (LLVMVerifyFunction func LLVMPrintMessageAction)
       (LLVMDumpValue func)
-      (panic! (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name)))
+      (fail! context (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name)))
+    (context-set-func context old-func)
     func))
 
 (defun call-closure (context nuc-val args)
@@ -312,7 +325,7 @@
          (%find-captured-vars context (cddr sexpr) to-ignore))))
     (true (mappend (lambda (e) (%find-captured-vars context e to-ignore)) sexpr))))
 
-(defun llvm-type<-type-spec (type-spec)
+(defun llvm-type<-type-spec (context type-spec)
   (case type-spec
     ((quote *) UINTPTR)
     ((quote string) (LLVMPointerType (LLVMIntType 8) 0))
@@ -322,9 +335,9 @@
     ((quote long) LONG)
     ((quote long-long) LONG-LONG)
     ((quote array) (LLVMPointerType UINTPTR 0))
-    (default (panic! (format nil "Unsupported type-spec '~'" type-spec)))))
+    (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
-(defun c-val<-nuc-val (type-spec val)
+(defun c-val<-nuc-val (context type-spec val)
   (cond
     ((eq? type-spec (quote *))
      (LLVMBuildIntToPtr
@@ -346,22 +359,22 @@
      (LLVMBuildIntCast
        $builder
        (int<-nuc-val val)
-       (llvm-type<-type-spec type-spec)
+       (llvm-type<-type-spec context type-spec)
        "cast-nuc-val"))
     ((eq? type-spec (quote bool))
       (LLVMBuildIntCast
         $builder
         (LLVMBuildICmp $builder LLVMIntEQ val LLVM-TRUE "int<-bool")
-        (llvm-type<-type-spec (quote int))
+        (llvm-type<-type-spec context (quote int))
         ""))
     ((eq? type-spec (quote array))
      (LLVMBuildCall
        $builder
-       (runtime-func "rt_list_to_array" (llvm-type<-type-spec type-spec) (list NUC-VAL))
+       (runtime-func "rt_list_to_array" (llvm-type<-type-spec context type-spec) (list NUC-VAL))
        (list val)
        1
        "array<-list"))
-    (true (panic! (format nil "Unsupported type-spec '~'" type-spec)))))
+    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
 (defun nuc-val<-c-val (type-spec val)
   (cond
