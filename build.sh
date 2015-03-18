@@ -1,7 +1,16 @@
 #!/bin/sh
 
+script_dir=$(dirname "$(realpath "$0")")
+cd "$script_dir"
 llvm_libs='core analysis bitwriter'
 link_flags="$(llvm-config --ldflags --libs $llvm_libs --system-libs)"
+
+echo Building the runtime...
+make -C runtime
+if [ $? -ne 0 ]; then
+	exit $?
+fi
+echo
 
 compile()
 {
@@ -27,8 +36,8 @@ compile_ir()
 	sed -i "/^; ModuleID = '.*'$/d" "$2"
 }
 
-echo "Using $(realpath nucc) as stage1"
-compile nucc stage2
+echo "Using $(realpath snapshots/latest.sh) as stage1"
+compile snapshots/latest.sh stage2
 compile_ir nucc stage2.ll
 compile_ir stage2 stage3.ll
 
@@ -46,3 +55,13 @@ rm stage2.ll stage3.ll
 mv stage2 nucc
 echo Compilation finished, all is well
 echo New compiler at $(realpath nucc)
+
+# If we don't have a snapshot for this commit, save one
+# TODO: This should check that the new snapshot is different to the old one, as
+# not all commits change the compiler.
+snapshots_dir="$script_dir/snapshots"
+snapshot_name="$snapshots_dir/nucc_$(git rev-parse --short=12 HEAD)"
+if [ ! -f "$snapshot_name" ]; then
+	echo "Saving a shapshot to $snapshot_name"
+	cp nucc "$snapshot_name"
+fi
