@@ -2,9 +2,9 @@
 
 script_dir=$(dirname "$(realpath "$0")")
 if [ $# -gt 0 ]; then
-	stage1="$(realpath "$1")"
+	stage0="$(realpath "$1")"
 else
-	stage1="$(realpath "$script_dir/snapshots/latest.sh")"
+	stage0="$(realpath "$script_dir/snapshots/latest.sh")"
 fi
 
 cd "$script_dir"
@@ -42,22 +42,25 @@ compile_ir()
 	sed -i "/^; ModuleID = '.*'$/d" "$2"
 }
 
-echo "Using $stage1 as stage1"
-compile "$stage1" ./stage2
-compile_ir "$stage1" stage2.ll
+echo "Using $stage0 as stage0"
+compile "$stage0" ./stage1
+compile ./stage1 stage2
+compile_ir ./stage1 stage2.ll
 compile_ir ./stage2 stage3.ll
 
 echo Checking stage2.ll against stage3.ll for consistency
 diff stage2.ll stage3.ll
-echo
 if [ $? -ne 0 ]; then
+	echo
 	echo "stage2 and stage3 were different!"
 	echo "leaving stage2, stage2.ll and stage3.ll around for you to look at"
 	exit 1
 fi
 
-# Consistency check passed, get rid of the IR and just leave the stage2 compiler
-rm stage2.ll stage3.ll
+echo
+
+# Consistency check passed, get rid of the everything but the stage2 compiler
+rm stage1 stage2.ll stage3.ll
 mv stage2 nucc
 echo Compilation finished, all is well
 echo New compiler at $(realpath nucc)
