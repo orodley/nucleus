@@ -160,7 +160,7 @@
             (arg-types (cdr names-and-types))
             (body (cdddr form))
             (return-type (cond
-                           ((eq? (first body) '->)
+                           ((and (not (nil? body)) (eq? (first body) '->))
                             (let ((t (second body)))
                               (set body (cddr body))
                               t))
