@@ -58,7 +58,7 @@
               (context (make-context nil nil nil)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
-         (process-toplevel-form context (quote (defvar $status-code 0)))
+         (process-toplevel-form context '(defvar $status-code 0))
          ;; TODO: we should have a flag to not include the standard library, and
          ;; then enable it on all tests that don't need standard library functions.
          ;; That way, if the standard library is broken, only the tests that
@@ -67,7 +67,7 @@
          (process-file context (list input-filename))
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
-                              $module (mangle-name (quote main))))
+                              $module (mangle-name 'main)))
                (main-func (LLVMAddFunction
                             $module "main"
                             (LLVMFunctionType
@@ -97,7 +97,7 @@
                (LLVMBuildLShr
                  $builder
                  (LLVMBuildLoad
-                   $builder (get-lvalue context (quote $status-code)) "")
+                   $builder (get-lvalue context '$status-code) "")
                  (llvm-val<-int LOWTAG-BITS)
                  "")
                INT
@@ -147,7 +147,7 @@
 
 (defun process-toplevel-form (context form)
   (case (first form)
-    ((quote defun)
+    ('defun
      (unless (length>= form 3)
        (fail! context (format nil "Malformed 'defun' form: ~" form)))
      (let ((name (second form))
@@ -159,9 +159,9 @@
                           (mangle-name (second form)) NUC-VAL
                           (map (lambda (_) NUC-VAL) (third form)))))
          (add-func context (make-func name (length args) args body llvm-func)))))
-    ((quote defvar)
+    ('defvar
      (let* ((name (second form))
-            (value (if (length-is? form 3) (third form) (quote nil)))
+            (value (if (length-is? form 3) (third form) 'nil))
             (init (llvm-val<-int (if (int? value)
                                    (<< value LOWTAG-BITS)
                                    0)))
@@ -169,7 +169,7 @@
        (LLVMSetInitializer var init)
        (unless (int? value)
          (add-initialiser var value))))
-    ((quote extern)
+    ('extern
      (unless (length-is? (cdr form) 4)
        (fail!
          context
@@ -182,11 +182,11 @@
        context
        (let ((args (map (lambda (_) (gensym)) (repeat (third form) nil))))
          ;; TODO: Life without quasiquote is painful
-         (list (quote defun) (fifth form) args
+         (list 'defun (fifth form) args
                ;; TODO: we should make the name be a symbol - change this once
                ;; we're bootstrapped
-               (cons (quote %raw-call) (cons (second form) args))))))
-    ((quote cfun)
+               (cons '%raw-call (cons (second form) args))))))
+    ('cfun
      (unless (length-is? (cdr form) 4)
        (fail!
          context (format nil "Invalid number of arguments to 'cfun' (got ~, expected 4)"
@@ -198,9 +198,9 @@
        (process-toplevel-form
          context
          ;; TODO: Life without quasiquote is painful
-         (list (quote defun) name args
-               (list (quote %c-call) (string<-symbol name) (zip arg-types args) ret-type)))))
-    ((quote include)
+         (list 'defun name args
+               (list '%c-call (string<-symbol name) (zip arg-types args) ret-type)))))
+    ('include
      (unless (length-is? (cdr form) 1)
        (fail!
          context (format nil "Invalid number of arguments to 'include' (got ~, expected 1)"
@@ -213,7 +213,7 @@
                                             (dirname including-file))))
        (process-file context (list included-file))))
     ;; TODO: should this be called 'c'enum? It's just a regular enum really.
-    ((quote cenum)
+    ('cenum
      (when (nil? (cdr form))
        (fail! context "An enum must have one or more values"))
      ;; TODO: support negative integer literals

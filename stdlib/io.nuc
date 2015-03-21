@@ -132,7 +132,7 @@
        (let ((quoted (read-from-stream stream)))
          (when (eq? quoted EOF)
            (panic! "Encountered single quote at EOF"))
-         (list (quote quote) quoted)))
+         (list 'quote quoted)))
       ((eof? c) EOF)
       (true
         (let ((list-head (cons c nil)))

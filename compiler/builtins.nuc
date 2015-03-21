@@ -1,44 +1,44 @@
 (defvar $builtin-functions
   (list
-    (cons (quote +) builtin+)
-    (cons (quote -) builtin-)
-    (cons (quote *) builtin*)
-    (cons (quote %) builtin%)
-    (cons (quote /) builtin/)
-    (cons (quote cons) builtin-cons)
-    (cons (quote car) builtin-car)
-    (cons (quote cdr) builtin-cdr)
-    (cons (quote eq?) builtin-eq?)))
+    (cons '+ builtin+)
+    (cons '- builtin-)
+    (cons '* builtin*)
+    (cons '% builtin%)
+    (cons '/ builtin/)
+    (cons 'cons builtin-cons)
+    (cons 'car builtin-car)
+    (cons 'cdr builtin-cdr)
+    (cons 'eq? builtin-eq?)))
 (defvar $special-forms
   (list
-    (cons (quote set) special-form-set)
-    (cons (quote let) special-form-let)
-    (cons (quote progn) special-form-progn)
-    (cons (quote if) special-form-if)
-    (cons (quote quote) special-form-quote)
-    (cons (quote lambda) special-form-lambda)
+    (cons 'set special-form-set)
+    (cons 'let special-form-let)
+    (cons 'progn special-form-progn)
+    (cons 'if special-form-if)
+    (cons 'quote special-form-quote)
+    (cons 'lambda special-form-lambda)
 
     ;; TODO: these should just be regular functions once we have varargs
-    (cons (quote format) special-form-format)
-    (cons (quote list) special-form-list)
+    (cons 'format special-form-format)
+    (cons 'list special-form-list)
 
     ;; TODO: these should be regular functions which call into some internal
     ;; compiler primitive once we have varargs
-    (cons (quote <) special-form-<)
-    (cons (quote <=) special-form-<=)
-    (cons (quote >) special-form->)
-    (cons (quote >=) special-form->=)
+    (cons '< special-form-<)
+    (cons '<= special-form-<=)
+    (cons '> special-form->)
+    (cons '>= special-form->=)
 
     ;; TODO: make these into macros
-    (cons (quote let*) special-form-let*)
-    (cons (quote cond) special-form-cond)
-    (cons (quote case) special-form-case)
-    (cons (quote and) special-form-and)
-    (cons (quote or) special-form-or)
-    (cons (quote %raw-call) special-form-%raw-call)
-    (cons (quote %c-call) special-form-%c-call)
-    (cons (quote when) special-form-when)
-    (cons (quote unless) special-form-unless)))
+    (cons 'let* special-form-let*)
+    (cons 'cond special-form-cond)
+    (cons 'case special-form-case)
+    (cons 'and special-form-and)
+    (cons 'or special-form-or)
+    (cons '%raw-call special-form-%raw-call)
+    (cons '%c-call special-form-%c-call)
+    (cons 'when special-form-when)
+    (cons 'unless special-form-unless)))
 ;; TODO: Write these as more readable constant expressions
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
@@ -54,18 +54,18 @@
 (defvar LLVM-LAMBDA-T (llvm-val<-int 2823))
 (defvar $constants
   (list
-    (cons (quote nil) LLVM-NIL)
-    (cons (quote true) LLVM-TRUE)
-    (cons (quote false) LLVM-FALSE)
-    (cons (quote fixnum-t) LLVM-FIXNUM-T)
-    (cons (quote cons-t) LLVM-CONS-T)
-    (cons (quote nil-t) LLVM-NIL-T)
-    (cons (quote bool-t) LLVM-BOOL-T)
-    (cons (quote float-t) LLVM-FLOAT-T)
-    (cons (quote symbol-t) LLVM-SYMBOL-T)
-    (cons (quote foreign-t) LLVM-FOREIGN-T)
-    (cons (quote string-t) LLVM-STRING-T)
-    (cons (quote lambda-t) LLVM-LAMBDA-T)))
+    (cons 'nil LLVM-NIL)
+    (cons 'true LLVM-TRUE)
+    (cons 'false LLVM-FALSE)
+    (cons 'fixnum-t LLVM-FIXNUM-T)
+    (cons 'cons-t LLVM-CONS-T)
+    (cons 'nil-t LLVM-NIL-T)
+    (cons 'bool-t LLVM-BOOL-T)
+    (cons 'float-t LLVM-FLOAT-T)
+    (cons 'symbol-t LLVM-SYMBOL-T)
+    (cons 'foreign-t LLVM-FOREIGN-T)
+    (cons 'string-t LLVM-STRING-T)
+    (cons 'lambda-t LLVM-LAMBDA-T)))
 
 (defun get-special-form (name)
   (assoc-cdr name $special-forms))
@@ -100,9 +100,9 @@
   (compile-expr context
                 ;; TODO: Life without quasiquote is painful
                 (if (nil? (first args))
-                  (cons (quote progn) (rest args))
-                  (list (quote let) (list (caar args))
-                        (cons (quote let*) (cons (cdar args) (rest args)))))))
+                  (cons 'progn (rest args))
+                  (list 'let (list (caar args))
+                        (cons 'let* (cons (cdar args) (rest args)))))))
 
 (defun special-form-progn (context args)
   (compile-progn context args))
@@ -111,7 +111,7 @@
   ;; TODO: Enforce that 'condition' is a boolean at runtime
   (let* ((condition (compile-expr context (first args)))
          (then (second args))
-         (else (if (length-is? args 2) (quote nil) (third args)))
+         (else (if (length-is? args 2) 'nil (third args)))
          (current-func (get-current-func $builder))
          (then-block (LLVMAppendBasicBlock current-func "then"))
          (else-block (LLVMAppendBasicBlock current-func "else"))
@@ -138,11 +138,11 @@
 (defun special-form-cond (context clauses)
   (compile-expr context
                 (if (nil? clauses)
-                  (quote nil)
+                  'nil
                   ;; TODO: Life without quasiquote is painful
-                  (list (quote if) (caar clauses)
-                        (cons (quote progn) (cdar clauses))
-                        (cons (quote cond) (cdr clauses))))))
+                  (list 'if (caar clauses)
+                        (cons 'progn (cdar clauses))
+                        (cons 'cond (cdr clauses))))))
 
 (defun special-form-case (context args)
   (let ((expr (first args))
@@ -151,12 +151,12 @@
     ;; TODO: Life without quasiquote is painful
     (compile-expr
       context
-      (list (quote let) (list (list case-sym expr))
-            (cons (quote cond)
+      (list 'let (list (list case-sym expr))
+            (cons 'cond
                   (map (lambda (clause)
-                         (cons (if (eq? (first clause) (quote default))
-                                 (quote true)
-                                 (list (quote eq?) case-sym (first clause)))
+                         (cons (if (eq? (first clause) 'default)
+                                 'true
+                                 (list 'eq? case-sym (first clause)))
                                (rest clause)))
                        clauses))))))
 
@@ -167,9 +167,9 @@
       ;; multiple values in the same clause
       (fixnum-t (compile-expr context to-quote))
       (nil-t LLVM-NIL)
-      (cons-t (compile-expr context (list (quote cons)
-                                          (list (quote quote) (car to-quote))
-                                          (list (quote quote) (cdr to-quote)))))
+      (cons-t (compile-expr context (list 'cons
+                                          (list 'quote (car to-quote))
+                                          (list 'quote (cdr to-quote)))))
       (symbol-t (LLVMBuildCall
                   $builder
                   (runtime-func "rt_intern_symbol" NUC-VAL
@@ -182,26 +182,26 @@
 (defun special-form-and (context operands)
   (compile-expr context
                 (if (nil? operands)
-                  (quote true)
+                  'true
                   (let ((operand-sym (gensym)))
                     ;; TODO: Life without quasiquote is painful
-                    (list (quote let)
+                    (list 'let
                           (list (list operand-sym (first operands)))
-                          (list (quote if) operand-sym
-                                (cons (quote and) (rest operands))
-                                (quote false)))))))
+                          (list 'if operand-sym
+                                (cons 'and (rest operands))
+                                'false))))))
 
 (defun special-form-or (context operands)
   (compile-expr context
                 (if (nil? operands)
-                  (quote false)
+                  'false
                   (let ((operand-sym (gensym)))
                     ;; TODO: Life without quasiquote is painful
-                    (list (quote let)
+                    (list 'let
                           (list (list operand-sym (first operands)))
-                          (list (quote if) operand-sym
-                                (quote true)
-                                (cons (quote or) (rest operands))))))))
+                          (list 'if operand-sym
+                                'true
+                                (cons 'or (rest operands))))))))
 
 (defvar $lambda-counter 0)
 (defun special-form-lambda (context args-and-body)
@@ -246,7 +246,7 @@
                                (car entry) (compile-expr context (cdr entry))))
              args-alist)
         (length args-alist)
-        (if (eq? return-type (quote void))
+        (if (eq? return-type 'void)
           ""
           "%c-call")))))
 
@@ -254,8 +254,8 @@
   (compile-expr
     context
     ;; TODO: Life without quasiquote is painful
-    (list (quote %format) (first args) (second args)
-          (cons (quote list) (cddr args)))))
+    (list '%format (first args) (second args)
+          (cons 'list (cddr args)))))
 
 (defun special-form-list (context args)
   (if (nil? args)
@@ -263,7 +263,7 @@
     (compile-expr
       context
       ;; TODO: Life without quasiquote is painful
-      (list (quote cons) (first args) (cons (quote list) (rest args))))))
+      (list 'cons (first args) (cons 'list (rest args))))))
 
 (defun special-form-unless (context args)
   (let ((condition (first args))
@@ -271,7 +271,7 @@
     (compile-expr
       context
       ;; TODO: Life without quasiquote is painful
-      (list (quote if) condition (quote nil) (cons (quote progn) body)))))
+      (list 'if condition 'nil (cons 'progn body)))))
 
 (defun special-form-when (context args)
   (let ((condition (first args))
@@ -279,7 +279,7 @@
     (compile-expr
       context
       ;; TODO: Life without quasiquote is painful
-      (list (quote if) condition (cons (quote progn) body)))))
+      (list 'if condition (cons 'progn body)))))
 
 (defun comparison (context cmp llvm-cmp operands)
   (if (length-is? operands 2)
@@ -294,15 +294,15 @@
       LLVM-FALSE
       "")
     ;; TODO: Life without quasiquote is painful
-    (compile-expr context (list (quote and)
+    (compile-expr context (list 'and
                                 (list cmp
                                       (first operands)
                                       (second operands))
                                 (cons cmp (cdr operands))))))
-(defun special-form-< (context args) (comparison context (quote <) LLVMIntSLT args))
-(defun special-form-<= (context args) (comparison context (quote <=) LLVMIntSLE args))
-(defun special-form-> (context args) (comparison context (quote >) LLVMIntSGT args))
-(defun special-form->= (context args) (comparison context (quote >=) LLVMIntSGE args))
+(defun special-form-< (context args) (comparison context '< LLVMIntSLT args))
+(defun special-form-<= (context args) (comparison context '<= LLVMIntSLE args))
+(defun special-form-> (context args) (comparison context '> LLVMIntSGT args))
+(defun special-form->= (context args) (comparison context '>= LLVMIntSGE args))
 
 ;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
 ;; is zero, and shifting is a multiplication, which distributes over addition

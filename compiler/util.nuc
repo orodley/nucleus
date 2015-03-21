@@ -124,7 +124,7 @@
     (list (llvm-val<-int size)) 1 "gc_alloc"))
 
 (defun compile-progn (context forms)
-  (%compile-progn context (if (nil? forms) (list (quote nil)) forms)))
+  (%compile-progn context (if (nil? forms) (list 'nil) forms)))
 
 (defun %compile-progn (context forms)
   (let ((e (compile-expr context (car forms))))
@@ -315,7 +315,7 @@
        nil
        (let ((binding (get-lvalue context sexpr)))
          (if (nil? binding) nil (list (cons sexpr binding))))))
-    ((or (eq? (car sexpr) (quote let)) (eq? (car sexpr) (quote let*)))
+    ((or (eq? (car sexpr) 'let) (eq? (car sexpr) 'let*))
      ;; let/let* can shadow variables, producing spurious captures
      (let ((to-ignore (append! (map car (second sexpr)) to-ignore)))
        (append!
@@ -327,19 +327,19 @@
 
 (defun llvm-type<-type-spec (context type-spec)
   (case type-spec
-    ((quote *) UINTPTR)
-    ((quote string) (LLVMPointerType (LLVMIntType 8) 0))
-    ((quote void) (LLVMVoidType))
-    ((quote int) INT) ((quote uint) INT) ((quote bool) INT)
-    ((quote uint8) (LLVMIntType 8))
-    ((quote long) LONG)
-    ((quote long-long) LONG-LONG)
-    ((quote array) (LLVMPointerType UINTPTR 0))
+    ('* UINTPTR)
+    ('string (LLVMPointerType (LLVMIntType 8) 0))
+    ('void (LLVMVoidType))
+    ('int INT) ('uint INT) ('bool INT)
+    ('uint8 (LLVMIntType 8))
+    ('long LONG)
+    ('long-long LONG-LONG)
+    ('array (LLVMPointerType UINTPTR 0))
     (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
 (defun c-val<-nuc-val (context type-spec val)
   (cond
-    ((eq? type-spec (quote *))
+    ((eq? type-spec '*)
      (LLVMBuildIntToPtr
        $builder
        (LLVMBuildLoad
@@ -349,25 +349,24 @@
          "")
        UINTPTR
        ""))
-    ((eq? type-spec (quote string))
+    ((eq? type-spec 'string)
      (LLVMBuildCall
        $builder
        (runtime-func "rt_nuc_str_to_c_str" (LLVMPointerType (LLVMIntType 8) 0) (list NUC-VAL))
        (list val) 1 "c-val<-nuc-val"))
-    ((member? type-spec (list (quote int) (quote uint) (quote long)
-                              (quote long-long) (quote uint8)))
+    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8))
      (LLVMBuildIntCast
        $builder
        (int<-nuc-val val)
        (llvm-type<-type-spec context type-spec)
        "cast-nuc-val"))
-    ((eq? type-spec (quote bool))
+    ((eq? type-spec 'bool)
       (LLVMBuildIntCast
         $builder
         (LLVMBuildICmp $builder LLVMIntEQ val LLVM-TRUE "int<-bool")
-        (llvm-type<-type-spec context (quote int))
+        (llvm-type<-type-spec context 'int)
         ""))
-    ((eq? type-spec (quote array))
+    ((eq? type-spec 'array)
      (LLVMBuildCall
        $builder
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context type-spec) (list NUC-VAL))
@@ -378,18 +377,17 @@
 
 (defun nuc-val<-c-val (type-spec val)
   (cond
-    ((eq? type-spec (quote *))
+    ((eq? type-spec '*)
       (add-lowtag
         (let ((box (gc-alloc PTR-BYTES)))
           (LLVMBuildStore $builder (LLVMBuildPtrToInt $builder val NUC-VAL "") box)
           box)
         6))
-    ((eq? type-spec (quote void)) LLVM-NIL)
-    ((member? type-spec (list (quote int) (quote uint) (quote long)
-                              (quote long-long) (quote uint8)))
+    ((eq? type-spec 'void) LLVM-NIL)
+    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8))
      (nuc-val<-int
        (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
-    ((eq? type-spec (quote bool))
+    ((eq? type-spec 'bool)
      (LLVMBuildSelect $builder
                       (LLVMBuildICmp $builder LLVMIntEQ val (llvm-val<-int32 0) "")
                       LLVM-FALSE LLVM-TRUE ""))))
