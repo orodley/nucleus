@@ -128,6 +128,11 @@
        (let ((list-head (cons nil nil)))
          (read-list stream list-head)
          (cdr list-head)))
+      ((eq? c 39)
+       (let ((quoted (read-from-stream stream)))
+         (when (eq? quoted EOF)
+           (panic! "Encountered single quote at EOF"))
+         (list (quote quote) quoted)))
       ((eof? c) EOF)
       (true
         (let ((list-head (cons c nil)))
@@ -183,7 +188,7 @@
 
 (defun symbol-char? (c)
   (and (not (eof? c))
-       (not (member? c (list 59 32 10 34 40 41)))))
+       (not (member? c (list 59 32 10 34 39 40 41)))))
 
 (defun whitespace? (c)
   ;; ' ' or '\n' or '\t' 
