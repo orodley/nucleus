@@ -1,6 +1,12 @@
 #!/bin/sh
 
 script_dir=$(dirname "$(realpath "$0")")
+if [ $# -gt 0 ]; then
+	stage1="$(realpath "$1")"
+else
+	stage1="$(realpath "$script_dir/snapshots/latest.sh")"
+fi
+
 cd "$script_dir"
 llvm_libs='core analysis bitwriter'
 link_flags="$(llvm-config --ldflags --libs $llvm_libs --system-libs)"
@@ -15,7 +21,7 @@ echo
 compile()
 {
 	echo "Compiling $2 with $1"
-	"./$1" -link "$link_flags" compiler/main.nuc "$2"
+	"$1" -link "$link_flags" compiler/main.nuc "$2"
 	if [ $? -ne 0 ]; then
 		exit $?
 	fi
@@ -24,7 +30,7 @@ compile()
 compile_ir()
 {
 	echo "Compiling $2 with $1"
-	"./$1" -ir compiler/main.nuc "$2"
+	"$1" -ir compiler/main.nuc "$2"
 
 	if [ $? -ne 0 ]; then
 		exit $?
@@ -36,10 +42,10 @@ compile_ir()
 	sed -i "/^; ModuleID = '.*'$/d" "$2"
 }
 
-echo "Using $(realpath snapshots/latest.sh) as stage1"
-compile snapshots/latest.sh stage2
-compile_ir nucc stage2.ll
-compile_ir stage2 stage3.ll
+echo "Using $stage1 as stage1"
+compile "$stage1" ./stage2
+compile_ir "$stage1" stage2.ll
+compile_ir ./stage2 stage3.ll
 
 echo Checking stage2.ll against stage3.ll for consistency
 diff stage2.ll stage3.ll
