@@ -87,6 +87,7 @@
     new-value))
 
 (defun special-form-let (context args)
+  ;; TODO: better error reporting for malformed LET clauses
   (let* ((bindings (first args))
          (body (rest args))
          (names (map first bindings))

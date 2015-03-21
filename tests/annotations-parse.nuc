@@ -1,0 +1,7 @@
+; status-code: 23
+
+(defun foo ((x fixnum) (y fixnum)) -> fixnum
+  (+ x y))
+
+(defun main ()
+  (set $status-code (foo 11 12)))

@@ -150,15 +150,26 @@
     ('defun
      (unless (length>= form 3)
        (fail! context (format nil "Malformed 'defun' form: ~" form)))
-     (let ((name (second form))
-           (args (third form))
-           (body (cdddr form)))
-       (unless (and (symbol? name) (list? args))
+     (let* ((name (second form))
+            (arg-list (third form))
+            (names-and-types (parse-arg-list context arg-list))
+            (arg-names (car names-and-types))
+            (arg-types (cdr names-and-types))
+            (body (cdddr form))
+            (return-type (cond
+                           ((eq? (first body) '->)
+                            (let ((t (second body)))
+                              (set body (cddr body))
+                              t))
+                           (true '?))))
+       (unless (and (symbol? name) (list? arg-list))
          (fail! context (format nil "Malformed 'defun' form: ~" form)))
+       
        (let ((llvm-func (declare-function
                           (mangle-name (second form)) NUC-VAL
                           (map (lambda (_) NUC-VAL) (third form)))))
-         (add-func context (make-func name (length args) args body llvm-func)))))
+         (add-func context (make-func name (length arg-names) arg-names
+                                      arg-types return-type body llvm-func)))))
     ('defvar
      (let* ((name (second form))
             (value (if (length-is? form 3) (third form) 'nil))
@@ -248,7 +259,7 @@
       (true (process-file context (rest filename-and-backups))))))
 
 (defun compile-function (context func)
-  (let* ((args (func-args func))
+  (let* ((args (func-arg-names func))
          (env (context-env context))
          (llvm-func (func-llvm-func func))
          (params (llvm-params llvm-func)))
