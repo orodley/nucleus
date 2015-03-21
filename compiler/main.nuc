@@ -146,6 +146,9 @@
       (write-string-ln "Usage: nucc <input filename>"))))
 
 (defun process-toplevel-form (context form)
+  ;; TODO: Once we have 'defmacro' we'll need to another pass over the toplevel
+  ;; forms to find 'defmacro's and compile their dependency tree
+  (set form (macroexpand context form))
   (case (first form)
     ('defun
      (unless (length>= form 3)
@@ -164,13 +167,15 @@
                            (true '?))))
        (unless (and (symbol? name) (list? arg-list))
          (fail! context (format nil "Malformed 'defun' form: ~" form)))
-       
        (let ((llvm-func (declare-function
                           (mangle-name (second form)) NUC-VAL
                           (map (lambda (_) NUC-VAL) (third form)))))
          (add-func context (make-func name (length arg-names) arg-names
                                       arg-types return-type body llvm-func)))))
     ('defvar
+     (when (length>= form 4)
+       (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
+                              (length form))))
      (let* ((name (second form))
             (value (if (length-is? form 3) (third form) 'nil))
             (init (llvm-val<-int (if (int? value)
@@ -210,7 +215,7 @@
          context
          ;; TODO: Life without quasiquote is painful
          (list 'defun name args
-               (list '%c-call (string<-symbol name) (zip arg-types args) ret-type)))))
+               (list '%c-call (string<-symbol name) (zipl arg-types args) ret-type)))))
     ('include
      (unless (length-is? (cdr form) 1)
        (fail!
@@ -257,6 +262,19 @@
       ((nil? (cdr filename-and-backups))
        (fail! context (format nil "Could not find file ~" filename)))
       (true (process-file context (rest filename-and-backups))))))
+
+(defun macroexpand (context sexpr)
+  (if (eq? (type sexpr) cons-t)
+    (let* ((macro-name (first sexpr))
+           (args (rest sexpr))
+           (builtin-macro (get-builtin-macro macro-name)))
+      (cond
+        ((eq? macro-name 'quote) sexpr) ; don't touch quoted stuff
+        ((nil? builtin-macro)
+         (map (lambda (e) (macroexpand context e)) sexpr))
+        ;; Call macroexpand again, as it could expand directly to another macro
+        (true (macroexpand context (builtin-macro args)))))
+    sexpr))
 
 (defun compile-function (context func)
   (let* ((args (func-arg-names func))

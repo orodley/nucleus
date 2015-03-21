@@ -94,7 +94,7 @@
 
 (defun %map (list-head func lizt)
   (when (and (not (cons? lizt)) (not (nil? lizt)))
-    (panic! "Bad object passed into %map!"))
+    (panic! (format nil "Bad object '~' passed into %map!" lizt)))
   (unless (nil? lizt)
     (set-cdr list-head (cons (func (car lizt)) nil))
     (%map (cdr list-head) func (cdr lizt))))
@@ -174,15 +174,18 @@
     acc
     (%reduce func (cdr lizt) (func acc (car lizt)))))
 
-(defun zip (l1 l2)
+(defun zip (l1 l2) (zip-by cons l1 l2))
+(defun zipl (l1 l2) (zip-by (lambda (a b) (list a b)) l1 l2))
+
+(defun zip-by (func l1 l2)
   (let ((list-head (cons nil nil)))
-    (%zip list-head l1 l2)
+    (%zip-by list-head func l1 l2)
     (cdr list-head)))
 
-(defun %zip (list-head l1 l2)
+(defun %zip-by (list-head func l1 l2)
   (unless (or (nil? l1) (nil? l2))
-    (set-cdr list-head (cons (cons (car l1) (car l2)) nil))
-    (%zip (cdr list-head) (cdr l1) (cdr l2))))
+    (set-cdr list-head (cons (func (car l1) (car l2)) nil))
+    (%zip-by (cdr list-head) func (cdr l1) (cdr l2))))
 
 ;; TODO: make this faster using a hash table once those exist
 (defun unique (lizt)

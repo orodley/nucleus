@@ -344,7 +344,7 @@
        nil
        (let ((binding (get-lvalue context sexpr)))
          (if (nil? binding) nil (list (cons sexpr binding))))))
-    ((or (eq? (car sexpr) 'let) (eq? (car sexpr) 'let*))
+    ((eq? (car sexpr) 'let)
      ;; let/let* can shadow variables, producing spurious captures
      (let ((to-ignore (append! (map car (second sexpr)) to-ignore)))
        (append!

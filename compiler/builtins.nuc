@@ -29,16 +29,19 @@
     (cons '> special-form->)
     (cons '>= special-form->=)
 
-    ;; TODO: make these into macros
-    (cons 'let* special-form-let*)
-    (cons 'cond special-form-cond)
-    (cons 'case special-form-case)
-    (cons 'and special-form-and)
-    (cons 'or special-form-or)
+    ;; TODO: these are internal compiler primitives that probably shouldn't be
+    ;; exposed to the user as they currently are
     (cons '%raw-call special-form-%raw-call)
-    (cons '%c-call special-form-%c-call)
-    (cons 'when special-form-when)
-    (cons 'unless special-form-unless)))
+    (cons '%c-call special-form-%c-call)))
+(defvar $builtin-macros ;; TODO: should be in the stdlib
+  (list
+    (cons 'let* builtin-macro-let*)
+    (cons 'cond builtin-macro-cond)
+    (cons 'case builtin-macro-case)
+    (cons 'and builtin-macro-and)
+    (cons 'or builtin-macro-or)
+    (cons 'when builtin-macro-when)
+    (cons 'unless builtin-macro-unless)))
 ;; TODO: Write these as more readable constant expressions
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
@@ -73,6 +76,9 @@
 (defun get-builtin-function (name)
   (assoc-cdr name $builtin-functions))
 
+(defun get-builtin-macro (name)
+  (assoc-cdr name $builtin-macros))
+
 (defun get-constant (name)
   (assoc-cdr name $constants))
 
@@ -97,13 +103,12 @@
     (compile-progn new-context body)))
 
 ;; TODO: make into a macro
-(defun special-form-let* (context args)
-  (compile-expr context
-                ;; TODO: Life without quasiquote is painful
-                (if (nil? (first args))
-                  (cons 'progn (rest args))
-                  (list 'let (list (caar args))
-                        (cons 'let* (cons (cdar args) (rest args)))))))
+(defun builtin-macro-let* (context args)
+  ;; TODO: Life without quasiquote is painful
+  (if (nil? (first args))
+    (cons 'progn (rest args))
+    (list 'let (list (caar args))
+          (cons 'let* (cons (cdar args) (rest args))))))
 
 (defun special-form-progn (context args)
   (compile-progn context args))
@@ -136,30 +141,27 @@
     (LLVMBuildBr $builder after-block)
     compiled))
 
-(defun special-form-cond (context clauses)
-  (compile-expr context
-                (if (nil? clauses)
-                  'nil
-                  ;; TODO: Life without quasiquote is painful
-                  (list 'if (caar clauses)
-                        (cons 'progn (cdar clauses))
-                        (cons 'cond (cdr clauses))))))
+(defun builtin-macro-cond (context clauses)
+  (if (nil? clauses)
+    'nil
+    ;; TODO: Life without quasiquote is painful
+    (list 'if (caar clauses)
+          (cons 'progn (cdar clauses))
+          (cons 'cond (cdr clauses)))))
 
-(defun special-form-case (context args)
+(defun builtin-macro-case (context args)
   (let ((expr (first args))
         (clauses (rest args))
         (case-sym (gensym)))
     ;; TODO: Life without quasiquote is painful
-    (compile-expr
-      context
-      (list 'let (list (list case-sym expr))
-            (cons 'cond
-                  (map (lambda (clause)
-                         (cons (if (eq? (first clause) 'default)
-                                 'true
-                                 (list 'eq? case-sym (first clause)))
-                               (rest clause)))
-                       clauses))))))
+    (list 'let (list (list case-sym expr))
+          (cons 'cond
+                (map (lambda (clause)
+                       (cons (if (eq? (first clause) 'default)
+                               'true
+                               (list 'eq? case-sym (first clause)))
+                             (rest clause)))
+                     clauses)))))
 
 (defun special-form-quote (context args)
   (let ((to-quote (first args)))
@@ -180,29 +182,27 @@
                   "intern-const"))
       (default (fail! context (format nil "Don't know how to quote '~'" to-quote))))))
 
-(defun special-form-and (context operands)
-  (compile-expr context
-                (if (nil? operands)
-                  'true
-                  (let ((operand-sym (gensym)))
-                    ;; TODO: Life without quasiquote is painful
-                    (list 'let
-                          (list (list operand-sym (first operands)))
-                          (list 'if operand-sym
-                                (cons 'and (rest operands))
-                                'false))))))
+(defun builtin-macro-and (context operands)
+  (if (nil? operands)
+    'true
+    (let ((operand-sym (gensym)))
+      ;; TODO: Life without quasiquote is painful
+      (list 'let
+            (list (list operand-sym (first operands)))
+            (list 'if operand-sym
+                  (cons 'and (rest operands))
+                  'false)))))
 
-(defun special-form-or (context operands)
-  (compile-expr context
-                (if (nil? operands)
-                  'false
-                  (let ((operand-sym (gensym)))
-                    ;; TODO: Life without quasiquote is painful
-                    (list 'let
-                          (list (list operand-sym (first operands)))
-                          (list 'if operand-sym
-                                'true
-                                (cons 'or (rest operands))))))))
+(defun builtin-macro-or (context operands)
+  (if (nil? operands)
+    'false
+    (let ((operand-sym (gensym)))
+      ;; TODO: Life without quasiquote is painful
+      (list 'let
+            (list (list operand-sym (first operands)))
+            (list 'if operand-sym
+                  'true
+                  (cons 'or (rest operands)))))))
 
 (defvar $lambda-counter 0)
 (defun special-form-lambda (context args-and-body)
@@ -230,10 +230,10 @@
       (length args)
       "%raw-call")))
 
-(defun special-form-%c-call (context name-args-alist-return-type)
-  (let ((name (first name-args-alist-return-type))
-        (args-alist (second name-args-alist-return-type))
-        (return-type (third name-args-alist-return-type)))
+(defun special-form-%c-call (context name-args-list-return-type)
+  (let ((name (first name-args-list-return-type))
+        (args-list (second name-args-list-return-type))
+        (return-type (third name-args-list-return-type)))
     (nuc-val<-c-val
       return-type
       (LLVMBuildCall
@@ -241,12 +241,12 @@
         (runtime-func
           name
           (llvm-type<-type-spec context return-type)
-          (map (lambda (entry) (llvm-type<-type-spec context (car entry))) args-alist))
+          (map (lambda (entry) (llvm-type<-type-spec context (first entry))) args-list))
         (map (lambda (entry) (c-val<-nuc-val
                                context
-                               (car entry) (compile-expr context (cdr entry))))
-             args-alist)
-        (length args-alist)
+                               (car entry) (compile-expr context (second entry))))
+             args-list)
+        (length args-list)
         (if (eq? return-type 'void)
           ""
           "%c-call")))))
@@ -266,21 +266,17 @@
       ;; TODO: Life without quasiquote is painful
       (list 'cons (first args) (cons 'list (rest args))))))
 
-(defun special-form-unless (context args)
+(defun builtin-macro-unless (context args)
   (let ((condition (first args))
         (body (rest args)))
-    (compile-expr
-      context
-      ;; TODO: Life without quasiquote is painful
-      (list 'if condition 'nil (cons 'progn body)))))
+    ;; TODO: Life without quasiquote is painful
+    (list 'if condition 'nil (cons 'progn body))))
 
-(defun special-form-when (context args)
+(defun builtin-macro-when (context args)
   (let ((condition (first args))
         (body (rest args)))
-    (compile-expr
-      context
-      ;; TODO: Life without quasiquote is painful
-      (list 'if condition (cons 'progn body)))))
+    ;; TODO: Life without quasiquote is painful
+    (list 'if condition (cons 'progn body))))
 
 (defun comparison (context cmp llvm-cmp operands)
   (if (length-is? operands 2)
@@ -295,11 +291,12 @@
       LLVM-FALSE
       "")
     ;; TODO: Life without quasiquote is painful
-    (compile-expr context (list 'and
+    (compile-expr context (list 'if
                                 (list cmp
                                       (first operands)
                                       (second operands))
-                                (cons cmp (cdr operands))))))
+                                (cons cmp (cdr operands))
+                                'false))))
 (defun special-form-< (context args) (comparison context '< LLVMIntSLT args))
 (defun special-form-<= (context args) (comparison context '<= LLVMIntSLE args))
 (defun special-form-> (context args) (comparison context '> LLVMIntSGT args))
