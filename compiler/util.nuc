@@ -48,6 +48,12 @@
     (true
       (set $functions (cons (cons (func-name f) f) $functions)))))
 
+(defun add-global (context name type-spec)
+  (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
+    (context-set-env context (cons (make-binding name global type-spec)
+                                   (context-env context)))
+    global))
+
 (defun get-func (name) (assoc-cdr name $functions))
 
 (defvar $initialisers nil)
@@ -106,14 +112,11 @@
               nil)))))))
 
 (defun get-lvalue (context name)
-  (let ((global (LLVMGetNamedGlobal $module (mangle-name name))))
-    (if (not (null? global))
-      global
-      (let ((binding (find (lambda (binding) (eq? (binding-name binding) name))
-                           (context-env context))))
-        (if (nil? binding)
-          nil
-          (binding-llvm-ptr binding))))))
+  (let ((binding (find (lambda (binding) (eq? (binding-name binding) name))
+                       (context-env context))))
+    (if (nil? binding)
+      nil
+      (binding-llvm-ptr binding))))
 
 (defun remove-lowtag (nuc-val)
   (LLVMBuildAnd $builder nuc-val

@@ -181,10 +181,10 @@
             (init (llvm-val<-int (if (int? value)
                                    (<< value LOWTAG-BITS)
                                    0)))
-            (var (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
-       (LLVMSetInitializer var init)
+            (global (add-global context name '?)))
+       (LLVMSetInitializer global init)
        (unless (int? value)
-         (add-initialiser var value))))
+         (add-initialiser global value))))
     ('extern
      (unless (length-is? (cdr form) 4)
        (fail!
@@ -242,7 +242,7 @@
                                (second enum-variant)
                                (+ 1 enum-variant-value)))))
              (LLVMSetInitializer
-               (LLVMAddGlobal $module NUC-VAL (mangle-name name))
+               (add-global context name '?)
                (nuc-val<-int (llvm-val<-int value)))))
          (cdr form))))
     (default
