@@ -22,6 +22,12 @@
 (defun context-set-file (context new-file) (set-car (cdr context) new-file))
 (defun context-set-func (context new-func) (set-car (cddr context) new-func))
 
+;;; TODO: Replace with a struct once they exist
+(defun make-binding (name llvm-ptr type-spec) (list name llvm-ptr type-spec))
+(defun binding-name (binding) (first binding))
+(defun binding-llvm-ptr (binding) (second binding))
+(defun binding-type-spec (binding) (third binding))
+
 ;;; TODO: When an error occurs in a lambda, we should report the context better
 ;;; Maybe what we should do is store a chain of context switches terminating at
 ;;; toplevel form followed by filename, and we push/pop when we enter/leave a
@@ -65,12 +71,14 @@
                    (var-on-stack (LLVMBuildAlloca $builder NUC-VAL
                                                   (string<-symbol name))))
               (LLVMBuildStore $builder value var-on-stack)
-              (set env (cons (cons name var-on-stack) env))))
+              (set env (cons (make-binding name var-on-stack '?) env))))
           (zip names values))
     (make-context env file func)))
 
 (defun extend-env-with-pointers (context names ptrs)
-  (make-context (append (zip names ptrs) (context-env context))
+  (make-context (append (map2 (lambda (name ptr) (make-binding name ptr '?))
+                              names ptrs)
+                        (context-env context))
                 (context-file context) (context-func context)))
 
 (defun declare-function (name ret-type arg-types)
@@ -78,6 +86,10 @@
     $module
     name
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
+
+;;; TODO: this should all be unified - we shouldn't look up globals and
+;;; constants through a separate mechanism, it should all be in the env.
+;;; That way we have proper binding objects for all types of variable.
 
 (defun get-value (context name)
   (let ((lvalue (get-lvalue context name)))
@@ -97,7 +109,11 @@
   (let ((global (LLVMGetNamedGlobal $module (mangle-name name))))
     (if (not (null? global))
       global
-      (assoc-cdr name (context-env context)))))
+      (let ((binding (find (lambda (binding) (eq? (binding-name binding) name))
+                           (context-env context))))
+        (if (nil? binding)
+          nil
+          (binding-llvm-ptr binding))))))
 
 (defun remove-lowtag (nuc-val)
   (LLVMBuildAnd $builder nuc-val

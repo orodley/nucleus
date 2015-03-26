@@ -93,11 +93,26 @@
     (cdr list-head)))
 
 (defun %map (list-head func lizt)
+  ;; TODO: once we have type annotations this will be unnecessary
   (when (and (not (cons? lizt)) (not (nil? lizt)))
     (panic! (format nil "Bad object '~' passed into %map!" lizt)))
   (unless (nil? lizt)
     (set-cdr list-head (cons (func (car lizt)) nil))
     (%map (cdr list-head) func (cdr lizt))))
+
+;; TODO: make a varargs version
+(defun map2 (func l1 l2)
+  (let ((list-head (cons nil nil)))
+    (%map2 list-head func l1 l2)
+    (cdr list-head)))
+
+(defun %map2 (list-head func l1 l2)
+  (unless (or (nil? l1) (nil? l2))
+    (set-cdr list-head (cons (func (car l1) (car l2)) nil))
+    (%map2 (cdr list-head) func (cdr l1) (cdr l2))))
+
+(defun zip (l1 l2) (map2 cons l1 l2))
+(defun zipl (l1 l2) (map2 (lambda (a b) (list a b)) l1 l2))
 
 (defun filter (func lizt)
   (let ((list-head (cons nil nil)))
@@ -113,11 +128,14 @@
             (true list-head))
       func (cdr lizt))))
 
-(defun assoc (kar alist)
+(defun find (pred lizt)
   (cond
-    ((nil? alist) nil)
-    ((eq? (caar alist) kar) (car alist))
-    (true (assoc kar (cdr alist)))))
+    ((nil? lizt) nil)
+    ((pred (car lizt)) (car lizt))
+    (true (find pred (cdr lizt)))))
+
+(defun assoc (kar alist)
+  (find (lambda (kons) (eq? (car kons) kar)) alist))
 
 (defun assoc-cdr (kar alist)
   (let ((kons (assoc kar alist)))
@@ -173,19 +191,6 @@
   (if (nil? lizt)
     acc
     (%reduce func (cdr lizt) (func acc (car lizt)))))
-
-(defun zip (l1 l2) (zip-by cons l1 l2))
-(defun zipl (l1 l2) (zip-by (lambda (a b) (list a b)) l1 l2))
-
-(defun zip-by (func l1 l2)
-  (let ((list-head (cons nil nil)))
-    (%zip-by list-head func l1 l2)
-    (cdr list-head)))
-
-(defun %zip-by (list-head func l1 l2)
-  (unless (or (nil? l1) (nil? l2))
-    (set-cdr list-head (cons (func (car l1) (car l2)) nil))
-    (%zip-by (cdr list-head) func (cdr l1) (cdr l2))))
 
 ;; TODO: make this faster using a hash table once those exist
 (defun unique (lizt)
