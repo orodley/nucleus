@@ -20,36 +20,53 @@ nuc_val rt_type(nuc_val val)
 			case TRUE: case FALSE: return BOOL_TYPE;
 			}
 
-			assert(!"This should never be reached");
+			UNREACHABLE;
 		case FLOAT_EXTTAG: return FLOAT_TYPE;
 		}
 	}
 
 	printf("Got an invalid lowtag '%d'\n", (int)LOWTAG(val));
-	assert(!"This should never be reached");
+	UNREACHABLE;
 }
 
-static const char *lowtag_name(int lowtag)
+static const char *type_name(nuc_val type)
 {
-#define CASE(x) case x##_LOWTAG: return #x;
+#define CASE(x) case x##_TYPE: return #x;
 
-	switch (lowtag) {
-		CASE(FIXNUM) CASE(CONS) CASE(SYMBOL)
-		CASE(STRING) CASE(FOREIGN) CASE(EXTTAG)
-		default: return "UNKNOWN";
+	switch (type) {
+		CASE(FIXNUM) CASE(CONS) CASE(SYMBOL) CASE(STRING) CASE(LAMBDA)
+		CASE(FOREIGN) CASE(NIL) CASE(BOOL) CASE(FLOAT)
+		default: printf("Got type %d (ft = %d)\n", (int)type, (int)FIXNUM_TYPE); UNREACHABLE;
 	}
 
 #undef CASE
 }
 
 // TODO: doesn't handle exttags
-void rt_check_type(nuc_val val, int type_tag, const char *file, const char *func, int line)
+// TODO: use libbacktrace for better error messages
+void rt_check_type(nuc_val val, nuc_val expected_type,
+		const char *file, const char *func, int line)
 {
-	if (LOWTAG(val) != type_tag) {
-		fprintf(stderr,
-				"Wrong type given! Expected %s, got %s.\nError occured at "
-				"%s:%d in %s\n", lowtag_name(type_tag),
-				lowtag_name((int)LOWTAG(val)), file, line, func);
+	nuc_val given_type = rt_type(val);
+	if (given_type != expected_type) {
+		fprintf(stderr, "Wrong type given! Expected %s, got %s.\n",
+				type_name(expected_type), type_name(given_type));
+		if (file != NULL)
+			fprintf(stderr, "Error occured at %s:%d in %s\n", file, line, func);
+
+		exit(1);
+	}
+}
+
+// TODO: This should be varargs
+void rt_check_union_type(nuc_val val, nuc_val expected_type1, nuc_val expected_type2)
+{
+	nuc_val given_type = rt_type(val);
+	if (given_type != expected_type1 && given_type != expected_type2) {
+		fprintf(stderr, "Wrong type given! Expected {%s, %s}, got %s.\n",
+				type_name(expected_type1), type_name(expected_type2),
+				type_name(given_type));
+
 		exit(1);
 	}
 }

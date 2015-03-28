@@ -1,10 +1,11 @@
 ;;; TODO: including a directory should look for 'lib' inside it
 (include "llvm/lib")
 
-;;; TODO: currently we have to put "types" before "builtins", as there are some
-;;; static initializers in "builtins" that depend on variables in "types", and
-;;; we don't currently figure out dependencies and order the initializers
-;;; appropriately. This shouldn't be necessary later.
+;;; TODO: currently we have to put "constants" before "builtins", as there are
+;;; some static initializers in "builtins" that depend on variables in
+;;; "constants", and we don't currently figure out dependencies and order the
+;;; initializers appropriately. This shouldn't be necessary later.
+(include "constants")
 (include "types")
 (include "builtins")
 (include "util")
@@ -68,12 +69,8 @@
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
                               $module (mangle-name 'main)))
-               (main-func (LLVMAddFunction
-                            $module "main"
-                            (LLVMFunctionType
-                              INT
-                              (list INT (LLVMPointerType (LLVMPointerType (LLVMIntType 8) 0) 0))
-                              2 false))))
+               (main-func (declare-function "main" INT
+                                            (list INT (LLVMPointerType CHAR* 0)))))
            (when (null? entry-point)
              (panic! "No main function defined."))
            (LLVMPositionBuilderAtEnd $builder
@@ -81,8 +78,7 @@
            ;; Store args in $argv
            (LLVMBuildCall
              $builder
-             (runtime-func "rt_store_argv" (LLVMVoidType)
-                           (list INT (LLVMPointerType (LLVMPointerType (LLVMIntType 8) 0) 0)))
+             (runtime-func "rt_store_argv" VOID (list INT (LLVMPointerType CHAR* 0)))
              (llvm-params main-func) 2 "")
            (each (lambda (init)
                    (let ((var (car init))
@@ -167,11 +163,7 @@
                            (true '?))))
        (unless (and (symbol? name) (list? arg-list))
          (fail! context (format nil "Malformed 'defun' form: ~" form)))
-       (let ((llvm-func (declare-function
-                          (mangle-name (second form)) NUC-VAL
-                          (map (lambda (_) NUC-VAL) (third form)))))
-         (add-func context (make-func name (length arg-names) arg-names
-                                      arg-types return-type body llvm-func)))))
+       (add-func context name arg-names arg-types return-type body)))
     ('defvar
      (when (length>= form 4)
        (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
@@ -305,9 +297,7 @@
     (cons-t (compile-form context expr))
     (string-t (LLVMBuildCall
                 $builder
-                (runtime-func "rt_make_string"
-                              NUC-VAL
-                              (list SIZE-T (LLVMPointerType (LLVMIntType 8) 0)))
+                (runtime-func "rt_make_string" NUC-VAL (list SIZE-T CHAR*))
                 (list (llvm-val<-int (length expr)) (global-string expr))
                 2
                 "make-string-literal"))

@@ -41,12 +41,15 @@
                 (format nil "function ~" (func-name func)))))
     (panic! (format nil "Error compiling ~: ~" str message))))
 
-(defun add-func (context f)
-  (cond
-    ((not (nil? (get-func (func-name f))))
-     (fail! context (format nil "Duplicate definition of function '~'" (func-name f))))
-    (true
-      (set $functions (cons (cons (func-name f) f) $functions)))))
+(defun add-func (context name arg-names arg-types return-type body)
+  (let* ((arity (length arg-names))
+         (llvm-func (declare-function (mangle-name name) NUC-VAL (repeat arity NUC-VAL)))
+         (func (make-func name arity arg-names arg-types return-type body llvm-func)))
+    (cond
+      ((not (nil? (get-func name)))
+       (fail! context (format nil "Duplicate definition of function '~'" name)))
+      (true
+        (set $functions (cons (cons name func) $functions))))))
 
 (defun add-global (context name type-spec)
   (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
@@ -93,10 +96,6 @@
     name
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
-;;; TODO: this should all be unified - we shouldn't look up globals and
-;;; constants through a separate mechanism, it should all be in the env.
-;;; That way we have proper binding objects for all types of variable.
-
 (defun get-value (context name)
   (let ((lvalue (get-lvalue context name)))
     (if (not (nil? lvalue))
@@ -117,33 +116,6 @@
     (if (nil? binding)
       nil
       (binding-llvm-ptr binding))))
-
-(defun remove-lowtag (nuc-val)
-  (LLVMBuildAnd $builder nuc-val
-                ;; This is (~ (- (<< 1 LOWTAG-BITS) 1)).
-                ;; We can't write that directly as it exceeds the 61-bit limit
-                ;; of nucleus fixnums
-                (LLVMConstIntOfString (LLVMIntType 64) "fffffffffffffff8" 16)
-                "remove-lowtag"))
-
-(defun add-lowtag (nuc-val tag)
-  (LLVMBuildOr $builder
-               (LLVMBuildPtrToInt $builder nuc-val NUC-VAL "ptr-to-int")
-               (llvm-val<-int tag) "add-lowtag"))
-
-;; TODO: rename these
-(defun llvm-val<-int (x) (LLVMConstInt NUC-VAL x false))
-(defun llvm-val<-int8 (x) (LLVMConstInt (LLVMIntType 8) x false))
-(defun llvm-val<-int32 (x) (LLVMConstInt (LLVMIntType 32) x false))
-(defun nuc-val<-int (int)
-  (LLVMBuildShl $builder int (llvm-val<-int LOWTAG-BITS) "nuc-val<-int"))
-(defun int<-nuc-val (nuc-val)
-  ; TODO: type checking
-  (LLVMBuildLShr $builder nuc-val (llvm-val<-int LOWTAG-BITS) "int<-nuc-val"))
-
-(defun cons<-nuc-val (nuc-val)
-  ; TODO: type checking
-  (LLVMBuildIntToPtr $builder (remove-lowtag nuc-val) CONS-CELL-PTR ""))
 
 (defun gc-alloc (size)
   (LLVMBuildCall
@@ -341,9 +313,7 @@
   (let ((func (LLVMGetNamedFunction $module name)))
     (if (not (null? func))
       func
-      (LLVMAddFunction
-        $module name
-        (LLVMFunctionType return-type arg-types (length arg-types) false)))))
+      (declare-function name return-type arg-types))))
 
 (defun global-string (str)
   (LLVMBuildGEP
@@ -372,70 +342,3 @@
                   (second sexpr))
          (%find-captured-vars context (cddr sexpr) to-ignore))))
     (true (mappend (lambda (e) (%find-captured-vars context e to-ignore)) sexpr))))
-
-(defun llvm-type<-type-spec (context type-spec)
-  (case type-spec
-    ('* UINTPTR)
-    ('string (LLVMPointerType (LLVMIntType 8) 0))
-    ('void (LLVMVoidType))
-    ('int INT) ('uint INT) ('bool INT)
-    ('uint8 (LLVMIntType 8))
-    ('long LONG)
-    ('long-long LONG-LONG)
-    ('array (LLVMPointerType UINTPTR 0))
-    (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
-
-(defun c-val<-nuc-val (context type-spec val)
-  (cond
-    ((eq? type-spec '*)
-     (LLVMBuildIntToPtr
-       $builder
-       (LLVMBuildLoad
-         $builder
-         (LLVMBuildIntToPtr
-           $builder (remove-lowtag val) (LLVMPointerType NUC-VAL 0) "")
-         "")
-       UINTPTR
-       ""))
-    ((eq? type-spec 'string)
-     (LLVMBuildCall
-       $builder
-       (runtime-func "rt_nuc_str_to_c_str" (LLVMPointerType (LLVMIntType 8) 0) (list NUC-VAL))
-       (list val) 1 "c-val<-nuc-val"))
-    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8))
-     (LLVMBuildIntCast
-       $builder
-       (int<-nuc-val val)
-       (llvm-type<-type-spec context type-spec)
-       "cast-nuc-val"))
-    ((eq? type-spec 'bool)
-      (LLVMBuildIntCast
-        $builder
-        (LLVMBuildICmp $builder LLVMIntEQ val LLVM-TRUE "int<-bool")
-        (llvm-type<-type-spec context 'int)
-        ""))
-    ((eq? type-spec 'array)
-     (LLVMBuildCall
-       $builder
-       (runtime-func "rt_list_to_array" (llvm-type<-type-spec context type-spec) (list NUC-VAL))
-       (list val)
-       1
-       "array<-list"))
-    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
-
-(defun nuc-val<-c-val (type-spec val)
-  (cond
-    ((eq? type-spec '*)
-      (add-lowtag
-        (let ((box (gc-alloc PTR-BYTES)))
-          (LLVMBuildStore $builder (LLVMBuildPtrToInt $builder val NUC-VAL "") box)
-          box)
-        6))
-    ((eq? type-spec 'void) LLVM-NIL)
-    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8))
-     (nuc-val<-int
-       (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
-    ((eq? type-spec 'bool)
-     (LLVMBuildSelect $builder
-                      (LLVMBuildICmp $builder LLVMIntEQ val (llvm-val<-int32 0) "")
-                      LLVM-FALSE LLVM-TRUE ""))))

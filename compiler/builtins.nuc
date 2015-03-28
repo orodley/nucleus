@@ -55,6 +55,7 @@
 (defvar LLVM-FOREIGN-T (llvm-val<-int 2311))
 (defvar LLVM-STRING-T (llvm-val<-int 2567))
 (defvar LLVM-LAMBDA-T (llvm-val<-int 2823))
+;; TODO: these should have types
 (defvar $constants
   (list
     (cons 'nil LLVM-NIL)
@@ -175,8 +176,7 @@
                                           (list 'quote (cdr to-quote)))))
       (symbol-t (LLVMBuildCall
                   $builder
-                  (runtime-func "rt_intern_symbol" NUC-VAL
-                                (list (LLVMPointerType (LLVMIntType 8) 0)))
+                  (runtime-func "rt_intern_symbol" NUC-VAL (list CHAR*))
                   (list (global-string (string<-symbol to-quote)))
                   1
                   "intern-const"))
@@ -234,7 +234,7 @@
   (let ((name (first name-args-list-return-type))
         (args-list (second name-args-list-return-type))
         (return-type (third name-args-list-return-type)))
-    (nuc-val<-c-val
+    (dynamic-val<-static-val
       return-type
       (LLVMBuildCall
         $builder
@@ -242,7 +242,7 @@
           name
           (llvm-type<-type-spec context return-type)
           (map (lambda (entry) (llvm-type<-type-spec context (first entry))) args-list))
-        (map (lambda (entry) (c-val<-nuc-val
+        (map (lambda (entry) (static-val<-dynamic-val
                                context
                                (car entry) (compile-expr context (second entry))))
              args-list)

@@ -17,7 +17,7 @@ nuc_val rt_exec(nuc_val path_val, nuc_val arg_list)
 	if (arg_list == NIL) {
 		argv = no_args;
 	} else {
-		CHECK(arg_list, CONS_LOWTAG);
+		CHECK(arg_list, CONS_TYPE);
 
 		Cons *cons = (Cons *)REMOVE_LOWTAG(arg_list);
 		size_t args_len = rt_list_length(cons) + 1;
@@ -32,7 +32,7 @@ nuc_val rt_exec(nuc_val path_val, nuc_val arg_list)
 			if (next == NIL)
 				break;
 
-			CHECK(next, CONS_LOWTAG);
+			CHECK(next, CONS_TYPE);
 			tmp = (Cons *)REMOVE_LOWTAG(next);
 			argv[i++] = rt_nuc_str_to_c_str(tmp->car);
 		}
@@ -60,7 +60,7 @@ nuc_val rt_current_dir()
 
 nuc_val rt_file_exists(nuc_val path_val)
 {
-	CHECK(path_val, STRING_LOWTAG);
+	CHECK(path_val, STRING_TYPE);
 	String *path = (String *)REMOVE_LOWTAG(path_val);
 
 	return access(path->bytes, F_OK) == 0 ? TRUE : FALSE;
@@ -68,7 +68,7 @@ nuc_val rt_file_exists(nuc_val path_val)
 
 nuc_val rt_dirname(nuc_val path_val)
 {
-	CHECK(path_val, STRING_LOWTAG);
+	CHECK(path_val, STRING_TYPE);
 	String *path = (String *)REMOVE_LOWTAG(path_val);
 
 	// dirname can modify its input

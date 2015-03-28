@@ -15,7 +15,7 @@ nuc_val rt_cons(nuc_val car, nuc_val cdr)
 
 nuc_val rt_set_car(nuc_val cons, nuc_val new_car)
 {
-	CHECK(cons, CONS_LOWTAG);
+	CHECK(cons, CONS_TYPE);
 
 	Cons *c = (Cons *)REMOVE_LOWTAG(cons);
 	c->car = new_car;
@@ -25,7 +25,7 @@ nuc_val rt_set_car(nuc_val cons, nuc_val new_car)
 
 nuc_val rt_set_cdr(nuc_val cons, nuc_val new_cdr)
 {
-	CHECK(cons, CONS_LOWTAG);
+	CHECK(cons, CONS_TYPE);
 
 	Cons *c = (Cons *)REMOVE_LOWTAG(cons);
 	c->cdr = new_cdr;
@@ -42,7 +42,7 @@ size_t rt_list_length(Cons *cons)
 		if (next == NIL)
 			break;
 
-		CHECK(next, CONS_LOWTAG);
+		CHECK(next, CONS_TYPE);
 		tmp = (Cons *)REMOVE_LOWTAG(next);
 		len++;
 	}

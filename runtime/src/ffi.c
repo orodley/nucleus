@@ -6,7 +6,7 @@
 
 char *rt_nuc_str_to_c_str(nuc_val nuc_str)
 {
-	CHECK(nuc_str, STRING_LOWTAG);
+	CHECK(nuc_str, STRING_TYPE);
 	String *str = (String *)REMOVE_LOWTAG(nuc_str);
 
 	char *c_str = gc_alloc(str->length + 1);
@@ -24,7 +24,7 @@ uint64_t *rt_list_to_array(nuc_val list)
 		return result;
 	}
 
-	CHECK(list, CONS_LOWTAG);
+	CHECK(list, CONS_TYPE);
 	Cons *cons = (Cons *)REMOVE_LOWTAG(list);
 	size_t len = rt_list_length(cons);
 	uintptr_t *result = malloc(sizeof(*result) * (len + 1));
@@ -37,9 +37,9 @@ uint64_t *rt_list_to_array(nuc_val list)
 		if (next == NIL)
 			break;
 		
-		CHECK(next, CONS_LOWTAG);
+		CHECK(next, CONS_TYPE);
 		cons = (Cons *)REMOVE_LOWTAG(next);
-		CHECK(cons->car, FOREIGN_LOWTAG);
+		CHECK(cons->car, FOREIGN_TYPE);
 		result[i++] = *(uintptr_t *)REMOVE_LOWTAG(cons->car); // unbox the pointer
 	}
 
@@ -65,8 +65,8 @@ nuc_val rt_null_p(nuc_val ptr_val)
 
 nuc_val rt_ptr_eq(nuc_val p1, nuc_val p2)
 {
-	CHECK(p1, FOREIGN_LOWTAG);
-	CHECK(p2, FOREIGN_LOWTAG);
+	CHECK(p1, FOREIGN_TYPE);
+	CHECK(p2, FOREIGN_TYPE);
 
 	void *ptr1 = *(void **)REMOVE_LOWTAG(p1);
 	void *ptr2 = *(void **)REMOVE_LOWTAG(p2);

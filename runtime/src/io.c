@@ -32,8 +32,8 @@ static void string_stream_ensure_room_for(String_stream *stream, size_t size);
 
 nuc_val rt_write_char_to_stream(nuc_val stream_val, nuc_val char_val)
 {
-	CHECK(stream_val, FOREIGN_LOWTAG);
-	CHECK(char_val, FIXNUM_LOWTAG);
+	CHECK(stream_val, FOREIGN_TYPE);
+	CHECK(char_val, FIXNUM_TYPE);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 	char c = (char)NUC_VAL_TO_INT(char_val);
 
@@ -59,8 +59,8 @@ static void write_bytes_to_stream(Stream *stream, char *bytes, size_t length);
 
 nuc_val rt_write_string_to_stream(nuc_val stream_val, nuc_val string_val)
 {
-	CHECK(stream_val, FOREIGN_LOWTAG);
-	CHECK(string_val, STRING_LOWTAG);
+	CHECK(stream_val, FOREIGN_TYPE);
+	CHECK(string_val, STRING_TYPE);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 	String *string = (String *)REMOVE_LOWTAG(string_val);
 
@@ -98,8 +98,8 @@ nuc_val rt_write_string_ln_to_stream(nuc_val stream, nuc_val string)
 
 nuc_val rt_write_addr_to_stream(nuc_val stream_val, nuc_val obj)
 {
-	CHECK(stream_val, FOREIGN_LOWTAG);
-	CHECK(obj, FOREIGN_LOWTAG);
+	CHECK(stream_val, FOREIGN_TYPE);
+	CHECK(obj, FOREIGN_TYPE);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 	uintptr_t foreign_ptr = *(uintptr_t *)REMOVE_LOWTAG(obj);
 
@@ -116,7 +116,7 @@ nuc_val rt_write_addr_to_stream(nuc_val stream_val, nuc_val obj)
 
 nuc_val rt_read_char_from_stream(nuc_val stream_val)
 {
-	CHECK(stream_val, FOREIGN_LOWTAG);
+	CHECK(stream_val, FOREIGN_TYPE);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 
 	switch (stream->type) {
@@ -171,7 +171,7 @@ nuc_val rt_open(nuc_val string)
 
 nuc_val rt_close(nuc_val stream_val)
 {
-	CHECK(stream_val, FOREIGN_LOWTAG);
+	CHECK(stream_val, FOREIGN_TYPE);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 
 	switch (stream->type) {
@@ -195,7 +195,7 @@ nuc_val rt_close(nuc_val stream_val)
 
 nuc_val rt_make_string_stream(nuc_val initial_contents_val)
 {
-	CHECK(initial_contents_val, STRING_LOWTAG);
+	CHECK(initial_contents_val, STRING_TYPE);
 	String *initial_contents = (String *)REMOVE_LOWTAG(initial_contents_val);
 
 	Stream *stream = gc_alloc(sizeof *stream);
@@ -217,7 +217,7 @@ nuc_val rt_make_string_stream(nuc_val initial_contents_val)
 
 nuc_val rt_string_stream_to_string(nuc_val stream_val)
 {
-	CHECK(stream_val, FOREIGN_LOWTAG);
+	CHECK(stream_val, FOREIGN_TYPE);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 	String_stream *string_stream = &stream->impl.string_stream;
 

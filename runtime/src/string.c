@@ -16,14 +16,14 @@ nuc_val rt_make_string(size_t length, char *bytes)
 
 nuc_val rt_string_length(nuc_val string)
 {
-	CHECK(string, STRING_LOWTAG);
+	CHECK(string, STRING_TYPE);
 	return INT_TO_NUC_VAL(((String *)REMOVE_LOWTAG(string))->length);
 }
 
 nuc_val rt_char_at(nuc_val string_val, nuc_val index_val)
 {
-	CHECK(string_val, STRING_LOWTAG);
-	CHECK(index_val, FIXNUM_LOWTAG);
+	CHECK(string_val, STRING_TYPE);
+	CHECK(index_val, FIXNUM_TYPE);
 	String *string = (String *)REMOVE_LOWTAG(string_val);
 	size_t index = NUC_VAL_TO_INT(index_val);
 
@@ -42,7 +42,7 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 		return rt_make_string(0, &nothing);
 	}
 
-	CHECK(char_list, CONS_LOWTAG);
+	CHECK(char_list, CONS_TYPE);
 	Cons *cons = (Cons *)REMOVE_LOWTAG(char_list);
 	size_t len = rt_list_length(cons);
 
@@ -55,7 +55,7 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 		if (next == NIL)
 			break;
 
-		CHECK(next, CONS_LOWTAG);
+		CHECK(next, CONS_TYPE);
 		tmp = (Cons *)REMOVE_LOWTAG(next);
 		str_bytes[i++] = (char)NUC_VAL_TO_INT(tmp->car);
 	}
@@ -67,7 +67,7 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 
 nuc_val rt_string_to_char_list(nuc_val string)
 {
-	CHECK(string, STRING_LOWTAG);
+	CHECK(string, STRING_TYPE);
 
 	String *str = (String *)REMOVE_LOWTAG(string);
 	if (str->length == 0)
@@ -89,9 +89,9 @@ nuc_val rt_string_to_char_list(nuc_val string)
 
 nuc_val rt_substring(nuc_val str_val, nuc_val start_val, nuc_val end_val)
 {
-	CHECK(str_val, STRING_LOWTAG);
-	CHECK(start_val, FIXNUM_LOWTAG);
-	CHECK(end_val, FIXNUM_LOWTAG);
+	CHECK(str_val, STRING_TYPE);
+	CHECK(start_val, FIXNUM_TYPE);
+	CHECK(end_val, FIXNUM_TYPE);
 	String *str = (String *)REMOVE_LOWTAG(str_val);
 	size_t start = NUC_VAL_TO_INT(start_val);
 	size_t end = NUC_VAL_TO_INT(end_val);
