@@ -3,13 +3,10 @@ A simple, self-hosting Lisp compiler, targeting LLVM.
 Building
 ========
 
-First, build the nucleus compiler with the bootstrap compiler:
+First you need a precompiled snapshot to bootstrap. If you actually want to
+try building it let me know and I'll put some up somewhere.
 
-```
-$ ./boot.sh
-```
-
-Then, compile the compiler with itself:
+Then you can compile with:
 
 ```
 $ ./build.sh
