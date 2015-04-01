@@ -14,9 +14,7 @@ def main():
     be_positive = False
     tests = []
     for arg in sys.argv[1:]:
-        if arg == '-b':
-            nucc = 'boot/nucc.sh'
-        elif arg == '-s':
+        if arg == '-s':
             print_details = False
         elif arg == '-p':
             be_positive = True
