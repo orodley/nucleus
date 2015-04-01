@@ -1,6 +1,22 @@
 #!/bin/sh
 
+just_stage1=false
 script_dir=$(dirname "$(realpath "$0")")
+
+OPTIND=1
+while getopts '1' opt; do
+	case "$opt" in
+		1)
+			just_stage1=true
+			;;
+		'?')
+			echo "Unknown option"
+			exit 1
+			;;
+	esac
+done
+shift "$((OPTIND-1))"
+
 if [ $# -gt 0 ]; then
 	stage0="$(realpath "$1")"
 else
@@ -44,6 +60,12 @@ compile_ir()
 
 echo "Using $stage0 as stage0"
 compile "$stage0" ./stage1
+
+if [ "$just_stage1" = true ]; then
+	echo Compilation finished, all is well
+	exit 0
+fi
+
 compile ./stage1 stage2
 compile_ir ./stage1 stage2.ll
 compile_ir ./stage2 stage3.ll
