@@ -16,7 +16,7 @@
     ((eq? typ '?)
      (make-term typ (dynamic-val<-static-val context (tt term) (tv term)) (tl? term)))
     (true
-      (make-term typ (cast context term typ) (tl? term)))))
+      (make-term typ (implicit-conversion context term typ) (tl? term)))))
 
 (defun consistent? (type1 type2)
   (cond
@@ -37,7 +37,11 @@
 (defun add-lowtag (val tag)
   (LLVMBuildOr $builder
                (LLVMBuildPtrToInt $builder val NUC-VAL "ptr-to-int")
-               (llvm-val<-int tag) "add-lowtag"))
+               (llvm-i64<-int tag) "add-lowtag"))
+
+(defun fixnum<-llvm-int (val)
+  (add-lowtag (LLVMBuildShl $builder val (llvm-i64<-int LOWTAG-BITS) "")
+              FIXNUM-LOWTAG))
 
 (defun check-type (val type-as-llvm-val)
   (if (cons? type-as-llvm-val)
@@ -51,20 +55,14 @@
       $builder
       (runtime-func "rt_check_type" VOID (list NUC-VAL NUC-VAL CHAR* CHAR* INT))
       (list val type-as-llvm-val (LLVMConstNull CHAR*) (LLVMConstNull CHAR*)
-            (llvm-val<-int32 0))
+            (llvm-i32<-int 0))
       "")))
 
-;; TODO: rename these
-(defun llvm-val<-int (x) (LLVMConstInt NUC-VAL x false))
-(defun llvm-val<-int8 (x) (LLVMConstInt (LLVMIntType 8) x false))
-(defun llvm-val<-int32 (x) (LLVMConstInt (LLVMIntType 32) x false))
-(defun nuc-val<-int (int)
-  (LLVMBuildShl $builder int (llvm-val<-int LOWTAG-BITS) "nuc-val<-int"))
-(defun int<-nuc-val (nuc-val)
-  (LLVMBuildAShr $builder nuc-val (llvm-val<-int LOWTAG-BITS) "int<-nuc-val"))
+(defun llvm-i64<-int (x) (LLVMConstInt (LLVMIntType 64) x false))
+(defun llvm-i32<-int (x) (LLVMConstInt (LLVMIntType 32) x false))
+(defun llvm-i8<-int (x) (LLVMConstInt (LLVMIntType 8) x false))
 
-(defun cons<-nuc-val (nuc-val)
-  ; TODO: type checking
+(defun cons-ptr<-nuc-val (nuc-val)
   (LLVMBuildIntToPtr $builder (remove-lowtag nuc-val) CONS-CELL-PTR ""))
 
 ;;; TODO: this should probably have an extra phase - converting into a nucleus
@@ -141,13 +139,13 @@
      (check-type val LLVM-FIXNUM-T)
      (LLVMBuildIntCast
        $builder
-       (int<-nuc-val val)
+       (LLVMBuildAShr $builder val (llvm-i64<-int LOWTAG-BITS) "remove-int-tag")
        (llvm-type<-type-spec context type-spec)
-       "cast-nuc-val"))
+       ""))
     ((eq? type-spec 'bool)
      (check-type val LLVM-BOOL-T)
      (LLVMBuildSelect $builder (LLVMBuildICmp $builder LLVMIntEQ val LLVM-TRUE "")
-                      (llvm-val<-int32 1) (llvm-val<-int32 0) ""))
+                      (llvm-i32<-int 1) (llvm-i32<-int 0) ""))
     ((eq? type-spec 'string)
      (check-type val LLVM-STRING-T)
      (LLVMBuildIntToPtr $builder (remove-lowtag val) STRING-PTR ""))
@@ -160,11 +158,11 @@
        "array<-list"))
     ((eq? type-spec 'nil-t)
      (check-type val LLVM-NIL-T)
-     (llvm-val<-int 0))
+     (llvm-i64<-int 0))
     ((eq? type-spec 'type)
      ;; TODO: We should have a separate exttag for types so that we can do a
      ;; check-type here.
-     (LLVMBuildLShr $builder val (llvm-val<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
+     (LLVMBuildLShr $builder val (llvm-i64<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
     (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
 (defun dynamic-val<-static-val (context type-spec val)
@@ -177,10 +175,8 @@
           box)
         FOREIGN-LOWTAG))
     ((eq? type-spec 'void) LLVM-NIL)
-    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8
-                              'i32 'i64))
-     (nuc-val<-int
-       (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
+    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8 'i32 'i64))
+     (fixnum<-llvm-int (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
     ((eq? type-spec 'bool)
      ;(format true "d-v<-s-v: val = ~" val)
      (let ((zero (LLVMConstInt (LLVMTypeOf val) 0 false)))
@@ -195,15 +191,14 @@
        (LLVMBuildShl
        $builder
        val
-       (llvm-val<-int32 (+ LOWTAG-BITS EXTTAG-BITS))
+       (llvm-i32<-int (+ LOWTAG-BITS EXTTAG-BITS))
        "")
-       (llvm-val<-int32 (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
+       (llvm-i32<-int (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
        ""))
     (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))  ))
 
-;;; Performs an implicit conversion between two static types.
-(defun cast (context term typ)
-  ;(format true "(cast ... ~ ~)" term typ)
+(defun implicit-conversion (context term typ)
+  ;(format true "(implicit-conversion ... ~ ~)" term typ)
   (cond
     ((and (numeric (tt term)) (numeric typ))
      (LLVMBuildIntCast

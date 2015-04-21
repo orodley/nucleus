@@ -126,7 +126,7 @@
 (defun gc-alloc (size)
   (llvm-build-call
     $builder (runtime-func "gc_alloc" (LLVMPointerType NUC-VAL 0) (list SIZE-T))
-    (list (llvm-val<-int size)) "gc_alloc"))
+    (list (llvm-i64<-int size)) "gc_alloc"))
 
 (defun compile-progn (context forms)
   (%compile-progn context (if (nil? forms) (list 'nil) forms)))
@@ -188,10 +188,10 @@
                              (LLVMBuildGEP
                                $builder
                                (LLVMBuildGEP $builder (first params)
-                                             (map llvm-val<-int32 (list 0 2))
+                                             (map llvm-i32<-int (list 0 2))
                                              2
                                              "")
-                               (map llvm-val<-int (list 0 i))
+                               (map llvm-i64<-int (list 0 i))
                                2
                                "get-var-from-closure")
                              "")
@@ -228,7 +228,7 @@
              (LLVMBuildGEP
                $builder
                closure
-               (map llvm-val<-int32 (list 0 0))
+               (map llvm-i32<-int (list 0 0))
                2
                "")
              "load-func-pointer-from-struct"))
@@ -238,8 +238,8 @@
          (captures
            (LLVMBuildGEP
              $builder
-             (LLVMBuildGEP $builder closure (map llvm-val<-int32 (list 0 2)) 2 "")
-             (map llvm-val<-int32 (list 0 0))
+             (LLVMBuildGEP $builder closure (map llvm-i32<-int (list 0 2)) 2 "")
+             (map llvm-i32<-int (list 0 0))
              2
              ""))
          (first-capture (LLVMBuildLoad $builder captures "")))
@@ -255,7 +255,7 @@
         $builder
         (LLVMBuildICmp $builder LLVMIntEQ
                        (LLVMBuildPtrToInt $builder first-capture UINTPTR "")
-                       (llvm-val<-int 0) "")
+                       (llvm-i64<-int 0) "")
         then-block
         else-block)
       (LLVMPositionBuilderAtEnd $builder then-block)
@@ -311,7 +311,7 @@
                    $builder
                    (tv (binding-term capture))
                    (LLVMBuildGEP $builder captures-array
-                                 (map llvm-val<-int (list 0 i))
+                                 (map llvm-i64<-int (list 0 i))
                                  2 "array-elt")))
                captures)
     ;; TODO: figure out the types of functions
@@ -322,10 +322,10 @@
         (runtime-func "rt_make_lambda" NUC-VAL
                       (list UINTPTR (LLVMIntType 8) (LLVMIntType 32) UINTPTR))
         (list (LLVMBuildPtrToInt $builder func UINTPTR "func-pointer-to-int")
-              (llvm-val<-int8 arity)
-              (llvm-val<-int32 (length captures))
+              (llvm-i8<-int arity)
+              (llvm-i32<-int (length captures))
               (if (nil? captures)
-                (llvm-val<-int 0)
+                (llvm-i64<-int 0)
                 (LLVMBuildPtrToInt $builder captures-array UINTPTR "array-to-int")))
         "make-lambda")
       false)))
@@ -340,7 +340,7 @@
   (LLVMBuildGEP
     $builder
     (LLVMBuildGlobalString $builder str "")
-    (list (llvm-val<-int 0) (llvm-val<-int 0))
+    (list (llvm-i64<-int 0) (llvm-i64<-int 0))
     2
     "str-to-ptr"))
 

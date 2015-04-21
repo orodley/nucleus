@@ -84,10 +84,10 @@
                    (let ((var (car init))
                          (expr (cdr init)))
                      ;; TODO: statically typed globals
-                     (LLVMBuildStore $builder (tv (coerce context
-                                                          (compile-expr context expr)
-                                                          '?))
-                                     var)))
+                     (LLVMBuildStore
+                       $builder
+                       (tv (coerce context (compile-expr context expr) '?))
+                       var)))
                  (reverse $initialisers))
            (llvm-build-call $builder entry-point nil "")
            (LLVMBuildRet
@@ -98,7 +98,7 @@
                  $builder
                  (LLVMBuildLoad
                    $builder (tv (binding-term (get-binding context '$status-code))) "")
-                 (llvm-val<-int LOWTAG-BITS)
+                 (llvm-i64<-int LOWTAG-BITS)
                  "")
                INT
                "truncate-status-code")))
@@ -148,7 +148,7 @@
 
 (defun process-toplevel-form (context form)
   ;(format true "(p-t-l .. ~)" form)
-  ;; TODO: Once we have 'defmacro' we'll need to another pass over the toplevel
+  ;; NOTE: Once we have 'defmacro' we'll need to another pass over the toplevel
   ;; forms to find 'defmacro's and compile their dependency tree
   (set form (macroexpand context form))
   ;(format true "macroexpanded = ~" form)
@@ -177,7 +177,7 @@
                               (length form))))
      (let* ((name (second form))
             (value (if (length-is? form 3) (third form) 'nil))
-            (init (llvm-val<-int (if (int? value)
+            (init (llvm-i64<-int (if (int? value)
                                    (<< value LOWTAG-BITS)
                                    0)))
             (global (add-global context name '?)))
@@ -242,7 +242,7 @@
                                (+ 1 enum-variant-value)))))
              (LLVMSetInitializer
                (add-global context name '?)
-               (nuc-val<-int (llvm-val<-int value)))))
+               (fixnum<-llvm-int (llvm-i64<-int value)))))
          (cdr form))))
     (default
       (fail! context (format nil "Invalid top-level form '~'" (first form))))))
@@ -276,7 +276,7 @@
     sexpr))
 
 ;; TODO: This is basically a subset of what compile-lambda does, we should
-;; unify the two.
+;; combine the two.
 (defun compile-function (context func)
   ;(format true "(c-f ... ~)" func)
   ;; if it's extern we don't need to compile it, the implmentation already
@@ -313,8 +313,7 @@
 
 (defun %compile-expr (context expr)
   (case (type expr)
-    ;; TODO: limit on size
-    (fixnum-t (make-term 'i64 (llvm-val<-int expr) false))
+    (fixnum-t (make-term 'i64 (llvm-i64<-int expr) false))
     (symbol-t
       (let* ((binding (get-binding context expr))
              (term
@@ -325,9 +324,7 @@
                       (make-lambda (func-llvm-func func)
                                    (LLVMCountParams (func-llvm-func func))
                                    nil)
-                      (fail! context
-                             (format nil "Undefined variable '~' in env ~"
-                                     expr (context-env context))))))
+                      (fail! context (format nil "Undefined variable '~'" expr)))))
                  (true (binding-term binding)))))
         (if (tl? term)
           (make-term
@@ -343,7 +340,7 @@
                 (llvm-build-call
                   $builder
                   (runtime-func "rt_make_string" STRING-PTR (list SIZE-T CHAR*))
-                  (list (llvm-val<-int (length expr)) (global-string expr))
+                  (list (llvm-i64<-int (length expr)) (global-string expr))
                   "make-string-literal")
                 false))
     (default (fail! context

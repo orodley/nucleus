@@ -18,7 +18,6 @@
     (cons 'quote special-form-quote)
     (cons 'lambda special-form-lambda)
 
-
     ;; TODO: these should be regular functions which call into some internal
     ;; compiler primitive once we have varargs
     (cons '< special-form-<)
@@ -40,24 +39,24 @@
 ;; TODO: Write these as more readable constant expressions
 ;; TODO: Maybe these should have different names to indicate that this
 ;; representation is only used when they are dynamic values?
-(defvar LLVM-NIL (llvm-val<-int 7))
-(defvar LLVM-TRUE (llvm-val<-int 263))
-(defvar LLVM-FALSE (llvm-val<-int 519))
-(defvar LLVM-FIXNUM-T (llvm-val<-int 775))
-(defvar LLVM-CONS-T (llvm-val<-int 1031))
-(defvar LLVM-NIL-T (llvm-val<-int 1287))
-(defvar LLVM-BOOL-T (llvm-val<-int 1543))
-(defvar LLVM-FLOAT-T (llvm-val<-int 1799))
-(defvar LLVM-SYMBOL-T (llvm-val<-int 2055))
-(defvar LLVM-FOREIGN-T (llvm-val<-int 2311))
-(defvar LLVM-STRING-T (llvm-val<-int 2567))
-(defvar LLVM-LAMBDA-T (llvm-val<-int 2823))
+(defvar LLVM-NIL (llvm-i64<-int 7))
+(defvar LLVM-TRUE (llvm-i64<-int 263))
+(defvar LLVM-FALSE (llvm-i64<-int 519))
+(defvar LLVM-FIXNUM-T (llvm-i64<-int 775))
+(defvar LLVM-CONS-T (llvm-i64<-int 1031))
+(defvar LLVM-NIL-T (llvm-i64<-int 1287))
+(defvar LLVM-BOOL-T (llvm-i64<-int 1543))
+(defvar LLVM-FLOAT-T (llvm-i64<-int 1799))
+(defvar LLVM-SYMBOL-T (llvm-i64<-int 2055))
+(defvar LLVM-FOREIGN-T (llvm-i64<-int 2311))
+(defvar LLVM-STRING-T (llvm-i64<-int 2567))
+(defvar LLVM-LAMBDA-T (llvm-i64<-int 2823))
 ;; TODO: these should all have static types
 (defvar $constants
   (list
-    (make-constant 'nil (llvm-val<-int 0) 'nil-t)
-    (make-constant 'true (llvm-val<-int32 1) 'bool)
-    (make-constant 'false (llvm-val<-int32 0) 'bool)
+    (make-constant 'nil (llvm-i64<-int 0) 'nil-t)
+    (make-constant 'true (llvm-i32<-int 1) 'bool)
+    (make-constant 'false (llvm-i32<-int 0) 'bool)
     (make-constant 'fixnum-t LLVM-FIXNUM-T '?)
     (make-constant 'cons-t LLVM-CONS-T '?)
     (make-constant 'nil-t LLVM-NIL-T '?)
@@ -99,7 +98,6 @@
     ;(format true "After extending environment with variables ~, the new environment is ~" names (context-env new-context))
     (compile-progn new-context body)))
 
-;; TODO: make into a macro
 (defun builtin-macro-let* (context args)
   ;; TODO: Life without quasiquote is painful
   (if (nil? (first args))
@@ -357,14 +355,14 @@
 ;;; static typing for conses.
 
 (defun builtin-car (context args)
-  (let ((cons-ptr (cons<-nuc-val (tv (coerce context (first args) '?)))))
+  (let ((cons-ptr (cons-ptr<-nuc-val (tv (coerce context (first args) '?)))))
     (make-term
       '? ; TODO: this should be determined by the type of the input term
       (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 0 "") "car")
       false)))
 
 (defun builtin-cdr (context args)
-  (let ((cons-ptr (cons<-nuc-val (tv (coerce context (first args) '?)))))
+  (let ((cons-ptr (cons-ptr<-nuc-val (tv (coerce context (first args) '?)))))
     (make-term
       '? ; TODO: this should be determined by the type of the input term
       (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")
@@ -410,7 +408,7 @@
              'bool
              (llvm-phi $builder (llvm-type<-type-spec context 'bool)
                        (list (cons (tv ct-term) correct-type-block)
-                             (cons (llvm-val<-int32 0) wrong-type-block)))
+                             (cons (llvm-i32<-int 0) wrong-type-block)))
              false))))
       ((eq? (tt term2) '?)
        ;; Reverse the order so we go into the case above where the type of the
@@ -421,4 +419,4 @@
       (true
         ;; TODO: We should be able to compare some stuff of different static
         ;; type, e.g.: ints of different width. We just need to cast first
-        (make-term 'bool (llvm-val<-int32 0) false)))))
+        (make-term 'bool (llvm-i32<-int 0) false)))))
