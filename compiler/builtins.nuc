@@ -18,21 +18,13 @@
     (cons 'quote special-form-quote)
     (cons 'lambda special-form-lambda)
 
-    ;; TODO: these should just be regular functions once we have varargs
-    (cons 'format special-form-format)
-    (cons 'list special-form-list)
 
     ;; TODO: these should be regular functions which call into some internal
     ;; compiler primitive once we have varargs
     (cons '< special-form-<)
     (cons '<= special-form-<=)
     (cons '> special-form->)
-    (cons '>= special-form->=)
-
-    ;; TODO: these are internal compiler primitives that probably shouldn't be
-    ;; exposed to the user as they currently are
-    (cons '%raw-call special-form-%raw-call)
-    (cons '%c-call special-form-%c-call)))
+    (cons '>= special-form->=)))
 (defvar $builtin-macros ;; TODO: should be in the stdlib
   (list
     (cons 'let* builtin-macro-let*)
@@ -41,8 +33,13 @@
     (cons 'and builtin-macro-and)
     (cons 'or builtin-macro-or)
     (cons 'when builtin-macro-when)
-    (cons 'unless builtin-macro-unless)))
+    (cons 'unless builtin-macro-unless)
+    ;; TODO: these should just be regular functions once we have varargs
+    (cons 'format builtin-macro-format)
+    (cons 'list builtin-macro-list)))
 ;; TODO: Write these as more readable constant expressions
+;; TODO: Maybe these should have different names to indicate that this
+;; representation is only used when they are dynamic values?
 (defvar LLVM-NIL (llvm-val<-int 7))
 (defvar LLVM-TRUE (llvm-val<-int 263))
 (defvar LLVM-FALSE (llvm-val<-int 519))
@@ -55,52 +52,51 @@
 (defvar LLVM-FOREIGN-T (llvm-val<-int 2311))
 (defvar LLVM-STRING-T (llvm-val<-int 2567))
 (defvar LLVM-LAMBDA-T (llvm-val<-int 2823))
-;; TODO: these should have types
+;; TODO: these should all have static types
 (defvar $constants
   (list
-    (cons 'nil LLVM-NIL)
-    (cons 'true LLVM-TRUE)
-    (cons 'false LLVM-FALSE)
-    (cons 'fixnum-t LLVM-FIXNUM-T)
-    (cons 'cons-t LLVM-CONS-T)
-    (cons 'nil-t LLVM-NIL-T)
-    (cons 'bool-t LLVM-BOOL-T)
-    (cons 'float-t LLVM-FLOAT-T)
-    (cons 'symbol-t LLVM-SYMBOL-T)
-    (cons 'foreign-t LLVM-FOREIGN-T)
-    (cons 'string-t LLVM-STRING-T)
-    (cons 'lambda-t LLVM-LAMBDA-T)))
+    (make-constant 'nil (llvm-val<-int 0) 'nil-t)
+    (make-constant 'true (llvm-val<-int32 1) 'bool)
+    (make-constant 'false (llvm-val<-int32 0) 'bool)
+    (make-constant 'fixnum-t LLVM-FIXNUM-T '?)
+    (make-constant 'cons-t LLVM-CONS-T '?)
+    (make-constant 'nil-t LLVM-NIL-T '?)
+    (make-constant 'bool-t LLVM-BOOL-T '?)
+    (make-constant 'float-t LLVM-FLOAT-T '?)
+    (make-constant 'symbol-t LLVM-SYMBOL-T '?)
+    (make-constant 'foreign-t LLVM-FOREIGN-T '?)
+    (make-constant 'string-t LLVM-STRING-T '?)
+    (make-constant 'lambda-t LLVM-LAMBDA-T '?)))
 
-(defun get-special-form (name)
-  (assoc-cdr name $special-forms))
-
-(defun get-builtin-function (name)
-  (assoc-cdr name $builtin-functions))
-
-(defun get-builtin-macro (name)
-  (assoc-cdr name $builtin-macros))
-
-(defun get-constant (name)
-  (assoc-cdr name $constants))
+(defun get-special-form (name) (assoc-cdr name $special-forms))
+(defun get-builtin-function (name) (assoc-cdr name $builtin-functions))
+(defun get-builtin-macro (name) (assoc-cdr name $builtin-macros))
 
 (defun special-form-set (context args)
   (let* ((env (context-env context))
          (name (first args))
-         (lvalue (get-lvalue context name))
+         (binding (get-binding context name))
          (new-value (compile-expr context (second args))))
-    (if (null? lvalue)
-      (fail! context "Undefined variable")
-      (LLVMBuildStore $builder new-value lvalue))
+    (cond
+      ((nil? binding)
+       (fail! context (format nil "Undefined variable '~'" name)))
+      ((not (binding-lvalue? binding))
+       (fail! context (format nil "Cannot assign to constant '~'" name)))
+      (true (LLVMBuildStore $builder (tv (coerce context new-value
+                                                 (tt (binding-term binding))))
+                            (tv (binding-term binding)))))
     new-value))
 
 (defun special-form-let (context args)
-  ;; TODO: better error reporting for malformed LET clauses
-  (let* ((bindings (first args))
+  ;; TODO: better error reporting for malformed 'let' clauses
+  ;; TODO: optional type annotations for 'let' variables
+  (let* ((clauses (first args))
          (body (rest args))
-         (names (map first bindings))
-         (values (map (lambda (e) (compile-expr context e))
-                      (map second bindings)))
-         (new-context (extend-env-with-values context names values)))
+         (names (map first clauses))
+         (terms (map (lambda (clause) (compile-expr context (second clause)))
+                      clauses))
+         (new-context (extend-env-with-terms context names terms)))
+    ;(format true "After extending environment with variables ~, the new environment is ~" names (context-env new-context))
     (compile-progn new-context body)))
 
 ;; TODO: make into a macro
@@ -115,32 +111,66 @@
   (compile-progn context args))
 
 (defun special-form-if (context args)
-  ;; TODO: Enforce that 'condition' is a boolean at runtime
-  (let* ((condition (compile-expr context (first args)))
-         (then (second args))
-         (else (if (length-is? args 2) 'nil (third args)))
+  (let* ((condition (coerce context (compile-expr context (first args)) 'bool))
+         (then-expr (second args))
+         ;; TODO: maybe during the 'macroexpansion' pass we insert missing
+         ;; else branches? We could perhaps do some other things too, like what
+         ;; GHC does with desugaring into 'Core'.
+         (else-expr (if (length-is? args 2) 'nil (third args)))
          (current-func (get-current-func $builder))
          (then-block (LLVMAppendBasicBlock current-func "then"))
          (else-block (LLVMAppendBasicBlock current-func "else"))
          (after-block (LLVMAppendBasicBlock current-func "after")))
-    (LLVMBuildCondBr
-      $builder
-      (LLVMBuildICmp $builder LLVMIntEQ condition LLVM-TRUE "")
-      then-block
-      else-block)
-    (let* ((then-value (%build-branch context then then-block after-block))
+    (LLVMBuildCondBr $builder (LLVMBuildIntCast $builder (tv condition) (LLVMIntType 1) "")
+                     then-block else-block)
+    (let* ((then-term (compile-in-block context then-expr then-block))
            (then-resultant-block (LLVMGetInsertBlock $builder))
-           (else-value (%build-branch context else else-block after-block))
-           (else-resultant-block (LLVMGetInsertBlock $builder)))
+           (else-term (compile-in-block context else-expr else-block))
+           (else-resultant-block (LLVMGetInsertBlock $builder))
+           (then-type (tt then-term))
+           (else-type (tt else-term))
+           (result-type
+             (if (eq? then-type else-type)
+               then-type
+               ;; TODO: If both types are different static types then we need
+               ;; a dynamic value, but we shouldn't just throw away the static
+               ;; type information - we should keep it as a union type and do
+               ;; static type checking based on that. For example:
+               ;;  (car (if foo nil false))
+               ;; should be able to be detected as a static type error, as the
+               ;; type of the argument of car is 'cons' (or (cons A B) once we
+               ;; have a proper cons type), which is disjoint from the type of
+               ;; the if expression, (or nil-t bool).
+               '?))
+           ;; We need to call 'coerce' while the builder is in the same block
+           ;; as the value we are calling it on, otherwise the type coercion
+           ;; code is inserted into the wrong place. However, we only know what
+           ;; type to coerce into after we have already compiled both branches,
+           ;; so we have to go back into the block.
+           (then-term (%build-branch context then-term result-type
+                                     then-resultant-block after-block))
+           (else-term (%build-branch context else-term result-type
+                                     else-resultant-block after-block)))
       (LLVMPositionBuilderAtEnd $builder after-block)
-      (llvm-phi $builder NUC-VAL (list (cons then-value then-resultant-block)
-                                       (cons else-value else-resultant-block))))))
+      ;(format true "(if ~ ~) -> ~" then-type else-type result-type)
+      (make-term
+        result-type
+        ;; TODO: maybe llvm-phi should just figure out the result type itself
+        ;; based on the the given terms and do the coercions itself.
+        (llvm-phi $builder (llvm-type<-type-spec context result-type)
+                  (list (cons (tv then-term) then-resultant-block)
+                        (cons (tv else-term) else-resultant-block)))
+        false))))
 
-(defun %build-branch (context expr branch-block after-block)
+(defun compile-in-block (context expr block)
+  (LLVMPositionBuilderAtEnd $builder block)
+  (compile-expr context expr))
+
+(defun %build-branch (context term typ branch-block after-block)
   (LLVMPositionBuilderAtEnd $builder branch-block)
-  (let ((compiled (compile-expr context expr)))
+  (let ((result (coerce context term typ)))
     (LLVMBuildBr $builder after-block)
-    compiled))
+    result))
 
 (defun builtin-macro-cond (context clauses)
   (if (nil? clauses)
@@ -167,19 +197,23 @@
 (defun special-form-quote (context args)
   (let ((to-quote (first args)))
     (case (type to-quote)
-      ;; TODO: merge all self-evaluating cases into once once 'case' supports
-      ;; multiple values in the same clause
       (fixnum-t (compile-expr context to-quote))
-      (nil-t LLVM-NIL)
+      ;; This case never comes up directly from source, as 'nil' is read in as
+      ;; the symbol 'nil' not the constant. It only comes up in the recursive
+      ;; case below when quoting a cons.
+      (nil-t (make-term 'nil-t LLVM-NIL false))
       (cons-t (compile-expr context (list 'cons
                                           (list 'quote (car to-quote))
                                           (list 'quote (cdr to-quote)))))
-      (symbol-t (LLVMBuildCall
-                  $builder
-                  (runtime-func "rt_intern_symbol" NUC-VAL (list CHAR*))
-                  (list (global-string (string<-symbol to-quote)))
-                  1
-                  "intern-const"))
+      (symbol-t (make-term
+                  ;; TODO: statically typed symbols
+                  '?
+                  (llvm-build-call
+                    $builder
+                    (runtime-func "rt_intern_symbol" NUC-VAL (list CHAR*))
+                    (list (global-string (string<-symbol to-quote)))
+                    "intern-const")
+                  false))
       (default (fail! context (format nil "Don't know how to quote '~'" to-quote))))))
 
 (defun builtin-macro-and (context operands)
@@ -204,6 +238,10 @@
                   'true
                   (cons 'or (rest operands)))))))
 
+;;; TODO: Detect lambdas with identical bodies and use the same function.
+;;; We'd also need to keep track if any errors were found when compiling the
+;;; other lambda and generate the same error (once we're doing errors properly).
+
 (defvar $lambda-counter 0)
 (defun special-form-lambda (context args-and-body)
   (let* ((args (car args-and-body))
@@ -213,58 +251,21 @@
                                              (+ 1 $lambda-counter)))))
          (current-block (LLVMGetInsertBlock $builder))
          (captures (find-captured-vars context body args))
-         (func (compile-lambda context name args body (map car captures))))
+         (func (compile-lambda context name args body captures)))
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
     (make-lambda func (length args) captures)))
 
-(defun special-form-%raw-call (context name-and-args)
-  (let ((name (first name-and-args))
-        (args (rest name-and-args)))
-    (LLVMBuildCall
-      $builder
-      ;; deliberately DON'T mangle
-      (runtime-func (string<-symbol name) NUC-VAL (map (lambda (_) NUC-VAL) args))
-      ;; TODO: compile-all
-      (map (lambda (e) (compile-expr context e)) args)
-      (length args)
-      "%raw-call")))
+(defun builtin-macro-format (context args)
+  ;; TODO: Life without quasiquote is painful
+  (list '%format (first args) (second args)
+        (cons 'list (cddr args))))
 
-(defun special-form-%c-call (context name-args-list-return-type)
-  (let ((name (first name-args-list-return-type))
-        (args-list (second name-args-list-return-type))
-        (return-type (third name-args-list-return-type)))
-    (dynamic-val<-static-val
-      return-type
-      (LLVMBuildCall
-        $builder
-        (runtime-func
-          name
-          (llvm-type<-type-spec context return-type)
-          (map (lambda (entry) (llvm-type<-type-spec context (first entry))) args-list))
-        (map (lambda (entry) (static-val<-dynamic-val
-                               context
-                               (car entry) (compile-expr context (second entry))))
-             args-list)
-        (length args-list)
-        (if (eq? return-type 'void)
-          ""
-          "%c-call")))))
-
-(defun special-form-format (context args)
-  (compile-expr
-    context
-    ;; TODO: Life without quasiquote is painful
-    (list '%format (first args) (second args)
-          (cons 'list (cddr args)))))
-
-(defun special-form-list (context args)
+(defun builtin-macro-list (context args)
   (if (nil? args)
-    LLVM-NIL
-    (compile-expr
-      context
-      ;; TODO: Life without quasiquote is painful
-      (list 'cons (first args) (cons 'list (rest args))))))
+    'nil
+    ;; TODO: Life without quasiquote is painful
+    (list 'cons (first args) (cons 'list (rest args)))))
 
 (defun builtin-macro-unless (context args)
   (let ((condition (first args))
@@ -278,18 +279,27 @@
     ;; TODO: Life without quasiquote is painful
     (list 'if condition (cons 'progn body))))
 
+
+;;; TODO: We need to have a proper story for how numeric primitives work for
+;;; different integer(/float) types.
+;;; TODO: We don't need to bother removing the lowtag for some of these numeric
+;;; functions when both are dynamic. Maybe we should come up with a nice way of
+;;; enabling this kind of optimisation.
+
+
 (defun comparison (context cmp llvm-cmp operands)
   (if (length-is? operands 2)
-    (LLVMBuildSelect
-      $builder
-      ;; Don't bother removing the lowtag, as it doesn't affect ordering
-      (LLVMBuildICmp $builder llvm-cmp
-                     (compile-expr context (first operands))
-                     (compile-expr context (second operands))
-                     "")
-      LLVM-TRUE
-      LLVM-FALSE
-      "")
+    (make-term
+      'bool
+      (LLVMBuildZExt
+        $builder
+        (LLVMBuildICmp $builder llvm-cmp
+                       (tv (coerce context (compile-expr context (first operands)) 'i64))
+                       (tv (coerce context (compile-expr context (second operands)) 'i64))
+                       "")
+        (LLVMIntType 32)
+        "")
+      false)
     ;; TODO: Life without quasiquote is painful
     (compile-expr context (list 'if
                                 (list cmp
@@ -302,62 +312,113 @@
 (defun special-form-> (context args) (comparison context '> LLVMIntSGT args))
 (defun special-form->= (context args) (comparison context '>= LLVMIntSGE args))
 
-;; We don't bother dealing with the lowtag here, because the lowtag for fixnums
-;; is zero, and shifting is a multiplication, which distributes over addition
-;; and subtraction - shifting each operand right and then the result left is
-;; the same as not shifting at all.
-(defun builtin+ (context args) (reduce (lambda (a b) (LLVMBuildAdd $builder a b "+")) args))
-(defun builtin- (context args) (reduce (lambda (a b) (LLVMBuildSub $builder a b "-")) args))
+(defun arithmetic-builtin (context args llvm-op name)
+  (reduce (lambda (a b)
+            (make-term
+              'i64
+              (llvm-op $builder
+                       (tv (coerce context a 'i64))
+                       (tv (coerce context b 'i64))
+                       name)
+              false))
+          args))
+(defun builtin+ (context args) (arithmetic-builtin context args %LLVMBuildAdd "+"))
+(defun builtin- (context args) (arithmetic-builtin context args %LLVMBuildSub "-"))
+(defun builtin* (context args) (arithmetic-builtin context args %LLVMBuildMul "*"))
+(defun builtin% (context args) (arithmetic-builtin context args %LLVMBuildSRem "%"))
+(defun builtin/ (context args) (arithmetic-builtin context args %LLVMBuildSDiv "/"))
 
-(defun builtin* (context args)
-  (reduce (lambda (a b)
-            ;; Rather than shifting each operand right and the result left, we
-            ;; just deal with the extra factor of 2^LOWTAG-BITS by shifting
-            ;; the result.
-            ;; TODO: If we have type information about the upper bound of the
-            ;; operands we can batch these shifts rather than shifting every
-            ;; time. The only reason we can't is overflow, which we may be able
-            ;; to statically determine to be impossible.
-            (LLVMBuildLShr
-              $builder
-              (LLVMBuildMul $builder a b "*")
-              (llvm-val<-int LOWTAG-BITS)
-              ""))
-          args))
-(defun builtin% (context args)
-  (reduce (lambda (a b)
-            ;; The same comments in builtin* apply here
-            (LLVMBuildLShr
-              $builder
-              (LLVMBuildSRem $builder a b "*")
-              (llvm-val<-int LOWTAG-BITS)
-              ""))
-          args))
-(defun builtin/ (context args)
-  (reduce (lambda (a b)
-            ;; The same comments in builtin* apply here
-            (LLVMBuildShl
-              $builder
-              (LLVMBuildSDiv $builder a b "*")
-              (llvm-val<-int LOWTAG-BITS)
-              ""))
-          args))
+;;; TODO: Remove these. They only exist as a workaround because we don't store
+;;; RTTI on lambdas yet. If we pass these functions as values the caller
+;;; assumes that all the arguments are i64s. So we make wrappers that take i64s.
+(defun %LLVMBuildAdd (builder val1 val2 name) (LLVMBuildAdd builder val1 val2 name))
+(defun %LLVMBuildSub (builder val1 val2 name) (LLVMBuildSub builder val1 val2 name))
+(defun %LLVMBuildMul (builder val1 val2 name) (LLVMBuildMul builder val1 val2 name))
+(defun %LLVMBuildSRem (builder val1 val2 name) (LLVMBuildSRem builder val1 val2 name))
+(defun %LLVMBuildSDiv (builder val1 val2 name) (LLVMBuildSDiv builder val1 val2 name))
 
 (defun builtin-cons (context args)
-  (LLVMBuildCall
-    $builder (runtime-func "rt_cons" NUC-VAL (list NUC-VAL NUC-VAL)) args 2 "cons"))
+  (make-term
+    '? ; TODO: this should be a higher-order type determined by the type of the input terms
+    (llvm-build-call
+      $builder
+      (runtime-func "rt_cons" NUC-VAL (list NUC-VAL NUC-VAL))
+      (map (lambda (term) (tv (coerce context term '?))) args)
+      "cons")
+    false))
+
+;;; TODO: An interesting idea is to make car and cdr return lvalues so that we
+;;; can do stuff like (set (car foo) bar). Have to give it a try and see if
+;;; that's a good design for generalized references. We'd also need a special
+;;; type for references, and make functions choose to return references. e.g.:
+;;; (defun first ((c cons)) -> (ref ?) (car c))
+;;; otherwise the 'lvalueness' gets swallowed upon returning from the function.
+;;; TODO: These should coerce their argument to a cons once we have proper
+;;; static typing for conses.
 
 (defun builtin-car (context args)
-  (let ((cons-ptr (cons<-nuc-val (first args))))
-    (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 0 "") "car")))
+  (let ((cons-ptr (cons<-nuc-val (tv (coerce context (first args) '?)))))
+    (make-term
+      '? ; TODO: this should be determined by the type of the input term
+      (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 0 "") "car")
+      false)))
 
 (defun builtin-cdr (context args)
-  (let ((cons-ptr (cons<-nuc-val (first args))))
-    (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")))
+  (let ((cons-ptr (cons<-nuc-val (tv (coerce context (first args) '?)))))
+    (make-term
+      '? ; TODO: this should be determined by the type of the input term
+      (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")
+      false)))
 
 (defun builtin-eq? (context args)
-  (LLVMBuildSelect $builder
-                   (LLVMBuildICmp $builder LLVMIntEQ (first args) (second args) "")
-                   LLVM-TRUE
-                   LLVM-FALSE
-                   "eq?"))
+  (let ((term1 (first args))
+        (term2 (second args)))
+    (cond
+      ((and (eq? (tt term1) '?) (eq? (tt term2) '?))
+       ;; TODO: If we have two dynamic values that are both foreign pointers
+       ;; they can be different as they are boxed. In that case we need to
+       ;; unbox them.
+       (simple-int-cmp (tv term1) (tv term2)))
+      ((eq? (tt term1) '?)
+       ;; We compare the runtime type, and if they're the same we compare the
+       ;; actual value.
+       ;; TODO: This is a little inefficient as coerce checks the type after
+       ;; we've already checked it to even reach that block. A version of
+       ;; 'coerce' that assumes the correct type could be handy.
+       (let* ((runtime-type (llvm-build-call
+                              $builder
+                              (runtime-func "rt_type" NUC-VAL (list NUC-VAL))
+                              (list (tv term1))
+                              ""))
+              (correct-type?
+                (LLVMBuildICmp $builder LLVMIntEQ runtime-type
+                               (type-id<-type-spec context (tt term2))
+                               ""))
+              (current-func (get-current-func $builder))
+              (correct-type-block (LLVMAppendBasicBlock current-func "type-eq"))
+              (wrong-type-block (LLVMAppendBasicBlock current-func "type-not-eq"))
+              (after-block (LLVMAppendBasicBlock current-func "eq?-after")))
+         (LLVMBuildCondBr $builder correct-type?  correct-type-block wrong-type-block)
+         (LLVMPositionBuilderAtEnd $builder wrong-type-block)
+         (LLVMBuildBr $builder after-block)
+         (LLVMPositionBuilderAtEnd $builder correct-type-block)
+         (let ((ct-term (builtin-eq?
+                          context (list (coerce context term1 (tt term2)) term2))))
+           (LLVMBuildBr $builder after-block)
+           (LLVMPositionBuilderAtEnd $builder after-block)
+           (make-term
+             'bool
+             (llvm-phi $builder (llvm-type<-type-spec context 'bool)
+                       (list (cons (tv ct-term) correct-type-block)
+                             (cons (llvm-val<-int32 0) wrong-type-block)))
+             false))))
+      ((eq? (tt term2) '?)
+       ;; Reverse the order so we go into the case above where the type of the
+       ;; first term is ?
+       (builtin-eq? context (list term2 term1)))
+      ((eq? (tt term1) (tt term2))
+       (simple-int-cmp (tv term1) (tv term2)))
+      (true
+        ;; TODO: We should be able to compare some stuff of different static
+        ;; type, e.g.: ints of different width. We just need to cast first
+        (make-term 'bool (llvm-val<-int32 0) false)))))

@@ -3,7 +3,7 @@
 (extern rt_ceiling 1 -> ceiling)
 (extern rt_int_to_float 1 -> float<-int)
 
-;; TODO: varargs
+;;; TODO: varargs
 (defun + (a b) (+ a b))
 (defun - (a b) (- a b))
 (defun * (a b) (* a b))
@@ -28,3 +28,6 @@
     ((zero? power) acc)
     ((even? power) (%expt (* base base) (/ power 2) acc))
     (true (%expt base (- power 1) (* acc base)))))
+
+;;; TODO: varargs
+(defun max (a b) (if (> a b) a b))

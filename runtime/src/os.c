@@ -55,7 +55,7 @@ nuc_val rt_current_dir()
 	if (getcwd(buf, 1024) == NULL)
 		return NIL;
 
-	return rt_make_string(strlen(buf), buf);
+	return ((nuc_val)rt_make_string(strlen(buf), buf)) | STRING_LOWTAG;
 }
 
 nuc_val rt_file_exists(nuc_val path_val)
@@ -77,5 +77,5 @@ nuc_val rt_dirname(nuc_val path_val)
 	path_copy[path->length] = '\0';
 
 	char *dir = dirname(path_copy);
-	return rt_make_string(strlen(dir), dir);
+	return ((nuc_val)rt_make_string(strlen(dir), dir)) | STRING_LOWTAG;
 }

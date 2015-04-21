@@ -221,8 +221,8 @@ nuc_val rt_string_stream_to_string(nuc_val stream_val)
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 	String_stream *string_stream = &stream->impl.string_stream;
 
-	return rt_make_string(string_stream->write_pos - string_stream->read_pos,
-			string_stream->chars + string_stream->read_pos);
+	return ((nuc_val)rt_make_string(string_stream->write_pos - string_stream->read_pos,
+			string_stream->chars + string_stream->read_pos)) | STRING_LOWTAG;
 }
 
 static void string_stream_ensure_room_for(String_stream *stream, size_t size)

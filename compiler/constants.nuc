@@ -22,6 +22,9 @@
     (list UINTPTR (LLVMIntType 8) (LLVMArrayType (LLVMPointerType NUC-VAL 0) 0))
     3
     false))
+(defvar STRING
+  (LLVMStructType (list (LLVMIntType 64) (LLVMArrayType CHAR 0)) 2 false))
+(defvar STRING-PTR (LLVMPointerType STRING 0))
 
 (defvar LOWTAG-BITS 3)
 
@@ -32,3 +35,8 @@
 (defvar LAMBDA-LOWTAG 5)
 (defvar FOREIGN-LOWTAG 6)
 (defvar EXTTAG-LOWTAG 7)
+
+
+(defvar EXTTAG-BITS 5)
+
+(defvar DISCRETE-EXTTAG 1)

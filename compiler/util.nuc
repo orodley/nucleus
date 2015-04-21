@@ -1,13 +1,18 @@
+;;; TODO: Think about the naming convention for "type constructors". Maybe we
+;;; could use capitals so the function that produces one can be shorter while
+;;; still allowing the lowercase version for variable names.
+
 ;;; TODO: Replace with a struct once they exist
-(defun make-func (name arity arg-names arg-types return-type body llvm-func)
-  (list name arity arg-names arg-types return-type body llvm-func))
+(defun make-func (name arity arg-names arg-types return-type impl-type body llvm-func)
+  (list name arity arg-names arg-types return-type impl-type body llvm-func))
 (defun func-name (func) (first func))
 (defun func-arity (func) (second func))
 (defun func-arg-names (func) (third func))
 (defun func-arg-types (func) (fourth func))
 (defun func-return-type (func) (fifth func))
-(defun func-body (func) (sixth func))
-(defun func-llvm-func (func) (seventh func))
+(defun func-impl-type (func) (sixth func))
+(defun func-body (func) (seventh func))
+(defun func-llvm-func (func) (eighth func))
 
 ;;; TODO: Replace with a hash table once that exists
 ;;; TODO: These should go in the context, along with $module and $builder
@@ -23,10 +28,15 @@
 (defun context-set-func (context new-func) (set-car (cddr context) new-func))
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-binding (name llvm-ptr type-spec) (list name llvm-ptr type-spec))
+;;; TODO: Do we really need this? Couldn't we just have an alist with
+;;; car = name and cdr = term?
+(defun make-binding (name term) (list name term))
 (defun binding-name (binding) (first binding))
-(defun binding-llvm-ptr (binding) (second binding))
-(defun binding-type-spec (binding) (third binding))
+(defun binding-term (binding) (second binding))
+(defun binding-lvalue? (binding) (tl? (binding-term binding)))
+;;; TODO: polymorphic constants?
+(defun make-constant (name val typ) (make-binding name (make-term typ val false)))
+(defun make-var (name val typ) (make-binding name (make-term typ val true)))
 
 ;;; TODO: When an error occurs in a lambda, we should report the context better
 ;;; Maybe what we should do is store a chain of context switches terminating at
@@ -34,6 +44,9 @@
 ;;; new context?
 ;;; e.g.: "Error: undefined variable 'foo' in lambda in lambda in function bar in file x.nuc
 ;;; (could merge adjacent identical contexts, like "lambda (2 levels deep)")
+;;; TODO: Rather than panicing, this should return a term containing an LLVM
+;;; 'undef' value, and stick the error into a list in the context. That way we
+;;; can report multiple errors at once.
 (defun fail! (context message)
   (let* ((func (context-func context))
          (str (if (nil? func)
@@ -41,10 +54,14 @@
                 (format nil "function ~" (func-name func)))))
     (panic! (format nil "Error compiling ~: ~" str message))))
 
-(defun add-func (context name arg-names arg-types return-type body)
-  (let* ((arity (length arg-names))
-         (llvm-func (declare-function (mangle-name name) NUC-VAL (repeat arity NUC-VAL)))
-         (func (make-func name arity arg-names arg-types return-type body llvm-func)))
+(defun add-func (context name arg-names arg-types return-type impl-type body)
+  (let* ((llvm-return-type (llvm-type<-type-spec context return-type))
+         (llvm-arg-types (map (lambda (t) (llvm-type<-type-spec context t))
+                              arg-types))
+         (arity (length arg-names))
+         (llvm-func (declare-function
+                      (mangle-name name) llvm-return-type llvm-arg-types))
+         (func (make-func name arity arg-names arg-types return-type impl-type body llvm-func)))
     (cond
       ((not (nil? (get-func name)))
        (fail! context (format nil "Duplicate definition of function '~'" name)))
@@ -53,7 +70,7 @@
 
 (defun add-global (context name type-spec)
   (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
-    (context-set-env context (cons (make-binding name global type-spec)
+    (context-set-env context (cons (make-var name global type-spec)
                                    (context-env context)))
     global))
 
@@ -65,62 +82,51 @@
   (set $initialisers (cons (cons var init) $initialisers)))
 
 (defun mangle-name (name)
-  (format nil "nuc(~)" name))
+  (let ((ret (format nil "nuc(~)" name)))
+    ;(format true "(m-n ~) -> ~" name ret)
+    ret))
 
 ;; TODO: write this properly
 (defun << (x y) (* x (expt 2 y)))
 
-(defun extend-env-with-values (context names values)
+(defun extend-env-with-terms (context names terms)
   (let ((env (context-env context))
         (file (context-file context))
         (func (context-func context)))
-    (each (lambda (name-and-value)
-            (let* ((name (car name-and-value))
-                   (value (cdr name-and-value))
-                   (var-on-stack (LLVMBuildAlloca $builder NUC-VAL
+    (each (lambda (name-and-term)
+            (let* ((name (car name-and-term))
+                   (term (cdr name-and-term))
+                   (var-on-stack (LLVMBuildAlloca $builder
+                                                  (llvm-type<-type-spec context (tt term))
                                                   (string<-symbol name))))
-              (LLVMBuildStore $builder value var-on-stack)
-              (set env (cons (make-binding name var-on-stack '?) env))))
-          (zip names values))
+              (LLVMBuildStore $builder (tv term) var-on-stack)
+              (set env (cons (make-var name var-on-stack (tt term)) env))))
+          (zip names terms))
     (make-context env file func)))
 
-(defun extend-env-with-pointers (context names ptrs)
-  (make-context (append (map2 (lambda (name ptr) (make-binding name ptr '?))
-                              names ptrs)
-                        (context-env context))
+(defun extend-env-with-bindings (context bindings)
+  (make-context (append bindings (context-env context))
                 (context-file context) (context-func context)))
 
 (defun declare-function (name ret-type arg-types)
+  ;(format true "(d-f ~ ~ ~)" name ret-type arg-types)
   (LLVMAddFunction
     $module
     name
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
-(defun get-value (context name)
-  (let ((lvalue (get-lvalue context name)))
-    (if (not (nil? lvalue))
-      (LLVMBuildLoad $builder lvalue (string<-symbol name))
-      (let ((const (get-constant name)))
-        (if (not (nil? const))
-          const
-          (let ((func (get-func name)))
-            (if (not (nil? func))
-              (make-lambda (func-llvm-func func)
-                           (LLVMCountParams (func-llvm-func func))
-                           nil)
-              nil)))))))
+;; TODO: functions as values are still kinda separate, maybe they should also
+;; be integrated into the environment somehow?
 
-(defun get-lvalue (context name)
-  (let ((binding (find (lambda (binding) (eq? (binding-name binding) name))
-                       (context-env context))))
-    (if (nil? binding)
-      nil
-      (binding-llvm-ptr binding))))
+(defun get-binding (context name)
+  ;(format true "(g-b ... ~)" name)
+  (find (lambda (binding) (eq? (binding-name binding) name))
+        (context-env context)))
 
 (defun gc-alloc (size)
-  (LLVMBuildCall
+  (llvm-build-call
     $builder (runtime-func "gc_alloc" (LLVMPointerType NUC-VAL 0) (list SIZE-T))
-    (list (llvm-val<-int size)) 1 "gc_alloc"))
+    (list (llvm-val<-int size)) "gc_alloc"))
 
 (defun compile-progn (context forms)
   (%compile-progn context (if (nil? forms) (list 'nil) forms)))
@@ -147,7 +153,8 @@
                         arg-list)))
     (cons arg-names arg-types)))
 
-(defun compile-lambda (context name arg-list body captured-vars)
+;; TODO: allow type annotations for lambdas
+(defun compile-lambda (context name arg-list body captured-bindings)
   (let* ((old-func (context-func context))
          (params (repeat (length arg-list) NUC-VAL))
          (names-and-types (parse-arg-list context arg-list))
@@ -160,50 +167,60 @@
          ;; we don't capture any bindings, and instead just creating a static
          ;; closure once at compile-time and returning it every time.
          (func (declare-function (mangle-name name) NUC-VAL
-                                 (if (nil? captured-vars)
+                                 (if (nil? captured-bindings)
                                    params
                                    (cons (LLVMPointerType CLOSURE 0) params)))))
     ;; TODO: parse return type declarations
     (context-set-func context (make-func name (length arg-names) arg-names
-                                         arg-types '? body func))
+                                         arg-types '? body 'nucleus func))
     ;; TODO: set LLVM param names
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock func "entry"))
     (let* ((params (llvm-params func))
            (new-context
-             (extend-env-with-values
-               (extend-env-with-pointers
+             (extend-env-with-terms
+               (extend-env-with-bindings
                  context
-                 captured-vars
-                 (map (lambda (i-name)
-                        (let ((i (car i-name))
-                              (name (cdr i-name)))
-                          (LLVMBuildLoad
-                            $builder
-                            (LLVMBuildGEP
-                              $builder
-                              (LLVMBuildGEP $builder (first params)
-                                            (map llvm-val<-int32 (list 0 2))
-                                            2
-                                            "")
-                              (map llvm-val<-int (list 0 i))
-                              2
-                              "get-var-from-closure")
-                            "")))
-                      (zip (range (length captured-vars)) captured-vars)))
+                 (map2 (lambda (i binding)
+                         (make-var
+                           (binding-name binding)
+                           (LLVMBuildLoad
+                             $builder
+                             (LLVMBuildGEP
+                               $builder
+                               (LLVMBuildGEP $builder (first params)
+                                             (map llvm-val<-int32 (list 0 2))
+                                             2
+                                             "")
+                               (map llvm-val<-int (list 0 i))
+                               2
+                               "get-var-from-closure")
+                             "")
+                           (tt (binding-term binding))))
+                       (range (length captured-bindings))
+                       captured-bindings))
                arg-names
-               (if (nil? captured-vars)
-                 (llvm-params func)
-                 (cdr (llvm-params func))))))
-      (LLVMBuildRet $builder (compile-progn new-context body)))
+               (map2 (lambda (typ val) (make-term typ val true))
+                     (repeat (length arg-list) '?)
+                     (if (nil? captured-bindings)
+                       (llvm-params func)
+                       (cdr (llvm-params func)))))))
+      ;; TODO: once we're parsing lambda return type declarations this should
+      ;; use them rather than always using ?
+      (LLVMBuildRet $builder (tv (coerce context
+                                         (compile-progn new-context body)
+                                         '?))))
     (when (LLVMVerifyFunction func LLVMPrintMessageAction)
       (LLVMDumpValue func)
       (fail! context (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name)))
     (context-set-func context old-func)
     func))
 
-(defun call-closure (context nuc-val args)
+;;; TODO: We need RTTI for closures and proper static function types so we can
+;;; do more complete type checking, at compile-time or runtime depending on
+;;; whether the type can be deduced.
+(defun call-closure (context val args)
   (let* ((closure (LLVMBuildIntToPtr
-                    $builder (remove-lowtag nuc-val) (LLVMPointerType CLOSURE 0) ""))
+                    $builder (remove-lowtag val) (LLVMPointerType CLOSURE 0) ""))
          (func-pointer
            (LLVMBuildLoad
              $builder
@@ -231,7 +248,9 @@
     ;; side-effecting calls
     (let ((then-block (LLVMAppendBasicBlock current-func "doesn't-take-closure"))
           (else-block (LLVMAppendBasicBlock current-func "takes-closure"))
-          (after-block (LLVMAppendBasicBlock current-func "after-call")))
+          (after-block (LLVMAppendBasicBlock current-func "after-call"))
+          ;; TODO: Coerce based on RTTI
+          (coerced-args (map (lambda (term) (tv (coerce context term '?))) args)))
       (LLVMBuildCondBr
         $builder
         (LLVMBuildICmp $builder LLVMIntEQ
@@ -240,7 +259,7 @@
         then-block
         else-block)
       (LLVMPositionBuilderAtEnd $builder then-block)
-      (let ((then-result (LLVMBuildCall
+      (let ((then-result (llvm-build-call
                            $builder
                            (LLVMBuildIntToPtr
                              $builder
@@ -253,13 +272,12 @@
                                  false)
                                0)
                              "cast-to-correct-function-type")
-                           args
-                           args-len
+                           coerced-args
                            "call-closure")))
         (LLVMBuildBr $builder after-block)
         (LLVMPositionBuilderAtEnd $builder else-block)
         (let ((else-result
-                (LLVMBuildCall
+                (llvm-build-call
                   $builder
                   (LLVMBuildIntToPtr
                     $builder
@@ -273,8 +291,7 @@
                         false)
                       0)
                     "cast-to-correct-function-type")
-                  (cons closure args)
-                  (+ 1 args-len)
+                  (cons closure coerced-args)
                   "call-closure")))
           (LLVMBuildBr $builder after-block)
           (LLVMPositionBuilderAtEnd $builder after-block)
@@ -288,26 +305,30 @@
              (LLVMConstNull ary-type)
              (LLVMBuildAlloca $builder ary-type "make-captures-array"))))
     (enumerate (lambda (i capture)
+                 (assert! (binding-lvalue? capture) "Captures should be lvalues")
                  ;; TODO: insert-value?
                  (LLVMBuildStore
                    $builder
-                   (cdr capture)
+                   (tv (binding-term capture))
                    (LLVMBuildGEP $builder captures-array
                                  (map llvm-val<-int (list 0 i))
                                  2 "array-elt")))
                captures)
-    (LLVMBuildCall
-      $builder
-      (runtime-func "rt_make_lambda" NUC-VAL
-                    (list UINTPTR (LLVMIntType 8) (LLVMIntType 32) UINTPTR))
-      (list (LLVMBuildPtrToInt $builder func UINTPTR "func-pointer-to-int")
-            (llvm-val<-int8 arity)
-            (llvm-val<-int32 (length captures))
-            (if (nil? captures)
-              (llvm-val<-int 0)
-              (LLVMBuildPtrToInt $builder captures-array UINTPTR "array-to-int")))
-      4
-      "make-lambda")))
+    ;; TODO: figure out the types of functions
+    (make-term
+      '?
+      (llvm-build-call
+        $builder
+        (runtime-func "rt_make_lambda" NUC-VAL
+                      (list UINTPTR (LLVMIntType 8) (LLVMIntType 32) UINTPTR))
+        (list (LLVMBuildPtrToInt $builder func UINTPTR "func-pointer-to-int")
+              (llvm-val<-int8 arity)
+              (llvm-val<-int32 (length captures))
+              (if (nil? captures)
+                (llvm-val<-int 0)
+                (LLVMBuildPtrToInt $builder captures-array UINTPTR "array-to-int")))
+        "make-lambda")
+      false)))
 
 (defun runtime-func (name return-type arg-types)
   (let ((func (LLVMGetNamedFunction $module name)))
@@ -331,10 +352,13 @@
     ((atom? sexpr)
      (if (member? sexpr to-ignore)
        nil
-       (let ((binding (get-lvalue context sexpr)))
-         (if (nil? binding) nil (list (cons sexpr binding))))))
+       (let ((binding (get-binding context sexpr)))
+         (if (and (not (nil? binding))
+                  (binding-lvalue? binding))
+           (list binding)
+           nil))))
     ((eq? (car sexpr) 'let)
-     ;; let/let* can shadow variables, producing spurious captures
+     ;; let can shadow variables, producing spurious captures
      (let ((to-ignore (append! (map car (second sexpr)) to-ignore)))
        (append!
          (mappend (lambda (clause)
@@ -342,3 +366,13 @@
                   (second sexpr))
          (%find-captured-vars context (cddr sexpr) to-ignore))))
     (true (mappend (lambda (e) (%find-captured-vars context e to-ignore)) sexpr))))
+
+(defun simple-int-cmp (val1 val2)
+  (make-term
+    'bool
+    (LLVMBuildZExt
+      $builder
+      (LLVMBuildICmp $builder LLVMIntEQ val1 val2 "")
+      (LLVMIntType 32)
+      "")
+    false))

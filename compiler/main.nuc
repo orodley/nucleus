@@ -56,7 +56,7 @@
                                  "a.out"
                                  (second non-flag-args)))
               (llvm-context (LLVMGetGlobalContext))
-              (context (make-context nil nil nil)))
+              (context (make-context (copy-list $constants) nil nil)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
          (process-toplevel-form context '(defvar $status-code 0))
@@ -76,16 +76,20 @@
            (LLVMPositionBuilderAtEnd $builder
                                      (LLVMAppendBasicBlock main-func "entry"))
            ;; Store args in $argv
-           (LLVMBuildCall
+           (llvm-build-call
              $builder
              (runtime-func "rt_store_argv" VOID (list INT (LLVMPointerType CHAR* 0)))
-             (llvm-params main-func) 2 "")
+             (llvm-params main-func) "")
            (each (lambda (init)
                    (let ((var (car init))
                          (expr (cdr init)))
-                     (LLVMBuildStore $builder (compile-expr context expr) var)))
+                     ;; TODO: statically typed globals
+                     (LLVMBuildStore $builder (tv (coerce context
+                                                          (compile-expr context expr)
+                                                          '?))
+                                     var)))
                  (reverse $initialisers))
-           (LLVMBuildCall $builder entry-point nil 0 "")
+           (llvm-build-call $builder entry-point nil "")
            (LLVMBuildRet
              $builder
              (LLVMBuildIntCast
@@ -93,7 +97,7 @@
                (LLVMBuildLShr
                  $builder
                  (LLVMBuildLoad
-                   $builder (get-lvalue context '$status-code) "")
+                   $builder (tv (binding-term (get-binding context '$status-code))) "")
                  (llvm-val<-int LOWTAG-BITS)
                  "")
                INT
@@ -110,6 +114,7 @@
                (let ((llvm-dis-success
                        (zero? (exec "llvm-dis"
                                     (list tmp-bc-file "-o" output-filename)))))
+                 ;; TODO: Don't fork just to remove a file...
                  (exec "rm" (list tmp-bc-file))
                  (unless llvm-dis-success
                    (panic! "llvm-dis failed"))))
@@ -142,9 +147,11 @@
       (write-string-ln "Usage: nucc <input filename>"))))
 
 (defun process-toplevel-form (context form)
+  ;(format true "(p-t-l .. ~)" form)
   ;; TODO: Once we have 'defmacro' we'll need to another pass over the toplevel
   ;; forms to find 'defmacro's and compile their dependency tree
   (set form (macroexpand context form))
+  ;(format true "macroexpanded = ~" form)
   (case (first form)
     ('defun
      (unless (length>= form 3)
@@ -163,7 +170,7 @@
                            (true '?))))
        (unless (and (symbol? name) (list? arg-list))
          (fail! context (format nil "Malformed 'defun' form: ~" form)))
-       (add-func context name arg-names arg-types return-type body)))
+       (add-func context name arg-names arg-types return-type 'nucleus body)))
     ('defvar
      (when (length>= form 4)
        (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
@@ -177,6 +184,7 @@
        (LLVMSetInitializer global init)
        (unless (int? value)
          (add-initialiser global value))))
+    ;; TODO: unify extern/cfun
     ('extern
      (unless (length-is? (cdr form) 4)
        (fail!
@@ -185,15 +193,12 @@
            nil
            "Invalid number of arguments to 'extern' (got ~, expected 4)"
            (length (cdr form)))))
-     ;; TODO: possibly better to do this directly?
-     (process-toplevel-form
-       context
-       (let ((args (map (lambda (_) (gensym)) (repeat (third form) nil))))
-         ;; TODO: Life without quasiquote is painful
-         (list 'defun (fifth form) args
-               ;; TODO: we should make the name be a symbol - change this once
-               ;; we're bootstrapped
-               (cons '%raw-call (cons (second form) args))))))
+     (let* ((extern-name (second form))
+            (arity (third form))
+            (nuc-name (fifth form))
+            (llvm-func (runtime-func (string<-symbol extern-name) NUC-VAL (repeat arity NUC-VAL)))
+            (func (make-func nuc-name arity nil (repeat arity '?) '? 'extern nil llvm-func)))
+       (set $functions (cons (cons nuc-name func) $functions))))
     ('cfun
      (unless (length-is? (cdr form) 4)
        (fail!
@@ -201,13 +206,15 @@
                          (length (cdr form)))))
      (let* ((name (second form))
             (arg-types (third form))
+            (arity (length arg-types))
             (ret-type (fifth form))
-            (args (map (lambda (_) (gensym)) arg-types )))
-       (process-toplevel-form
-         context
-         ;; TODO: Life without quasiquote is painful
-         (list 'defun name args
-               (list '%c-call (string<-symbol name) (zipl arg-types args) ret-type)))))
+            (llvm-func (runtime-func
+                         (string<-symbol name)
+                         (llvm-type<-type-spec context ret-type)
+                         (map (lambda (t) (llvm-type<-type-spec context t))
+                              arg-types)))
+            (func (make-func name arity nil arg-types ret-type 'extern nil llvm-func)))
+       (set $functions (cons (cons name func) $functions))))
     ('include
      (unless (length-is? (cdr form) 1)
        (fail!
@@ -268,39 +275,77 @@
         (true (macroexpand context (builtin-macro args)))))
     sexpr))
 
+;; TODO: This is basically a subset of what compile-lambda does, we should
+;; unify the two.
 (defun compile-function (context func)
-  (let* ((args (func-arg-names func))
-         (env (context-env context))
-         (llvm-func (func-llvm-func func))
-         (params (llvm-params llvm-func)))
-    (assert! (not (null? llvm-func)) "Function should have been declared")
-    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
-    ;; TODO: set LLVM param names
-    (set context (extend-env-with-values context args params))
-    (context-set-func context func)
-    (let ((compiled (LLVMBuildRet $builder
-                                  (compile-progn context (func-body func)))))
-      (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
-        (LLVMDumpValue llvm-func)
-        (fail! context "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
-      compiled)))
+  ;(format true "(c-f ... ~)" func)
+  ;; if it's extern we don't need to compile it, the implmentation already
+  ;; exists and will be found at link time
+  (when (eq? (func-impl-type func) 'nucleus)
+    (let* ((args (func-arg-names func))
+           (env (context-env context))
+           (llvm-func (func-llvm-func func))
+           (params (llvm-params llvm-func)))
+      (assert! (not (null? llvm-func)) "Function should have been declared")
+      (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
+      ;; TODO: set LLVM param names
+      (set context (extend-env-with-terms
+                     context
+                     args
+                     (map2 (lambda (typ val) (make-term typ val true))
+                           (func-arg-types func)
+                           params)))
+      (context-set-func context func)
+      (let ((compiled (LLVMBuildRet $builder
+                                    (tv (coerce context
+                                                (compile-progn context (func-body func))
+                                                (func-return-type func))))))
+        (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
+          (LLVMDumpValue llvm-func)
+          (fail! context "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
+        compiled))))
 
 (defun compile-expr (context expr)
+  ;(format true "(c-e ... ~)" expr)
+  (let ((term (%compile-expr context expr)))
+    ;(format true "(c-e ... ~) -> ~" expr term)
+    term))
+
+(defun %compile-expr (context expr)
   (case (type expr)
     ;; TODO: limit on size
-    (fixnum-t (llvm-val<-int (<< expr LOWTAG-BITS)))
+    (fixnum-t (make-term 'i64 (llvm-val<-int expr) false))
     (symbol-t
-      (let ((value (get-value context expr)))
-        (if (nil? value)
-          (fail! context (format nil "Undefined variable '~'" expr))
-          value)))
+      (let* ((binding (get-binding context expr))
+             (term
+               (cond
+                 ((nil? binding)
+                  (let ((func (get-func expr)))
+                    (if (not (nil? func))
+                      (make-lambda (func-llvm-func func)
+                                   (LLVMCountParams (func-llvm-func func))
+                                   nil)
+                      (fail! context
+                             (format nil "Undefined variable '~' in env ~"
+                                     expr (context-env context))))))
+                 (true (binding-term binding)))))
+        (if (tl? term)
+          (make-term
+            (tt term)
+            (LLVMBuildLoad $builder
+                           (tv (binding-term binding))
+                           (string<-symbol expr))
+            false)
+          term)))
     (cons-t (compile-form context expr))
-    (string-t (LLVMBuildCall
-                $builder
-                (runtime-func "rt_make_string" NUC-VAL (list SIZE-T CHAR*))
-                (list (llvm-val<-int (length expr)) (global-string expr))
-                2
-                "make-string-literal"))
+    (string-t (make-term
+                'string
+                (llvm-build-call
+                  $builder
+                  (runtime-func "rt_make_string" STRING-PTR (list SIZE-T CHAR*))
+                  (list (llvm-val<-int (length expr)) (global-string expr))
+                  "make-string-literal")
+                false))
     (default (fail! context
                     (format nil "Don't know how to compile this type of expression: ~"
                             expr)))))
@@ -313,22 +358,26 @@
       (special-form context args)
       (let ((builtin-function (get-builtin-function name)))
         (if (not (nil? builtin-function))
-          (builtin-function context (map (lambda (arg)
-                                           (compile-expr context arg))
-                                         args))
+          (builtin-function context (map (lambda (arg) (compile-expr context arg)) args))
           (let ((func (get-func name)))
             (if (not (nil? func))
               ;; Calling a static function
-              (let ((llvm-func (func-llvm-func func)))
+              (let (;(_ (format true "~: a-t = ~" (func-name func) (func-arg-types func)))
+                    (llvm-func (func-llvm-func func))
+                    (arg-terms (map2 (lambda (e typ)
+                                       (coerce context (compile-expr context e) typ))
+                                     args
+                                     (func-arg-types func))))
                 (if (eq? (LLVMCountParams llvm-func) (length args))
-                  (LLVMBuildCall $builder llvm-func
-                                 (map (lambda (e) (compile-expr context e)) args)
-                                 (length args) "")
+                  (make-term
+                    (func-return-type func)
+                    (llvm-build-call $builder llvm-func (map tv arg-terms) "")
+                    false)
                   (fail! context
                          (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
                                  name (length args) (LLVMCountParams llvm-func)))))
-              (let ((value (compile-expr context name)))
-                (if (not (nil? value))
-                  ;; Calling a closure pointer
-                  (call-closure context value args)
-                  (fail! context (format nil "Undefined function '~'" name)))))))))))
+              ;; Calling a closure pointer
+              ;; TODO: store RTTI in closures
+              (make-term '?
+                         (call-closure context (tv (compile-expr context name)) args)
+                         false))))))))

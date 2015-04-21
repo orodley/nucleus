@@ -27,13 +27,13 @@ void rt_store_argv(int32_t argc, char *argv[])
 	}
 
 	Cons *c = gc_alloc(sizeof *c);
-	c->car = rt_make_string(strlen(argv[0]), argv[0]);
+	c->car = ((nuc_val)rt_make_string(strlen(argv[0]), argv[0])) | STRING_LOWTAG;
 	argv_list = ((nuc_val)c) | CONS_LOWTAG;
 	for (int32_t i = 1; i < argc; i++) {
 		Cons *cdr = gc_alloc(sizeof *cdr);
 		c->cdr = ((nuc_val)cdr) | CONS_LOWTAG;
 		c = cdr;
-		c->car = rt_make_string(strlen(argv[i]), argv[i]);
+		c->car = ((nuc_val)rt_make_string(strlen(argv[i]), argv[i])) | STRING_LOWTAG;
 	}
 
 	c->cdr = NIL;

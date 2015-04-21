@@ -1,31 +1,57 @@
-(defun remove-lowtag (nuc-val)
-  (LLVMBuildAnd $builder nuc-val
+;;; TODO: Replace with a struct once they exist
+;;; A 'term' is the compile-time form of a nucleus value. It has a corresponding
+;;; LLVMValueRef, type, and boolean indicating whether it is an lvalue (i.e.
+;;; can be assigned to). If the type is unknown, it defaults to ?, the dynamic
+;;; type.
+(defun make-term (typ val lvalue?) (list typ val lvalue?))
+(defun tt (term) (first term))
+(defun tv (term) (second term))
+(defun tl? (term) (third term))
+
+(defun coerce (context term typ)
+  ;(format true "(coerce ... ~ ~)" term typ)
+  (cond
+    ((eq? (tt term) typ) term)
+    ((eq? (tt term) '?) (make-term typ (static-val<-dynamic-val context typ (tv term)) (tl? term)))
+    ((eq? typ '?)
+     (make-term typ (dynamic-val<-static-val context (tt term) (tv term)) (tl? term)))
+    (true
+      (make-term typ (cast context term typ) (tl? term)))))
+
+(defun consistent? (type1 type2)
+  (cond
+    ((eq? type1 type2) true)
+    ((eq? type1 '?) true)
+    ((eq? type2 '?) true)))
+
+(defun numeric (typ) (member? typ '(int uint long long-long uint8 u8 i32 i64)))
+
+(defun remove-lowtag (val)
+  (LLVMBuildAnd $builder val
                 ;; This is (~ (- (<< 1 LOWTAG-BITS) 1)).
                 ;; We can't write that directly as it exceeds the 61-bit limit
                 ;; of nucleus fixnums
                 (LLVMConstIntOfString (LLVMIntType 64) "fffffffffffffff8" 16)
                 "remove-lowtag"))
 
-(defun add-lowtag (nuc-val tag)
+(defun add-lowtag (val tag)
   (LLVMBuildOr $builder
-               (LLVMBuildPtrToInt $builder nuc-val NUC-VAL "ptr-to-int")
+               (LLVMBuildPtrToInt $builder val NUC-VAL "ptr-to-int")
                (llvm-val<-int tag) "add-lowtag"))
 
 (defun check-type (val type-as-llvm-val)
   (if (cons? type-as-llvm-val)
-    (LLVMBuildCall
+    (llvm-build-call
       $builder
       (runtime-func "rt_check_union_type" VOID (list NUC-VAL NUC-VAL NUC-VAL))
       ;; TODO: should make rt_check_union_type varargs
       (list val (first type-as-llvm-val) (second type-as-llvm-val))
-      3
       "")
-    (LLVMBuildCall
+    (llvm-build-call
       $builder
       (runtime-func "rt_check_type" VOID (list NUC-VAL NUC-VAL CHAR* CHAR* INT))
       (list val type-as-llvm-val (LLVMConstNull CHAR*) (LLVMConstNull CHAR*)
             (llvm-val<-int32 0))
-      5
       "")))
 
 ;; TODO: rename these
@@ -35,26 +61,63 @@
 (defun nuc-val<-int (int)
   (LLVMBuildShl $builder int (llvm-val<-int LOWTAG-BITS) "nuc-val<-int"))
 (defun int<-nuc-val (nuc-val)
-  ; TODO: type checking
-  (LLVMBuildLShr $builder nuc-val (llvm-val<-int LOWTAG-BITS) "int<-nuc-val"))
+  (LLVMBuildAShr $builder nuc-val (llvm-val<-int LOWTAG-BITS) "int<-nuc-val"))
 
 (defun cons<-nuc-val (nuc-val)
   ; TODO: type checking
   (LLVMBuildIntToPtr $builder (remove-lowtag nuc-val) CONS-CELL-PTR ""))
 
+;;; TODO: this should probably have an extra phase - converting into a nucleus
+;;; type object.
+
 (defun llvm-type<-type-spec (context type-spec)
   (case type-spec
+    ;; FFI stuff
     ('* UINTPTR)
-    ('string CHAR*)
+    ('char* CHAR*)
     ('void VOID)
     ('int INT) ('uint INT) ('bool INT)
-    ('uint8 (LLVMIntType 8))
     ('long LONG)
     ('long-long LONG-LONG)
     ('array (LLVMPointerType UINTPTR 0))
+
+    ;; Fixed width integer types
+    ;; TODO: remove duplicates (only there for bootstrapping)
+    ('uint8 (LLVMIntType 8))
+    ('u8 (LLVMIntType 8))
+    ('i32 (LLVMIntType 32))
+    ('i64 (LLVMIntType 64))
+
+    ;; Primitive nucleus types
+    ('? NUC-VAL)
+    ('symbol (LLVMIntType 32))
+    ('bool (LLVMIntType 32))
+    ('string STRING-PTR)
+    ;; TODO: what size should a statically typed nil be? 32 or 64 bits?
+    ('nil-t (LLVMIntType 64))
+
+    (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
+
+(defun type-id<-type-spec (context type-spec)
+  (case type-spec
+    ;; FFI stuff
+    ('* LLVM-FOREIGN-T)
+    ('char* LLVM-STRING-T)
+    ('void LLVM-NIL-T)
+    ('int LLVM-FIXNUM-T) ('uint LLVM-FIXNUM-T) ('long-long LLVM-FIXNUM-T)
+    ('uint8 LLVM-FIXNUM-T) ('u8 LLVM-FIXNUM-T) ('i32 LLVM-FIXNUM-T)
+    ('i64 LLVM-FIXNUM-T)
+
+    ;; Primitive nucleus types
+    ('symbol LLVM-SYMBOL-T)
+    ('bool LLVM-BOOL-T)
+    ('string LLVM-STRING-T)
+    ('nil-t LLVM-NIL-T)
+
     (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
 (defun static-val<-dynamic-val (context type-spec val)
+  ;(format true "(s-v<-d-v ... ~ ~)" type-spec val)
   (cond
     ((eq? type-spec '*)
      (check-type val LLVM-FOREIGN-T)
@@ -67,13 +130,14 @@
          "")
        UINTPTR
        ""))
-    ((eq? type-spec 'string)
+    ((eq? type-spec 'char*)
      (check-type val LLVM-STRING-T)
-     (LLVMBuildCall
+     (llvm-build-call
        $builder
        (runtime-func "rt_nuc_str_to_c_str" CHAR* (list NUC-VAL))
-       (list val) 1 "static-val<-dynamic-val"))
-    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8))
+       (list val) "static-val<-dynamic-val"))
+    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8
+                              'i32 'i64))
      (check-type val LLVM-FIXNUM-T)
      (LLVMBuildIntCast
        $builder
@@ -82,22 +146,29 @@
        "cast-nuc-val"))
     ((eq? type-spec 'bool)
      (check-type val LLVM-BOOL-T)
-     (LLVMBuildIntCast
-       $builder
-       (LLVMBuildICmp $builder LLVMIntEQ val LLVM-TRUE "int<-bool")
-       (llvm-type<-type-spec context 'int)
-       ""))
+     (LLVMBuildSelect $builder (LLVMBuildICmp $builder LLVMIntEQ val LLVM-TRUE "")
+                      (llvm-val<-int32 1) (llvm-val<-int32 0) ""))
+    ((eq? type-spec 'string)
+     (check-type val LLVM-STRING-T)
+     (LLVMBuildIntToPtr $builder (remove-lowtag val) STRING-PTR ""))
     ((eq? type-spec 'array)
      (check-type val (list LLVM-CONS-T LLVM-NIL-T))
-     (LLVMBuildCall
+     (llvm-build-call
        $builder
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context type-spec) (list NUC-VAL))
        (list val)
-       1
        "array<-list"))
+    ((eq? type-spec 'nil-t)
+     (check-type val LLVM-NIL-T)
+     (llvm-val<-int 0))
+    ((eq? type-spec 'type)
+     ;; TODO: We should have a separate exttag for types so that we can do a
+     ;; check-type here.
+     (LLVMBuildLShr $builder val (llvm-val<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
     (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
-(defun dynamic-val<-static-val (type-spec val)
+(defun dynamic-val<-static-val (context type-spec val)
+  ;(format true "(d-v<-s-v ... ~ ~)" type-spec val)
   (cond
     ((eq? type-spec '*)
       (add-lowtag
@@ -106,10 +177,47 @@
           box)
         FOREIGN-LOWTAG))
     ((eq? type-spec 'void) LLVM-NIL)
-    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8))
+    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8
+                              'i32 'i64))
      (nuc-val<-int
        (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
     ((eq? type-spec 'bool)
-     (LLVMBuildSelect $builder
-                      (LLVMBuildICmp $builder LLVMIntEQ val (llvm-val<-int32 0) "")
-                      LLVM-FALSE LLVM-TRUE ""))))
+     ;(format true "d-v<-s-v: val = ~" val)
+     (let ((zero (LLVMConstInt (LLVMTypeOf val) 0 false)))
+       (LLVMBuildSelect $builder
+                        (LLVMBuildICmp $builder LLVMIntEQ val zero "")
+                        LLVM-FALSE LLVM-TRUE "")))
+    ((eq? type-spec 'string) (add-lowtag val STRING-LOWTAG))
+    ((eq? type-spec 'nil-t) LLVM-NIL)
+    ((eq? type-spec 'type)
+     (LLVMBuildOr
+       $builder
+       (LLVMBuildShl
+       $builder
+       val
+       (llvm-val<-int32 (+ LOWTAG-BITS EXTTAG-BITS))
+       "")
+       (llvm-val<-int32 (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
+       ""))
+    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))  ))
+
+;;; Performs an implicit conversion between two static types.
+(defun cast (context term typ)
+  ;(format true "(cast ... ~ ~)" term typ)
+  (cond
+    ((and (numeric (tt term)) (numeric typ))
+     (LLVMBuildIntCast
+       $builder
+       (tv term)
+       (llvm-type<-type-spec context typ)
+       ""))
+    ((and (eq? (tt term) 'string) (eq? typ 'char*))
+     (LLVMBuildBitCast
+       $builder
+       (LLVMBuildStructGEP $builder (tv term) 1 "")
+       CHAR*
+       ""))
+    (true (fail! context
+                 (format nil
+                         "Static type error: tried to use a term of type '~' where '~' was wanted"
+                         (tt term) typ)))))

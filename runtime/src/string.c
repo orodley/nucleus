@@ -4,14 +4,14 @@
 #include "gc.h"
 #include "nuc.h"
 
-nuc_val rt_make_string(size_t length, char *bytes)
+String *rt_make_string(size_t length, char *bytes)
 {
 	String *str = gc_alloc(sizeof *str + length + 1);
 	str->length = length;
 	strncpy(str->bytes, bytes, length);
 	str->bytes[length] = '\0';
 
-	return ((nuc_val)str) | STRING_LOWTAG;
+	return str;
 }
 
 nuc_val rt_string_length(nuc_val string)
@@ -39,7 +39,7 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 {
 	if (char_list == NIL) {
 		char nothing = '\0';
-		return rt_make_string(0, &nothing);
+		return ((nuc_val)rt_make_string(0, &nothing)) | STRING_LOWTAG;
 	}
 
 	CHECK(char_list, CONS_TYPE);
@@ -60,7 +60,7 @@ nuc_val rt_char_list_to_string(nuc_val char_list)
 		str_bytes[i++] = (char)NUC_VAL_TO_INT(tmp->car);
 	}
 
-	nuc_val string = rt_make_string(len, str_bytes);
+	nuc_val string = ((nuc_val)rt_make_string(len, str_bytes)) | STRING_LOWTAG;
 	free(str_bytes);
 	return string;
 }
@@ -98,5 +98,5 @@ nuc_val rt_substring(nuc_val str_val, nuc_val start_val, nuc_val end_val)
 
 	size_t length = end - start;
 	char *bytes = str->bytes + start;
-	return rt_make_string(length, bytes);
+	return ((nuc_val)rt_make_string(length, bytes)) | STRING_LOWTAG;
 }

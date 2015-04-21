@@ -51,7 +51,7 @@ nuc_val rt_symbol_to_string(nuc_val sym)
 	int index = sym >> LOWTAG_BITS;
 	char *str = look_up_symbol(&sym_tab, index);
 
-	return rt_make_string(strlen(str), str);
+	return ((nuc_val)rt_make_string(strlen(str), str)) | STRING_LOWTAG;
 }
 
 nuc_val rt_string_to_symbol(nuc_val str_val)
