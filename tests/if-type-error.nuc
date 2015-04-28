@@ -1,0 +1,4 @@
+; compile-stderr: Static type error
+
+(defun main ()
+  (if 23 1 2))

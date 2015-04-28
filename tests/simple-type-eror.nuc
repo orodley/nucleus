@@ -1,0 +1,4 @@
+; compile-stderr: Static type error
+
+(defun main ()
+  (+ "foo" 1))
