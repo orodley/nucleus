@@ -184,22 +184,7 @@
        (LLVMSetInitializer global init)
        (unless (int? value)
          (add-initialiser global value))))
-    ;; TODO: unify extern/cfun
     ('extern
-     (unless (length-is? (cdr form) 4)
-       (fail!
-         context
-         (format
-           nil
-           "Invalid number of arguments to 'extern' (got ~, expected 4)"
-           (length (cdr form)))))
-     (let* ((extern-name (second form))
-            (arity (third form))
-            (nuc-name (fifth form))
-            (llvm-func (runtime-func (string<-symbol extern-name) NUC-VAL (repeat arity NUC-VAL)))
-            (func (make-func nuc-name arity nil (repeat arity '?) '? 'extern nil llvm-func)))
-       (set $functions (cons (cons nuc-name func) $functions))))
-    ('%extern
      (unless (length-is? (cdr form) 4)
        (fail!
          context (format nil "Invalid number of arguments to 'cfun' (got ~, expected 4)"

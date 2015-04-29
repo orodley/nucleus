@@ -1,14 +1,14 @@
 ;;;; This file defines all functions relating to input and output.
 
-(extern rt_write_char_to_stream 2 -> write-char-to-stream)
-(extern rt_read_char_from_stream 1 -> read-char-from-stream)
-(extern rt_write_string_to_stream 2 -> write-string-to-stream)
-(extern rt_write_string_ln_to_stream 2 -> write-string-ln-to-stream)
-(extern rt_write_addr_to_stream 2 -> %write-addr-to-stream)
-(extern rt_symbol_to_string 1 -> string<-symbol)
-(extern rt_string_to_symbol 1 -> symbol<-string)
-(extern rt_make_string_stream 1 -> make-string-stream)
-(extern rt_string_stream_to_string 1 -> string<-string-stream)
+(extern (rt_write_char_to_stream write-char-to-stream) (? ?) -> ?)
+(extern (rt_read_char_from_stream read-char-from-stream) (?) -> ?)
+(extern (rt_write_string_to_stream write-string-to-stream) (? ?) -> ?)
+(extern (rt_write_string_ln_to_stream write-string-ln-to-stream) (? ?) -> ?)
+(extern (rt_write_addr_to_stream %write-addr-to-stream) (? ?) -> ?)
+(extern (rt_symbol_to_string string<-symbol) (?) -> ?)
+(extern (rt_string_to_symbol symbol<-string) (?) -> ?)
+(extern (rt_make_string_stream make-string-stream) (?) -> ?)
+(extern (rt_string_stream_to_string string<-string-stream) (?) -> ?)
 
 (defun read-char ()
   (read-char-from-stream $stdin))

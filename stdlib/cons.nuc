@@ -1,10 +1,10 @@
 ;;;; Everything to do with conses
 
-(extern rt_cons 2 -> cons)
-(extern rt_set_car 2 -> set-car)
-(extern rt_set_cdr 2 -> set-cdr)
-(extern rt_char_list_to_string 1 -> string<-char-list)
-(extern rt_string_to_char_list 1 -> char-list<-string)
+(extern (rt_cons cons) (? ?) -> ?)
+(extern (rt_set_car set-car) (? ?) -> ?)
+(extern (rt_set_cdr set-cdr) (? ?) -> ?)
+(extern (rt_char_list_to_string string<-char-list) (?) -> ?)
+(extern (rt_string_to_char_list char-list<-string) (?) -> ?)
 
 (defun car (c) (car c))
 (defun cdr (c) (cdr c))

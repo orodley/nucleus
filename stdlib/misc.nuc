@@ -1,6 +1,6 @@
 ;; TODO: make this take varags and a format string
-(extern rt_panic 1 -> panic!)
-(extern rt_type 1 -> type)
+(extern (rt_panic panic!) (?) -> ?)
+(extern (rt_type type) (?) -> ?)
 
 (defun not (bool)
   (if bool false true))
@@ -15,7 +15,7 @@
   (if (not condition)
     (panic! message)))
 
-(extern rt_rand 0 -> random)
+(extern (rt_rand random) () -> ?)
 
 (defvar $gensym-counter 0)
 

@@ -1,18 +1,18 @@
 ;;;; Functions for interacting with the operating system
 
-(extern rt_get_argv 0 -> %get-argv)
+(extern (rt_get_argv %get-argv) () -> ?)
 (defvar $argv (%get-argv))
 
-(extern rt_get_stdin 0 -> %get-stdin)
+(extern (rt_get_stdin %get-stdin) () -> ?)
 (defvar $stdin (%get-stdin))
 
-(extern rt_get_stdout 0 -> %get-stdout)
+(extern (rt_get_stdout %get-stdout) () -> ?)
 (defvar $stdout (%get-stdout))
 
-(extern rt_open 1 -> open)
-(extern rt_close 1 -> close)
+(extern (rt_open open) (?) -> ?)
+(extern (rt_close close) (?) -> ?)
 
-(extern rt_exec 2 -> exec)
+(extern (rt_exec exec) (? ?) -> ?)
 
-(extern rt_current_dir 0 -> current-dir)
-(extern rt_file_exists 1 -> file-exists?)
+(extern (rt_current_dir current-dir) () -> ?)
+(extern (rt_file_exists file-exists?) (?) -> ?)

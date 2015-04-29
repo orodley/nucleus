@@ -1,6 +1,6 @@
-(extern rt_get_null 0 -> %get-null)
+(extern (rt_get_null %get-null) () -> ?)
 (defvar NULL (%get-null))
 
-(extern rt_null_p 1 -> null?)
+(extern (rt_null_p null?) (?) -> ?)
 
-(extern rt_ptr_eq 2 -> ptr-eq?)
+(extern (rt_ptr_eq ptr-eq?) (? ?) -> ?)

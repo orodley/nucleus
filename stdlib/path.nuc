@@ -14,4 +14,4 @@
     path
     (ensure-absolute (join-path base path) (current-dir))))
 
-(extern rt_dirname 1 -> dirname)
+(extern (rt_dirname dirname) (?) -> ?)
