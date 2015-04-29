@@ -26,6 +26,9 @@
 
 (defun numeric (typ) (member? typ '(int uint long long-long uint8 u8 i32 i64)))
 
+(defun type-width (context typ)
+  (LLVMGetIntTypeWidth (llvm-type<-type-spec context typ)))
+
 (defun remove-lowtag (val)
   (LLVMBuildAnd $builder val
                 ;; This is (~ (- (<< 1 LOWTAG-BITS) 1)).
@@ -216,3 +219,25 @@
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was wanted"
                          (tt term) typ)))))
+
+;;; Given a bunch of terms, which are arguments to some arithmetic builtin, this
+;;; converts them all to the same type, determined by the largest width of all
+;;; given terms.
+(defun arithmetic-conversion (context terms)
+  (let ((max-width-type 'u8))
+    (each (lambda (term)
+            (let ((typ (tt term)))
+              (if (not (or (eq? typ '?) (numeric typ)))
+                (fail! context (format nil "Static type error: tried to use a term of type '~' where a numeric type was expected"
+                                       typ)))
+              (if (> (type-width context typ)
+                     (type-width context max-width-type))
+                (set max-width-type typ))))
+          terms)
+    ;; We need to make sure we have an actual integral type at this point, not
+    ;; a tagged value.
+    (if (eq? max-width-type '?)
+      (set max-width-type 'i64))
+    (cons max-width-type
+          (map (lambda (term) (tv (coerce context term max-width-type)))
+               terms))))

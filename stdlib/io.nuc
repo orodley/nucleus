@@ -123,7 +123,7 @@
        (let ((list-head (cons nil nil)))
          (read-string stream list-head)
          (string<-char-list (cdr list-head))))
-      ((<= 48 c 57) (read-fixnum stream (- c 48)))
+      ((and (<= 48 c) (<= c 57)) (read-fixnum stream (- c 48)))
       ((eq? c 40)
        (let ((list-head (cons nil nil)))
          (read-list stream list-head)
@@ -155,7 +155,7 @@
 (defun read-fixnum (stream acc)
   (let ((c (%read-char stream)))
     (cond
-      ((<= 48 c 57)
+      ((and (<= 48 c) (<= c 57))
        (read-fixnum stream (+ (* acc 10) (- c 48))))
       (true
         (back-up-char c)

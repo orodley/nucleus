@@ -8,7 +8,13 @@
     (cons 'cons builtin-cons)
     (cons 'car builtin-car)
     (cons 'cdr builtin-cdr)
-    (cons 'eq? builtin-eq?)))
+    (cons 'eq? builtin-eq?)
+    ;; TODO: these should be variable arity. maybe a macro which expands into
+    ;; the binary version?
+    (cons '< builtin-<)
+    (cons '<= builtin-<=)
+    (cons '> builtin->)
+    (cons '>= builtin->=)))
 (defvar $special-forms
   (list
     (cons 'set special-form-set)
@@ -16,14 +22,7 @@
     (cons 'progn special-form-progn)
     (cons 'if special-form-if)
     (cons 'quote special-form-quote)
-    (cons 'lambda special-form-lambda)
-
-    ;; TODO: these should be regular functions which call into some internal
-    ;; compiler primitive once we have varargs
-    (cons '< special-form-<)
-    (cons '<= special-form-<=)
-    (cons '> special-form->)
-    (cons '>= special-form->=)))
+    (cons 'lambda special-form-lambda)))
 (defvar $builtin-macros ;; TODO: should be in the stdlib
   (list
     (cons 'let* builtin-macro-let*)
@@ -286,40 +285,28 @@
 
 
 (defun comparison (context cmp llvm-cmp operands)
-  (if (length-is? operands 2)
+  (if (not (length-is? operands 2))
+    (fail! context (format nil "~ can only take two operands" cmp)))
+  (let ((vals (cdr (arithmetic-conversion context operands))))
     (make-term
       'bool
       (LLVMBuildZExt
         $builder
-        (LLVMBuildICmp $builder llvm-cmp
-                       (tv (coerce context (compile-expr context (first operands)) 'i64))
-                       (tv (coerce context (compile-expr context (second operands)) 'i64))
-                       "")
+        (LLVMBuildICmp $builder llvm-cmp (first vals) (second vals) cmp)
         (LLVMIntType 32)
         "")
-      false)
-    ;; TODO: Life without quasiquote is painful
-    (compile-expr context (list 'if
-                                (list cmp
-                                      (first operands)
-                                      (second operands))
-                                (cons cmp (cdr operands))
-                                'false))))
-(defun special-form-< (context args) (comparison context '< LLVMIntSLT args))
-(defun special-form-<= (context args) (comparison context '<= LLVMIntSLE args))
-(defun special-form-> (context args) (comparison context '> LLVMIntSGT args))
-(defun special-form->= (context args) (comparison context '>= LLVMIntSGE args))
+      false)))
+(defun builtin-< (context args) (comparison context "<" LLVMIntSLT args))
+(defun builtin-<= (context args) (comparison context "<=" LLVMIntSLE args))
+(defun builtin-> (context args) (comparison context ">" LLVMIntSGT args))
+(defun builtin->= (context args) (comparison context ">=" LLVMIntSGE args))
 
 (defun arithmetic-builtin (context args llvm-op name)
-  (reduce (lambda (a b)
-            (make-term
-              'i64
-              (llvm-op $builder
-                       (tv (coerce context a 'i64))
-                       (tv (coerce context b 'i64))
-                       name)
-              false))
-          args))
+  (let* ((typ-and-vals (arithmetic-conversion context args))
+         (typ (car typ-and-vals))
+         (vals (cdr typ-and-vals)))
+    (make-term 
+      typ (reduce (lambda (a b) (llvm-op $builder a b name false)) vals) false)))
 (defun builtin+ (context args) (arithmetic-builtin context args %LLVMBuildAdd "+"))
 (defun builtin- (context args) (arithmetic-builtin context args %LLVMBuildSub "-"))
 (defun builtin* (context args) (arithmetic-builtin context args %LLVMBuildMul "*"))
