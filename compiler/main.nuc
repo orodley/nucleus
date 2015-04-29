@@ -199,22 +199,25 @@
             (llvm-func (runtime-func (string<-symbol extern-name) NUC-VAL (repeat arity NUC-VAL)))
             (func (make-func nuc-name arity nil (repeat arity '?) '? 'extern nil llvm-func)))
        (set $functions (cons (cons nuc-name func) $functions))))
-    ('cfun
+    ('%extern
      (unless (length-is? (cdr form) 4)
        (fail!
          context (format nil "Invalid number of arguments to 'cfun' (got ~, expected 4)"
                          (length (cdr form)))))
-     (let* ((name (second form))
+     (let* ((names (second form))
+            (extern-name (if (cons? names) (first names) names))
+            (nuc-name (if (cons? names) (second names) names))
             (arg-types (third form))
             (arity (length arg-types))
             (ret-type (fifth form))
             (llvm-func (runtime-func
-                         (string<-symbol name)
+                         (string<-symbol extern-name)
                          (llvm-type<-type-spec context ret-type)
                          (map (lambda (t) (llvm-type<-type-spec context t))
                               arg-types)))
-            (func (make-func name arity nil arg-types ret-type 'extern nil llvm-func)))
-       (set $functions (cons (cons name func) $functions))))
+            (func (make-func nuc-name arity nil arg-types
+                             ret-type 'extern nil llvm-func)))
+       (set $functions (cons (cons nuc-name func) $functions))))
     ('include
      (unless (length-is? (cdr form) 1)
        (fail!

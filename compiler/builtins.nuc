@@ -305,7 +305,7 @@
   (let* ((typ-and-vals (arithmetic-conversion context args))
          (typ (car typ-and-vals))
          (vals (cdr typ-and-vals)))
-    (make-term 
+    (make-term
       typ (reduce (lambda (a b) (llvm-op $builder a b name false)) vals) false)))
 (defun builtin+ (context args) (arithmetic-builtin context args %LLVMBuildAdd "+"))
 (defun builtin- (context args) (arithmetic-builtin context args %LLVMBuildSub "-"))
