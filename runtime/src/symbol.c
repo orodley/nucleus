@@ -14,7 +14,7 @@ typedef struct Symbol_table
 
 static Symbol_table sym_tab;
 
-nuc_val rt_intern_symbol(char *str)
+Symbol rt_intern_symbol(char *str)
 {
 	int symbol_pos = -1;
 	for (size_t i = 0; i < MAX_SYMBOLS; i++) {
@@ -34,7 +34,7 @@ nuc_val rt_intern_symbol(char *str)
 	}
 	assert(symbol_pos != -1);
 
-	return (nuc_val)((symbol_pos << LOWTAG_BITS) | SYMBOL_LOWTAG);
+	return (uint32_t)symbol_pos;
 }
 
 char *look_up_symbol(Symbol_table *table, int symbol_index)
@@ -62,7 +62,7 @@ nuc_val rt_string_to_symbol(nuc_val str_val)
 	strncpy(c_str, str->bytes, str->length);
 	c_str[str->length] = '\0';
 
-	nuc_val symbol = rt_intern_symbol(c_str);
+	Symbol symbol = rt_intern_symbol(c_str);
 	free(str);
-	return symbol;
+	return ((nuc_val)symbol << LOWTAG_BITS) | SYMBOL_LOWTAG;
 }

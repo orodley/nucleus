@@ -203,11 +203,12 @@
                                           (list 'quote (car to-quote))
                                           (list 'quote (cdr to-quote)))))
       (symbol-t (make-term
-                  ;; TODO: statically typed symbols
-                  '?
+                  'symbol
                   (llvm-build-call
                     $builder
-                    (runtime-func "rt_intern_symbol" NUC-VAL (list CHAR*))
+                    (runtime-func "rt_intern_symbol"
+                                  (llvm-type<-type-spec context'symbol)
+                                  (list CHAR*))
                     (list (global-string (string<-symbol to-quote)))
                     "intern-const")
                   false))
@@ -251,7 +252,7 @@
          (func (compile-lambda context name args body captures)))
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
-    (make-lambda func (length args) captures)))
+    (make-lambda context func (length args) captures)))
 
 (defun builtin-macro-format (context args)
   ;; TODO: Life without quasiquote is painful

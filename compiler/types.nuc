@@ -37,6 +37,8 @@
                 (LLVMConstIntOfString (LLVMIntType 64) "fffffffffffffff8" 16)
                 "remove-lowtag"))
 
+;;; TODO: rework some of this stuff
+
 (defun add-lowtag (val tag)
   (LLVMBuildOr $builder
                (LLVMBuildPtrToInt $builder val NUC-VAL "ptr-to-int")
@@ -159,6 +161,13 @@
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context type-spec) (list NUC-VAL))
        (list val)
        "array<-list"))
+    ((eq? type-spec 'symbol)
+     (check-type val LLVM-SYMBOL-T)
+     (LLVMBuildIntCast
+       $builder
+       (LLVMBuildLShr $builder val (llvm-i64<-int LOWTAG-BITS) "remove-symbol-lowtag")
+       (llvm-type<-type-spec context type-spec)
+       ""))
     ((eq? type-spec 'nil-t)
      (check-type val LLVM-NIL-T)
      (llvm-i64<-int 0))
@@ -187,6 +196,14 @@
                         (LLVMBuildICmp $builder LLVMIntEQ val zero "")
                         LLVM-FALSE LLVM-TRUE "")))
     ((eq? type-spec 'string) (add-lowtag val STRING-LOWTAG))
+    ((eq? type-spec 'symbol)
+     (LLVMBuildOr
+       $builder
+       (LLVMBuildShl $builder (LLVMBuildZExt $builder val NUC-VAL "")
+                     (llvm-i64<-int LOWTAG-BITS)
+                     "")
+       (llvm-i64<-int SYMBOL-LOWTAG)
+       ""))
     ((eq? type-spec 'nil-t) LLVM-NIL)
     ((eq? type-spec 'type)
      (LLVMBuildOr

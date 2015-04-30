@@ -10,6 +10,7 @@
 #define UNREACHABLE assert(!"This should never be reached")
 
 typedef uint64_t nuc_val;
+typedef uint32_t Symbol;
 
 // TODO: A lot of these should probably be inline functions.
 #define LOWTAG_BITS 3

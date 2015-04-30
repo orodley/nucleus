@@ -19,7 +19,8 @@
 (defvar CONS-CELL-PTR (LLVMPointerType CONS-CELL 0))
 (defvar CLOSURE
   (LLVMStructType
-    (list UINTPTR (LLVMIntType 8) (LLVMArrayType (LLVMPointerType NUC-VAL 0) 0))
+    (list UINTPTR (LLVMIntType 8) (LLVMArrayType
+                                    (LLVMPointerType (LLVMIntType 8) 0) 0))
     3
     false))
 (defvar STRING

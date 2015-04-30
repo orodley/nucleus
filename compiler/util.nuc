@@ -183,17 +183,24 @@
                  (map2 (lambda (i binding)
                          (make-var
                            (binding-name binding)
-                           (LLVMBuildLoad
+                           (LLVMBuildBitCast
                              $builder
-                             (LLVMBuildGEP
+                             (LLVMBuildLoad
                                $builder
-                               (LLVMBuildGEP $builder (first params)
-                                             (map llvm-i32<-int (list 0 2))
-                                             2
-                                             "")
-                               (map llvm-i64<-int (list 0 i))
-                               2
-                               "get-var-from-closure")
+                               (LLVMBuildGEP
+                                 $builder
+                                 (LLVMBuildGEP $builder (first params)
+                                               (map llvm-i32<-int (list 0 2))
+                                               2
+                                               "")
+                                 (map llvm-i64<-int (list 0 i))
+                                 2
+                                 "get-var-from-closure")
+                               "")
+                             (LLVMPointerType
+                               (llvm-type<-type-spec
+                                 context (tt (binding-term binding)))
+                               0)
                              "")
                            (tt (binding-term binding))))
                        (range (length captured-bindings))
@@ -298,7 +305,7 @@
           (llvm-phi $builder NUC-VAL (list (cons then-result then-block)
                                            (cons else-result else-block))))))))
 
-(defun make-lambda (func arity captures)
+(defun make-lambda (context func arity captures)
   (let* ((ary-type (LLVMArrayType (LLVMPointerType NUC-VAL 0) (length captures)))
          (captures-array
            (if (nil? captures)
@@ -310,9 +317,17 @@
                  (LLVMBuildStore
                    $builder
                    (tv (binding-term capture))
-                   (LLVMBuildGEP $builder captures-array
-                                 (map llvm-i64<-int (list 0 i))
-                                 2 "array-elt")))
+                   (LLVMBuildBitCast
+                     $builder
+                     (LLVMBuildGEP $builder captures-array
+                                   (map llvm-i64<-int (list 0 i))
+                                   2 "array-elt")
+                     (LLVMPointerType
+                       (LLVMPointerType
+                         (llvm-type<-type-spec context (tt (binding-term capture)))
+                         0)
+                       0)
+                     "")))
                captures)
     ;; TODO: figure out the types of functions
     (make-term
