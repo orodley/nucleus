@@ -14,6 +14,8 @@ typedef struct String_stream
 	size_t write_pos;
 } String_stream;
 
+// TODO: we should probably have a separate tag for streams.
+
 typedef struct Stream
 {
 	enum

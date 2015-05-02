@@ -13,7 +13,7 @@
 (extern LLVMSetInitializer (* *) -> void)
 
 (extern LLVMConstInt (* long-long bool) -> *)
-(extern LLVMConstIntOfString (* char* uint8) -> *)
+(extern LLVMConstIntOfString (* char* u8) -> *)
 (extern LLVMConstNull (*) -> *)
 
 (extern LLVMAppendBasicBlock (* char*) -> *)

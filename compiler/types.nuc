@@ -24,7 +24,9 @@
     ((eq? type1 '?) true)
     ((eq? type2 '?) true)))
 
-(defun numeric? (typ) (member? typ '(int uint long long-long uint8 u8 i32 i64)))
+(defun numeric? (typ)
+  (member? typ '(int uint long long-long char
+                 u8 i8 i16 i32 i64)))
 
 (defun type-width (context typ)
   (LLVMGetIntTypeWidth (llvm-type<-type-spec context typ)))
@@ -74,6 +76,7 @@
   (case type-spec
     ;; FFI stuff
     ('* UINTPTR)
+    ('char (LLVMIntType 8))
     ('char* CHAR*)
     ('void VOID)
     ('int INT) ('uint INT) ('bool INT)
@@ -82,9 +85,8 @@
     ('array (LLVMPointerType UINTPTR 0))
 
     ;; Fixed width integer types
-    ;; TODO: remove duplicates (only there for bootstrapping)
-    ('uint8 (LLVMIntType 8))
     ('u8 (LLVMIntType 8))
+    ('i16 (LLVMIntType 16))
     ('i32 (LLVMIntType 32))
     ('i64 (LLVMIntType 64))
 

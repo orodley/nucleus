@@ -8,10 +8,10 @@
   ;; TODO: iterate instead of consing up huge lists needlessly
   (list-eq? (char-list<-string s1) (char-list<-string s2)))
 
-(extern (rt_string_length string-length) (?) -> ?)
-(extern (rt_char_at char-at) (? ?) -> ?)
+(extern (rt_string_length string-length) (string) -> i64)
+(extern (rt_char_at char-at) (string uint) -> char)
 ;; TODO: should we have a substring function that doesn't copy?
-(extern (rt_substring substring) (? ? ?) -> ?)
+(extern (rt_substring substring) (string i64 i64) -> string)
 
 (defun string-concat (str1 str2)
   ;; TODO: make this not be a performance disaster

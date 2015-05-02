@@ -14,25 +14,19 @@ String *rt_make_string(size_t length, char *bytes)
 	return str;
 }
 
-nuc_val rt_string_length(nuc_val string)
+uint64_t rt_string_length(String *string)
 {
-	CHECK(string, STRING_TYPE);
-	return INT_TO_NUC_VAL(((String *)REMOVE_LOWTAG(string))->length);
+	return string->length;
 }
 
-nuc_val rt_char_at(nuc_val string_val, nuc_val index_val)
+char rt_char_at(String *string, unsigned int index)
 {
-	CHECK(string_val, STRING_TYPE);
-	CHECK(index_val, FIXNUM_TYPE);
-	String *string = (String *)REMOVE_LOWTAG(string_val);
-	size_t index = NUC_VAL_TO_INT(index_val);
-
 	if (index >= string->length) {
 		fprintf(stderr, "Index %zd out of bounds for string\n", index);
 		exit(1);
 	}
 
-	return INT_TO_NUC_VAL(string->bytes[index]);
+	return string->bytes[index];
 }
 
 nuc_val rt_char_list_to_string(nuc_val char_list)
@@ -87,16 +81,10 @@ nuc_val rt_string_to_char_list(nuc_val string)
 	return ((nuc_val)head) | CONS_LOWTAG;
 }
 
-nuc_val rt_substring(nuc_val str_val, nuc_val start_val, nuc_val end_val)
+String *rt_substring(String *str, uint64_t start, uint64_t end)
 {
-	CHECK(str_val, STRING_TYPE);
-	CHECK(start_val, FIXNUM_TYPE);
-	CHECK(end_val, FIXNUM_TYPE);
-	String *str = (String *)REMOVE_LOWTAG(str_val);
-	size_t start = NUC_VAL_TO_INT(start_val);
-	size_t end = NUC_VAL_TO_INT(end_val);
-
 	size_t length = end - start;
 	char *bytes = str->bytes + start;
-	return ((nuc_val)rt_make_string(length, bytes)) | STRING_LOWTAG;
+
+	return rt_make_string(length, bytes);
 }
