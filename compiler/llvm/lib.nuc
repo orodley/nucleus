@@ -28,6 +28,7 @@
 (extern LLVMGetIntTypeWidth (*) -> uint)
 
 (extern LLVMIntType (uint) -> *)
+(extern LLVMFloatType () -> *)
 (extern LLVMPointerType (* uint) -> *)
 (extern LLVMStructType (array uint bool) -> *)
 (extern LLVMArrayType (* uint) -> *)
@@ -35,10 +36,15 @@
 (extern LLVMVoidType () -> *)
 
 (extern LLVMBuildAdd (* * * char*) -> *)
+(extern LLVMBuildFAdd (* * * char*) -> *)
 (extern LLVMBuildSub (* * * char*) -> *)
+(extern LLVMBuildFSub (* * * char*) -> *)
 (extern LLVMBuildMul (* * * char*) -> *)
+(extern LLVMBuildFMul (* * * char*) -> *)
 (extern LLVMBuildSDiv (* * * char*) -> *)
+(extern LLVMBuildFDiv (* * * char*) -> *)
 (extern LLVMBuildSRem (* * * char*) -> *)
+(extern LLVMBuildFRem (* * * char*) -> *)
 (extern LLVMBuildLShr (* * * char*) -> *)
 (extern LLVMBuildAShr (* * * char*) -> *)
 (extern LLVMBuildShl (* * * char*) -> *)
@@ -47,6 +53,9 @@
 (extern LLVMBuildIntCast (* * * char*) -> *)
 (extern LLVMBuildBitCast (* * * char*) -> *)
 (extern LLVMBuildZExt (* * * char*) -> *)
+(extern LLVMBuildSIToFP (* * * char*) -> *)
+(extern LLVMBuildFPToSI (* * * char*) -> *)
+(extern LLVMBuildFPExt (* * * char*) -> *)
 (extern LLVMBuildIntToPtr (* * * char*) -> *)
 (extern LLVMBuildPtrToInt (* * * char*) -> *)
 (extern LLVMBuildSelect (* * * * char*) -> *)
@@ -78,6 +87,25 @@
   LLVMIntSGE
   LLVMIntSLT
   LLVMIntSLE)
+
+(extern LLVMBuildFCmp (* uint * * char*) -> *)
+(cenum
+  LLVMRealPredicateFalse
+  LLVMRealOEQ
+  LLVMRealOGT
+  LLVMRealOGE
+  LLVMRealOLT
+  LLVMRealOLE
+  LLVMRealONE
+  LLVMRealORD
+  LLVMRealUNO
+  LLVMRealUEQ
+  LLVMRealUGT
+  LLVMRealUGE
+  LLVMRealULT
+  LLVMRealULE
+  LLVMRealUNE
+  LLVMRealPredicateTrue)
 
 (extern LLVMSetValueName (* char*) -> void)
 (extern LLVMDumpValue (*) -> void)

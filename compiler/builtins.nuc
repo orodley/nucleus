@@ -1,5 +1,7 @@
 (defvar $builtin-functions
   (list
+    (cons 'float builtin-float)
+    (cons 'int builtin-int)
     (cons '+ builtin+)
     (cons '- builtin-)
     (cons '* builtin*)
@@ -278,41 +280,51 @@
     (list 'if condition (cons 'progn body))))
 
 
-;;; TODO: We need to have a proper story for how numeric primitives work for
-;;; different integer(/float) types.
 ;;; TODO: We don't need to bother removing the lowtag for some of these numeric
 ;;; functions when both are dynamic. Maybe we should come up with a nice way of
 ;;; enabling this kind of optimisation.
 
+(defun builtin-float (context args) (coerce context (first args) 'float))
+(defun builtin-int (context args) (coerce context (first args) 'int))
 
-(defun comparison (context cmp llvm-cmp operands)
+(defun comparison (context cmp int-cmp float-cmp operands)
   (if (not (length-is? operands 2))
     (fail! context (format nil "~ can only take two operands" cmp)))
-  (let ((vals (cdr (arithmetic-conversion context operands))))
+  (let* ((type-and-vals (arithmetic-conversion context operands))
+         (typ (car type-and-vals))
+         (vals (cdr type-and-vals)))
     (make-term
       'bool
       (LLVMBuildZExt
         $builder
-        (LLVMBuildICmp $builder llvm-cmp (first vals) (second vals) cmp)
+        (if (floating-point? typ)
+          (LLVMBuildFCmp $builder float-cmp (first vals) (second vals) cmp)
+          (LLVMBuildICmp $builder int-cmp (first vals) (second vals) cmp))
         (LLVMIntType 32)
         "")
       false)))
-(defun builtin-< (context args) (comparison context "<" LLVMIntSLT args))
-(defun builtin-<= (context args) (comparison context "<=" LLVMIntSLE args))
-(defun builtin-> (context args) (comparison context ">" LLVMIntSGT args))
-(defun builtin->= (context args) (comparison context ">=" LLVMIntSGE args))
+(defun builtin-< (context args) (comparison context "<" LLVMIntSLT LLVMRealOLT args))
+(defun builtin-<= (context args) (comparison context "<=" LLVMIntSLE LLVMRealOLE args))
+(defun builtin-> (context args) (comparison context ">" LLVMIntSGT LLVMRealOGT args))
+(defun builtin->= (context args) (comparison context ">=" LLVMIntSGE LLVMRealOGE args))
 
-(defun arithmetic-builtin (context args llvm-op name)
-  (let* ((typ-and-vals (arithmetic-conversion context args))
-         (typ (car typ-and-vals))
-         (vals (cdr typ-and-vals)))
+(defun arithmetic-builtin (context args int-op float-op name)
+  (let* ((type-and-vals (arithmetic-conversion context args))
+         (typ (car type-and-vals))
+         (vals (cdr type-and-vals))
+         (op (if (floating-point? typ) float-op int-op)))
     (make-term
-      typ (reduce (lambda (a b) (llvm-op $builder a b name false)) vals) false)))
-(defun builtin+ (context args) (arithmetic-builtin context args %LLVMBuildAdd "+"))
-(defun builtin- (context args) (arithmetic-builtin context args %LLVMBuildSub "-"))
-(defun builtin* (context args) (arithmetic-builtin context args %LLVMBuildMul "*"))
-(defun builtin% (context args) (arithmetic-builtin context args %LLVMBuildSRem "%"))
-(defun builtin/ (context args) (arithmetic-builtin context args %LLVMBuildSDiv "/"))
+      typ (reduce (lambda (a b) (op $builder a b name false)) vals) false)))
+(defun builtin+ (context args)
+  (arithmetic-builtin context args %LLVMBuildAdd %LLVMBuildFAdd "+"))
+(defun builtin- (context args)
+  (arithmetic-builtin context args %LLVMBuildSub %LLVMBuildFSub "-"))
+(defun builtin* (context args)
+  (arithmetic-builtin context args %LLVMBuildMul %LLVMBuildFMul "*"))
+(defun builtin% (context args)
+  (arithmetic-builtin context args %LLVMBuildSRem %LLVMBuildFRem "%"))
+(defun builtin/ (context args)
+  (arithmetic-builtin context args %LLVMBuildSDiv %LLVMBuildFDiv "/"))
 
 ;;; TODO: Remove these. They only exist as a workaround because we don't store
 ;;; RTTI on lambdas yet. If we pass these functions as values the caller
@@ -322,6 +334,11 @@
 (defun %LLVMBuildMul (builder val1 val2 name) (LLVMBuildMul builder val1 val2 name))
 (defun %LLVMBuildSRem (builder val1 val2 name) (LLVMBuildSRem builder val1 val2 name))
 (defun %LLVMBuildSDiv (builder val1 val2 name) (LLVMBuildSDiv builder val1 val2 name))
+(defun %LLVMBuildFAdd (builder val1 val2 name) (LLVMBuildFAdd builder val1 val2 name))
+(defun %LLVMBuildFSub (builder val1 val2 name) (LLVMBuildFSub builder val1 val2 name))
+(defun %LLVMBuildFMul (builder val1 val2 name) (LLVMBuildFMul builder val1 val2 name))
+(defun %LLVMBuildFRem (builder val1 val2 name) (LLVMBuildFRem builder val1 val2 name))
+(defun %LLVMBuildFDiv (builder val1 val2 name) (LLVMBuildFDiv builder val1 val2 name))
 
 (defun builtin-cons (context args)
   (make-term
@@ -405,7 +422,14 @@
       ((eq? (tt term1) (tt term2))
        (simple-int-cmp (tv term1) (tv term2)))
       ((and (numeric? (tt term1)) (numeric? (tt term2)))
-       (let ((vals (cdr (arithmetic-conversion context (list term1 term2)))))
-         (simple-int-cmp (first vals) (second vals))))
+       (let* ((type-and-vals (arithmetic-conversion context (list term1 term2)))
+              (typ (car type-and-vals))
+              (vals (cdr type-and-vals)))
+         (if (floating-point? typ)
+           (make-term
+             'bool
+             (LLVMBuildFCmp $builder LLVMRealOEQ (tv term1) (tv term2) "")
+             false)
+           (simple-int-cmp (first vals) (second vals)))))
       (true
         (make-term 'bool (llvm-i32<-int 0) false)))))

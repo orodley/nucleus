@@ -1,0 +1,7 @@
+; status-code: 23
+
+(defun main ()
+  (set $status-code (int (mul 10 (div 23 10)))))
+
+(defun div ((a float) (b float)) -> float (/ a b))
+(defun mul ((a float) (b float)) -> float (* a b))

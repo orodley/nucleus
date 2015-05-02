@@ -1,0 +1,7 @@
+; status-code: 3
+
+(defun main ()
+  (set $status-code (foo 1 2)))
+
+(defun foo ((a float) (b float))
+  (int (+ a b)))
