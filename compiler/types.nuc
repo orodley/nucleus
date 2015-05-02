@@ -24,7 +24,7 @@
     ((eq? type1 '?) true)
     ((eq? type2 '?) true)))
 
-(defun numeric (typ) (member? typ '(int uint long long-long uint8 u8 i32 i64)))
+(defun numeric? (typ) (member? typ '(int uint long long-long uint8 u8 i32 i64)))
 
 (defun type-width (context typ)
   (LLVMGetIntTypeWidth (llvm-type<-type-spec context typ)))
@@ -137,8 +137,7 @@
        $builder
        (runtime-func "rt_nuc_str_to_c_str" CHAR* (list NUC-VAL))
        (list val) "static-val<-dynamic-val"))
-    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8
-                              'i32 'i64))
+    ((numeric? type-spec)
      (check-type val LLVM-FIXNUM-T)
      (LLVMBuildIntCast
        $builder
@@ -188,7 +187,7 @@
           box)
         FOREIGN-LOWTAG))
     ((eq? type-spec 'void) LLVM-NIL)
-    ((member? type-spec (list 'int 'uint 'long 'long-long 'uint8 'i32 'i64))
+    ((numeric? type-spec)
      (fixnum<-llvm-int (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
     ((eq? type-spec 'bool)
      ;(format true "d-v<-s-v: val = ~" val)
@@ -223,7 +222,7 @@
 (defun implicit-conversion (context term typ)
   ;(format true "(implicit-conversion ... ~ ~)" term typ)
   (cond
-    ((and (numeric (tt term)) (numeric typ))
+    ((and (numeric? (tt term)) (numeric? typ))
      (LLVMBuildIntCast
        $builder
        (tv term)
@@ -254,7 +253,7 @@
   (let ((max-width-type 'u8))
     (each (lambda (term)
             (let ((typ (tt term)))
-              (if (not (or (eq? typ '?) (numeric typ)))
+              (if (not (or (eq? typ '?) (numeric? typ)))
                 (fail! context (format nil "Static type error: tried to use a term of type '~' where a numeric type was expected"
                                        typ)))
               (if (> (type-width context typ)
