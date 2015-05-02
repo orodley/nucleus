@@ -404,7 +404,8 @@
        (builtin-eq? context (list term2 term1)))
       ((eq? (tt term1) (tt term2))
        (simple-int-cmp (tv term1) (tv term2)))
+      ((and (numeric? (tt term1)) (numeric? (tt term2)))
+       (let ((vals (cdr (arithmetic-conversion context (list term1 term2)))))
+         (simple-int-cmp (first vals) (second vals))))
       (true
-        ;; TODO: We should be able to compare some stuff of different static
-        ;; type, e.g.: ints of different width. We just need to cast first
         (make-term 'bool (llvm-i32<-int 0) false)))))
