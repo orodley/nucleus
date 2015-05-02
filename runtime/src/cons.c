@@ -4,13 +4,15 @@
 #include "nuc.h"
 #include "gc.h"
 
-nuc_val rt_cons(nuc_val car, nuc_val cdr)
+// TODO: Does this (and possibly the next two) really need to be here, rather
+// than just compiled inline?
+Cons *rt_cons(nuc_val car, nuc_val cdr)
 {
 	Cons *c = gc_alloc(sizeof *c);
 	c->car = car;
 	c->cdr = cdr;
 
-	return ((nuc_val)c) | CONS_LOWTAG;
+	return c;
 }
 
 nuc_val rt_set_car(nuc_val cons, nuc_val new_car)

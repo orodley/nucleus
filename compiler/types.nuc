@@ -67,9 +67,6 @@
 (defun llvm-i32<-int (x) (LLVMConstInt (LLVMIntType 32) x false))
 (defun llvm-i8<-int (x) (LLVMConstInt (LLVMIntType 8) x false))
 
-(defun cons-ptr<-nuc-val (nuc-val)
-  (LLVMBuildIntToPtr $builder (remove-lowtag nuc-val) CONS-CELL-PTR ""))
-
 ;;; TODO: this should probably have an extra phase - converting into a nucleus
 ;;; type object.
 
@@ -96,6 +93,7 @@
     ('symbol (LLVMIntType 32))
     ('bool (LLVMIntType 32))
     ('string STRING-PTR)
+    ('cons CONS-CELL-PTR)
     ;; TODO: what size should a statically typed nil be? 32 or 64 bits?
     ('nil-t (LLVMIntType 64))
 
@@ -168,6 +166,9 @@
        (LLVMBuildLShr $builder val (llvm-i64<-int LOWTAG-BITS) "remove-symbol-lowtag")
        (llvm-type<-type-spec context type-spec)
        ""))
+    ((eq? type-spec 'cons)
+     (check-type val LLVM-CONS-T)
+     (LLVMBuildIntToPtr $builder (remove-lowtag val) CONS-CELL-PTR ""))
     ((eq? type-spec 'nil-t)
      (check-type val LLVM-NIL-T)
      (llvm-i64<-int 0))
@@ -204,6 +205,8 @@
                      "")
        (llvm-i64<-int SYMBOL-LOWTAG)
        ""))
+    ((eq? type-spec 'cons)
+     (add-lowtag val CONS-LOWTAG))
     ((eq? type-spec 'nil-t) LLVM-NIL)
     ((eq? type-spec 'type)
      (LLVMBuildOr
@@ -232,6 +235,13 @@
        (LLVMBuildStructGEP $builder (tv term) 1 "")
        CHAR*
        ""))
+    ;; TODO: this sucks
+    ((and (eq? (tt term) 'cons) (eq? typ 'array))
+     (llvm-build-call
+       $builder
+       (runtime-func "rt_list_to_array" (llvm-type<-type-spec context typ) (list NUC-VAL))
+       (list (add-lowtag (tv term) CONS-LOWTAG))
+       "array<-list"))
     (true (fail! context
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was wanted"

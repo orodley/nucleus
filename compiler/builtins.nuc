@@ -325,10 +325,10 @@
 
 (defun builtin-cons (context args)
   (make-term
-    '? ; TODO: this should be a higher-order type determined by the type of the input terms
+    'cons ; TODO: this should be a higher-order type determined by the type of the input terms
     (llvm-build-call
       $builder
-      (runtime-func "rt_cons" NUC-VAL (list NUC-VAL NUC-VAL))
+      (runtime-func "rt_cons" CONS-CELL-PTR (list NUC-VAL NUC-VAL))
       (map (lambda (term) (tv (coerce context term '?))) args)
       "cons")
     false))
@@ -343,14 +343,14 @@
 ;;; static typing for conses.
 
 (defun builtin-car (context args)
-  (let ((cons-ptr (cons-ptr<-nuc-val (tv (coerce context (first args) '?)))))
+  (let ((cons-ptr (tv (coerce context (first args) 'cons))))
     (make-term
       '? ; TODO: this should be determined by the type of the input term
       (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 0 "") "car")
       false)))
 
 (defun builtin-cdr (context args)
-  (let ((cons-ptr (cons-ptr<-nuc-val (tv (coerce context (first args) '?)))))
+  (let ((cons-ptr (tv (coerce context (first args) 'cons))))
     (make-term
       '? ; TODO: this should be determined by the type of the input term
       (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")
