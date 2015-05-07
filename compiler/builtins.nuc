@@ -40,12 +40,17 @@
 ;; TODO: Write these as more readable constant expressions
 ;; TODO: Maybe these should have different names to indicate that this
 ;; representation is only used when they are dynamic values?
-(defvar LLVM-NIL (llvm-i64<-int 7))
+
+;; nil is just a null cons pointer, so the dynamic version is just the cons
+;; lowtag.
+(defvar LLVM-NIL (llvm-i64<-int CONS-LOWTAG))
+(defvar LLVM-NULL-CONS (LLVMConstNull CONS-CELL-PTR))
+(defvar NIL-TERM (make-term 'cons LLVM-NULL-CONS false))
+
 (defvar LLVM-TRUE (llvm-i64<-int 263))
 (defvar LLVM-FALSE (llvm-i64<-int 519))
 (defvar LLVM-FIXNUM-T (llvm-i64<-int 775))
 (defvar LLVM-CONS-T (llvm-i64<-int 1031))
-(defvar LLVM-NIL-T (llvm-i64<-int 1287))
 (defvar LLVM-BOOL-T (llvm-i64<-int 1543))
 (defvar LLVM-FLOAT-T (llvm-i64<-int 1799))
 (defvar LLVM-SYMBOL-T (llvm-i64<-int 2055))
@@ -55,12 +60,11 @@
 ;; TODO: these should all have static types
 (defvar $constants
   (list
-    (make-constant 'nil (llvm-i64<-int 0) 'nil-t)
+    (make-constant 'nil LLVM-NULL-CONS 'cons)
     (make-constant 'true (llvm-i32<-int 1) 'bool)
     (make-constant 'false (llvm-i32<-int 0) 'bool)
     (make-constant 'fixnum-t LLVM-FIXNUM-T '?)
     (make-constant 'cons-t LLVM-CONS-T '?)
-    (make-constant 'nil-t LLVM-NIL-T '?)
     (make-constant 'bool-t LLVM-BOOL-T '?)
     (make-constant 'float-t LLVM-FLOAT-T '?)
     (make-constant 'symbol-t LLVM-SYMBOL-T '?)
@@ -135,11 +139,11 @@
                ;; a dynamic value, but we shouldn't just throw away the static
                ;; type information - we should keep it as a union type and do
                ;; static type checking based on that. For example:
-               ;;  (car (if foo nil false))
+               ;;  (car (if foo "" false))
                ;; should be able to be detected as a static type error, as the
                ;; type of the argument of car is 'cons' (or (cons A B) once we
                ;; have a proper cons type), which is disjoint from the type of
-               ;; the if expression, (or nil-t bool).
+               ;; the if expression, (or string bool).
                '?))
            ;; We need to call 'coerce' while the builder is in the same block
            ;; as the value we are calling it on, otherwise the type coercion
@@ -197,13 +201,14 @@
   (let ((to-quote (first args)))
     (case (type to-quote)
       (fixnum-t (compile-expr context to-quote))
-      ;; This case never comes up directly from source, as 'nil' is read in as
-      ;; the symbol 'nil' not the constant. It only comes up in the recursive
-      ;; case below when quoting a cons.
-      (nil-t (make-term 'nil-t LLVM-NIL false))
-      (cons-t (compile-expr context (list 'cons
-                                          (list 'quote (car to-quote))
-                                          (list 'quote (cdr to-quote)))))
+      (cons-t (if (nil? to-quote)
+                ;; This case never comes up directly from source, as 'nil' is
+                ;; read in as the symbol 'nil' not the constant. It only comes
+                ;; up in the recursive case below when quoting a cons.
+                NIL-TERM
+                (compile-expr context (list 'cons
+                                            (list 'quote (car to-quote))
+                                            (list 'quote (cdr to-quote))))))
       (symbol-t (make-term
                   'symbol
                   (llvm-build-call

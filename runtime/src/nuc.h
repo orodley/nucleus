@@ -45,12 +45,10 @@ typedef uint32_t Symbol;
 		| (DISCRETE_EXTTAG << LOWTAG_BITS) \
 		| EXTTAG_LOWTAG))
 
-#define NIL MAKE_DISCRETE(0)
 #define TRUE MAKE_DISCRETE(1)
 #define FALSE MAKE_DISCRETE(2)
 #define FIXNUM_TYPE MAKE_DISCRETE(3)
 #define CONS_TYPE MAKE_DISCRETE(4)
-#define NIL_TYPE MAKE_DISCRETE(5)
 #define BOOL_TYPE MAKE_DISCRETE(6)
 #define FLOAT_TYPE MAKE_DISCRETE(7)
 #define SYMBOL_TYPE MAKE_DISCRETE(8)
@@ -85,6 +83,10 @@ typedef struct Cons
 	nuc_val car;
 	nuc_val cdr;
 } Cons;
+
+// NIL is just a null cons pointer. This is the same as just taking the cons
+// lowtag.
+#define NIL CONS_LOWTAG
 
 typedef struct String
 {

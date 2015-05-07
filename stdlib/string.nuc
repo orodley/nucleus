@@ -56,10 +56,9 @@
 
 (defun string-split (str delimiters)
   (let ((delimiters (case (type delimiters)
-                 (string-t (char-list<-string delimiters))
-                 (fixnum-t (list delimiters))
-                 (cons-t delimiters)
-                 (nil-t delimiters))))
+                      (string-t (char-list<-string delimiters))
+                      (fixnum-t (list delimiters))
+                      (cons-t delimiters))))
     (filter (lambda (str) (not (string-eq? str "")))
             (reverse (%string-split str delimiters 0 0 nil)))))
 

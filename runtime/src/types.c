@@ -16,7 +16,6 @@ nuc_val rt_type(nuc_val val)
 		switch (EXTTAG(val)) {
 		case DISCRETE_EXTTAG:
 			switch (val) {
-			case NIL: return NIL_TYPE;
 			case TRUE: case FALSE: return BOOL_TYPE;
 			}
 
@@ -35,7 +34,7 @@ static const char *type_name(nuc_val type)
 
 	switch (type) {
 		CASE(FIXNUM) CASE(CONS) CASE(SYMBOL) CASE(STRING) CASE(LAMBDA)
-		CASE(FOREIGN) CASE(NIL) CASE(BOOL) CASE(FLOAT)
+		CASE(FOREIGN) CASE(BOOL) CASE(FLOAT)
 		default: printf("Got type %d (ft = %d)\n", (int)type, (int)FIXNUM_TYPE); UNREACHABLE;
 	}
 
@@ -53,19 +52,6 @@ void rt_check_type(nuc_val val, nuc_val expected_type,
 				type_name(expected_type), type_name(given_type));
 		if (file != NULL)
 			fprintf(stderr, "Error occured at %s:%d in %s\n", file, line, func);
-
-		exit(1);
-	}
-}
-
-// TODO: This should be varargs
-void rt_check_union_type(nuc_val val, nuc_val expected_type1, nuc_val expected_type2)
-{
-	nuc_val given_type = rt_type(val);
-	if (given_type != expected_type1 && given_type != expected_type2) {
-		fprintf(stderr, "Wrong type given! Expected {%s, %s}, got %s.\n",
-				type_name(expected_type1), type_name(expected_type2),
-				type_name(given_type));
 
 		exit(1);
 	}

@@ -251,7 +251,7 @@
       (true (process-file context (rest filename-and-backups))))))
 
 (defun macroexpand (context sexpr)
-  (if (eq? (type sexpr) cons-t)
+  (if (and (cons? sexpr) (not (nil? sexpr)))
     (let* ((macro-name (first sexpr))
            (args (rest sexpr))
            (builtin-macro (get-builtin-macro macro-name)))

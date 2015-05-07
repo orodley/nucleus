@@ -71,7 +71,6 @@
 
 (defun length (seq)
   (case (type seq)
-    (nil-t 0)
     (cons-t (list-length seq 0))
     (string-t (string-length seq))))
 

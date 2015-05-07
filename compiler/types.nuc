@@ -56,19 +56,12 @@
               FIXNUM-LOWTAG))
 
 (defun check-type (val type-as-llvm-val)
-  (if (cons? type-as-llvm-val)
-    (llvm-build-call
-      $builder
-      (runtime-func "rt_check_union_type" VOID (list NUC-VAL NUC-VAL NUC-VAL))
-      ;; TODO: should make rt_check_union_type varargs
-      (list val (first type-as-llvm-val) (second type-as-llvm-val))
-      "")
-    (llvm-build-call
-      $builder
-      (runtime-func "rt_check_type" VOID (list NUC-VAL NUC-VAL CHAR* CHAR* INT))
-      (list val type-as-llvm-val (LLVMConstNull CHAR*) (LLVMConstNull CHAR*)
-            (llvm-i32<-int 0))
-      "")))
+  (llvm-build-call
+    $builder
+    (runtime-func "rt_check_type" VOID (list NUC-VAL NUC-VAL CHAR* CHAR* INT))
+    (list val type-as-llvm-val (LLVMConstNull CHAR*) (LLVMConstNull CHAR*)
+          (llvm-i32<-int 0))
+    ""))
 
 (defun llvm-i64<-int (x) (LLVMConstInt (LLVMIntType 64) x false))
 (defun llvm-i32<-int (x) (LLVMConstInt (LLVMIntType 32) x false))
@@ -102,8 +95,6 @@
     ('string STRING-PTR)
     ('cons CONS-CELL-PTR)
     ('float (LLVMFloatType))
-    ;; TODO: what size should a statically typed nil be? 32 or 64 bits?
-    ('nil-t (LLVMIntType 64))
 
     (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
@@ -112,7 +103,10 @@
     ;; FFI stuff
     ('* LLVM-FOREIGN-T)
     ('char* LLVM-STRING-T)
-    ('void LLVM-NIL-T)
+    ;; TODO: We arbitrarily make calls to void functions evaluate to nil, so
+    ;; void = cons. Should we make them be something else? A special purpose
+    ;; value which isn't allowed to be used maybe?
+    ('void LLVM-CONS-T)
     ('int LLVM-FIXNUM-T) ('uint LLVM-FIXNUM-T) ('long-long LLVM-FIXNUM-T)
     ('uint8 LLVM-FIXNUM-T) ('u8 LLVM-FIXNUM-T) ('i32 LLVM-FIXNUM-T)
     ('i64 LLVM-FIXNUM-T)
@@ -121,7 +115,7 @@
     ('symbol LLVM-SYMBOL-T)
     ('bool LLVM-BOOL-T)
     ('string LLVM-STRING-T)
-    ('nil-t LLVM-NIL-T)
+    ('cons LLVM-CONS-T)
 
     (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
@@ -171,7 +165,7 @@
      (check-type val LLVM-STRING-T)
      (LLVMBuildIntToPtr $builder (remove-lowtag val) STRING-PTR ""))
     ((eq? type-spec 'array)
-     (check-type val (list LLVM-CONS-T LLVM-NIL-T))
+     (check-type val LLVM-CONS-T)
      (llvm-build-call
        $builder
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context type-spec) (list NUC-VAL))
@@ -187,9 +181,6 @@
     ((eq? type-spec 'cons)
      (check-type val LLVM-CONS-T)
      (LLVMBuildIntToPtr $builder (remove-lowtag val) CONS-CELL-PTR ""))
-    ((eq? type-spec 'nil-t)
-     (check-type val LLVM-NIL-T)
-     (llvm-i64<-int 0))
     ((eq? type-spec 'type)
      ;; TODO: We should have a separate exttag for types so that we can do a
      ;; check-type here.
@@ -240,7 +231,6 @@
        ""))
     ((eq? type-spec 'cons)
      (add-lowtag val CONS-LOWTAG))
-    ((eq? type-spec 'nil-t) LLVM-NIL)
     ((eq? type-spec 'type)
      (LLVMBuildOr
        $builder

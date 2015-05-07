@@ -43,7 +43,6 @@
       (write-string-to-stream stream sexp)
       (write-char-to-stream stream 34))
     (lambda-t (write-string-to-stream stream "#<lambda>"))
-    (nil-t (write-string-to-stream stream "nil"))
     (bool-t (write-string-to-stream stream (if sexp "true" "false")))
     (foreign-t (%write-addr-to-stream stream sexp))
     (default
@@ -58,9 +57,11 @@
       (print-fixnum stream (- x (* (/ x multiplier) multiplier))))))
 
 (defun print-cons (stream c)
-  (write-string-to-stream stream "(")
-  (print-to-stream stream (car c))
-  (%print-tail stream (cdr c)))
+  (cond
+    ((nil? c) (write-string-to-stream stream "nil"))
+    (true (write-string-to-stream stream "(")
+          (print-to-stream stream (car c))
+          (%print-tail stream (cdr c)))))
 
 (defun %print-tail (stream c)
   (cond
