@@ -139,14 +139,14 @@
        $builder
        (runtime-func "rt_nuc_str_to_c_str" CHAR* (list NUC-VAL))
        (list val) "static-val<-dynamic-val"))
-    ((numeric? type-spec)
+    ((integral? type-spec)
      (check-type val LLVM-FIXNUM-T)
      (LLVMBuildIntCast
        $builder
        (LLVMBuildAShr $builder val (llvm-i64<-int LOWTAG-BITS) "remove-int-tag")
        (llvm-type<-type-spec context type-spec)
        ""))
-    ((eq? type-spec 'float)
+    ((floating-point? type-spec)
      (check-type val LLVM-FLOAT-T)
      (LLVMBuildBitCast
        $builder
