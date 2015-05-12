@@ -301,7 +301,21 @@
 
 (defun %compile-expr (context expr)
   (case (type expr)
-    (fixnum-t (make-term 'i64 (llvm-i64<-int expr) false))
+    (fixnum-t
+      (let* ((required-bits (+ 1 (int (ceiling (log2 (float expr))))))
+             (constant-type
+               (cond
+                 ((<= required-bits 8) 'i8)
+                 ((<= required-bits 16) 'i16)
+                 ((<= required-bits 32) 'i32)
+                 ((<= required-bits 64) 'i64)
+                 (true
+                   (fail! context "Integer too big to fit into an i64! (How did we even read it?)")))))
+        (make-term constant-type
+                   (LLVMConstInt (llvm-type<-type-spec context constant-type)
+                                 expr
+                                 false)
+                   false)))
     (symbol-t
       (let* ((binding (get-binding context expr))
              (term

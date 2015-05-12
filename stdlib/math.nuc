@@ -1,4 +1,5 @@
 (extern (log10f log10) (float) -> float)
+(extern (log2f log2) (float) -> float)
 (extern (floorf floor) (float) -> float)
 (extern (ceilf ceiling) (float) -> float)
 

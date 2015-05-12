@@ -82,8 +82,10 @@
     ('long-long LONG-LONG)
     ('array (LLVMPointerType UINTPTR 0))
 
-    ;; Fixed width integer types
+    ;; Fixed width integer types.
+    ;; TODO: We need to do unsigned types properly.
     ('u8 (LLVMIntType 8))
+    ('i8 (LLVMIntType 8))
     ('i16 (LLVMIntType 16))
     ('i32 (LLVMIntType 32))
     ('i64 (LLVMIntType 64))
@@ -108,8 +110,8 @@
     ;; value which isn't allowed to be used maybe?
     ('void LLVM-CONS-T)
     ('int LLVM-FIXNUM-T) ('uint LLVM-FIXNUM-T) ('long-long LLVM-FIXNUM-T)
-    ('uint8 LLVM-FIXNUM-T) ('u8 LLVM-FIXNUM-T) ('i32 LLVM-FIXNUM-T)
-    ('i64 LLVM-FIXNUM-T)
+    ('uint8 LLVM-FIXNUM-T) ('u8 LLVM-FIXNUM-T) ('i8 LLVM-FIXNUM-T)
+    ('i32 LLVM-FIXNUM-T) ('i64 LLVM-FIXNUM-T)
 
     ;; Primitive nucleus types
     ('symbol LLVM-SYMBOL-T)
