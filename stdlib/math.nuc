@@ -1,7 +1,6 @@
-(extern (rt_log10 log10) (?) -> ?)
-(extern (rt_floor floor) (?) -> ?)
-(extern (rt_ceiling ceiling) (?) -> ?)
-(extern (rt_int_to_float float<-int) (?) -> ?)
+(extern (log10f log10) (float) -> float)
+(extern (floorf floor) (float) -> float)
+(extern (ceilf ceiling) (float) -> float)
 
 ;;; TODO: varargs
 (defun + (a b) (+ a b))
