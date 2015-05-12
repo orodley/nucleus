@@ -289,8 +289,16 @@
 ;;; functions when both are dynamic. Maybe we should come up with a nice way of
 ;;; enabling this kind of optimisation.
 
-(defun builtin-float (context args) (coerce context (first args) 'float))
-(defun builtin-int (context args) (coerce context (first args) 'int))
+(defun builtin-float (context args)
+  (make-term
+    'float
+    (implicit-conversion context (coerce context (first args) 'int) 'float)
+    false))
+(defun builtin-int (context args)
+  (make-term
+    'int
+    (implicit-conversion context (coerce context (first args) 'float) 'int)
+    false))
 
 (defun comparison (context cmp int-cmp float-cmp operands)
   (if (not (length-is? operands 2))
