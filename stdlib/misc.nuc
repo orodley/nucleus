@@ -12,7 +12,7 @@
   (eq? (type thing) symbol-t))
 
 (defun assert! (condition message)
-  (if (not condition)
+  (unless condition
     (panic! message)))
 
 (extern (rt_rand random) () -> ?)

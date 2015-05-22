@@ -301,7 +301,7 @@
     false))
 
 (defun comparison (context cmp int-cmp float-cmp operands)
-  (if (not (length-is? operands 2))
+  (unless (length-is? operands 2)
     (fail! context (format nil "~ can only take two operands" cmp)))
   (let* ((type-and-vals (arithmetic-conversion context operands))
          (typ (car type-and-vals))

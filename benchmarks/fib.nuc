@@ -5,4 +5,4 @@
        (fib (- n 2)))))
 
 (defun main ()
-  (println (fib 35)))
+  (println (fib 40)))

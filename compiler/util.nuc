@@ -347,9 +347,9 @@
 
 (defun runtime-func (name return-type arg-types)
   (let ((func (LLVMGetNamedFunction $module name)))
-    (if (not (null? func))
-      func
-      (declare-function name return-type arg-types))))
+    (if (null? func)
+      (declare-function name return-type arg-types)
+      func)))
 
 (defun global-string (str)
   (LLVMBuildGEP

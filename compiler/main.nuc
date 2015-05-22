@@ -322,12 +322,12 @@
                (cond
                  ((nil? binding)
                   (let ((func (get-func expr)))
-                    (if (not (nil? func))
+                    (if (nil? func)
+                      (fail! context (format nil "Undefined variable '~'" expr))
                       (make-lambda context
                                    (func-llvm-func func)
                                    (LLVMCountParams (func-llvm-func func))
-                                   nil)
-                      (fail! context (format nil "Undefined variable '~'" expr)))))
+                                   nil))))
                  (true (binding-term binding)))))
         (if (tl? term)
           (make-term
@@ -360,10 +360,14 @@
         (if (not (nil? builtin-function))
           (builtin-function context (map (lambda (arg) (compile-expr context arg)) args))
           (let ((func (get-func name)))
-            (if (not (nil? func))
+            (if (nil? func)
+              ;; Calling a closure pointer
+              ;; TODO: store RTTI in closures
+              (make-term '?
+                         (call-closure context (tv (compile-expr context name)) args)
+                         false)
               ;; Calling a static function
-              (let (;(_ (format true "~: a-t = ~" (func-name func) (func-arg-types func)))
-                    (llvm-func (func-llvm-func func))
+              (let ((llvm-func (func-llvm-func func))
                     (arg-terms (map2 (lambda (e typ)
                                        (coerce context (compile-expr context e) typ))
                                      args
@@ -375,9 +379,4 @@
                     false)
                   (fail! context
                          (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
-                                 name (length args) (LLVMCountParams llvm-func)))))
-              ;; Calling a closure pointer
-              ;; TODO: store RTTI in closures
-              (make-term '?
-                         (call-closure context (tv (compile-expr context name)) args)
-                         false))))))))
+                                 name (length args) (LLVMCountParams llvm-func))))))))))))

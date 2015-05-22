@@ -51,7 +51,7 @@
 (defun print-fixnum (stream x)
   (if (< x 10)
     (write-char-to-stream stream (+ x 48))
-    (let* ((ndigits (int (ceiling (log10 (float x)))))
+    (let* ((ndigits (int (floor (+ 1 (log10 (float x))))))
            (multiplier (expt 10 (- ndigits 1))))
       (write-char-to-stream stream (+ (/ x multiplier) 48))
       (print-fixnum stream (- x (* (/ x multiplier) multiplier))))))
@@ -142,7 +142,7 @@
 
 (defun skip-comment (stream)
   (let ((c (%read-char stream)))
-    (if (not (eq? c 10)) ; '\n' 
+    (unless (eq? c 10) ; '\n'
       (skip-comment stream))))
 
 (defun read-string (stream list-head)

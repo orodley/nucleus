@@ -1,25 +1,22 @@
 ;;; TODO: make into a macro
 (defun each (func lizt)
-  (if (not (nil? lizt))
-    (progn
-      (func (car lizt))
-      (each func (cdr lizt)))))
+  (unless (nil? lizt)
+    (func (car lizt))
+    (each func (cdr lizt))))
 
 ;;; TODO: make into a macro
 (defun each-cons (func lizt)
-  (if (not (nil? lizt))
-    (progn
-      (func lizt)
-      (each-cons func (cdr lizt)))))
+  (unless (nil? lizt)
+    (func lizt)
+    (each-cons func (cdr lizt))))
 
 (defun upto (upper-bound func)
   (%upto 0 upper-bound func))
 
 (defun %upto (n upper-bound func)
-  (if (not (eq? n upper-bound))
-    (progn
-      (func n)
-      (%upto (+ 1 n) upper-bound func))))
+  (unless (eq? n upper-bound)
+    (func n)
+    (%upto (+ 1 n) upper-bound func)))
 
 (defun enumerate (func lizt)
   (%enumerate func lizt 0))
