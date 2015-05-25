@@ -121,6 +121,11 @@
 
     (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
+(defun type-eq? (t1 t2)
+  (or (eq? t1 t2)
+      (and (eq? t1 'int) (eq? t2 'i32))
+      (and (eq? t2 'int) (eq? t1 'i32))))
+
 (defun static-val<-dynamic-val (context type-spec val)
   ;(format true "(s-v<-d-v ... ~ ~)" type-spec val)
   (cond

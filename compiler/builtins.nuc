@@ -115,6 +115,7 @@
 
 (defun special-form-if (context args)
   (let* ((condition (coerce context (compile-expr context (first args)) 'bool))
+         (start-block (LLVMGetInsertBlock $builder))
          (then-expr (second args))
          ;; TODO: maybe during the 'macroexpansion' pass we insert missing
          ;; else branches? We could perhaps do some other things too, like what
@@ -124,8 +125,10 @@
          (then-block (LLVMAppendBasicBlock current-func "then"))
          (else-block (LLVMAppendBasicBlock current-func "else"))
          (after-block (LLVMAppendBasicBlock current-func "after")))
-    (LLVMBuildCondBr $builder (LLVMBuildIntCast $builder (tv condition) (LLVMIntType 1) "")
-                     then-block else-block)
+    (LLVMBuildCondBr
+      $builder
+      (LLVMBuildIntCast $builder (tv condition) (LLVMIntType 1) "")
+      then-block else-block)
     (let* ((then-term (compile-in-block context then-expr then-block))
            (then-resultant-block (LLVMGetInsertBlock $builder))
            (else-term (compile-in-block context else-expr else-block))
@@ -133,10 +136,10 @@
            (then-type (tt then-term))
            (else-type (tt else-term))
            (result-type
-             (if (eq? then-type else-type)
+             (if (type-eq? then-type else-type)
                then-type
-               ;; TODO: If both types are different static types then we need
-               ;; a dynamic value, but we shouldn't just throw away the static
+               ;; TODO: If both types are different static types then we need a
+               ;; dynamic value, but we shouldn't just throw away the static
                ;; type information - we should keep it as a union type and do
                ;; static type checking based on that. For example:
                ;;  (car (if foo "" false))
@@ -144,32 +147,67 @@
                ;; type of the argument of car is 'cons' (or (cons A B) once we
                ;; have a proper cons type), which is disjoint from the type of
                ;; the if expression, (or string bool).
-               '?))
-           ;; We need to call 'coerce' while the builder is in the same block
-           ;; as the value we are calling it on, otherwise the type coercion
-           ;; code is inserted into the wrong place. However, we only know what
-           ;; type to coerce into after we have already compiled both branches,
-           ;; so we have to go back into the block.
-           (then-term (%build-branch context then-term result-type
-                                     then-resultant-block after-block))
-           (else-term (%build-branch context else-term result-type
-                                     else-resultant-block after-block)))
-      (LLVMPositionBuilderAtEnd $builder after-block)
-      ;(format true "(if ~ ~) -> ~" then-type else-type result-type)
-      (make-term
-        result-type
-        ;; TODO: maybe llvm-phi should just figure out the result type itself
-        ;; based on the the given terms and do the coercions itself.
-        (llvm-phi $builder (llvm-type<-type-spec context result-type)
-                  (list (cons (tv then-term) then-resultant-block)
-                        (cons (tv else-term) else-resultant-block)))
-        false))))
+               '?)))
+      (cond
+        ((not (LLVMIsConstant (tv condition)))
+         ;; We wait until here to do this, because if the condition is constant
+         ;; we do an unconditional branch.
+         (let ((then-term (%build-branch context then-term result-type
+                                         then-resultant-block after-block))
+               (else-term (%build-branch context else-term result-type
+                                         else-resultant-block after-block)))
+           (LLVMPositionBuilderAtEnd $builder after-block)
+           (make-term
+             result-type
+             ;; TODO: maybe llvm-phi should just figure out the result type itself
+             ;; based on the the given terms and do the coercions itself.
+             (llvm-phi $builder (llvm-type<-type-spec context result-type)
+                       (list (cons (tv then-term) then-resultant-block)
+                             (cons (tv else-term) else-resultant-block)))
+             false)))
+        ;; If we detect that the condition is constant, we can tell more about
+        ;; the result type. We could also remove the other branch, but LLVM
+        ;; will do that for us anyway.  We could save time by not compiling it
+        ;; in the first place, but then we don't get errors.  We have to do
+        ;; this here rather than when we first determine result-type so that
+        ;; the coercion for the omitted branch still works.  We also need to
+        ;; set then-term or else-term so that the phi node has something of the
+        ;; correct type.
+        ((eq? (LLVMConstIntGetSExtValue (tv condition)) 0)
+         (link-blocks $builder then-resultant-block after-block)
+         (link-blocks $builder else-resultant-block after-block)
+         (LLVMPositionBuilderAtEnd $builder after-block)
+         (let ((t (llvm-type<-type-spec context else-type)))
+           (make-term else-type
+                      (llvm-phi $builder t
+                                (list (cons (LLVMGetUndef t) then-resultant-block)
+                                      (cons (tv else-term) else-resultant-block)))
+                      false)))
+        ((eq? (LLVMConstIntGetSExtValue (tv condition)) 1)
+         (link-blocks $builder then-resultant-block after-block)
+         (link-blocks $builder else-resultant-block after-block)
+         (LLVMPositionBuilderAtEnd $builder after-block)
+         (let ((t (llvm-type<-type-spec context then-type)))
+           (make-term then-type
+                      (llvm-phi $builder t
+                                (list (cons (tv then-term) then-resultant-block)
+                                      (cons (LLVMGetUndef t) else-resultant-block)))
+                      false)))))))
 
 (defun compile-in-block (context expr block)
   (LLVMPositionBuilderAtEnd $builder block)
   (compile-expr context expr))
 
+(defun link-blocks (builder pred succ)
+  (LLVMPositionBuilderAtEnd $builder pred)
+  (LLVMBuildBr $builder succ))
+
 (defun %build-branch (context term typ branch-block after-block)
+  ;; We need to call 'coerce' while the builder is in the same block as the
+  ;; value we are calling it on, otherwise the type coercion code is inserted
+  ;; into the wrong place. However, we only know what type to coerce into after
+  ;; we have already compiled both branches, so we have to go back into the
+  ;; block.
   (LLVMPositionBuilderAtEnd $builder branch-block)
   (let ((result (coerce context term typ)))
     (LLVMBuildBr $builder after-block)

@@ -15,8 +15,12 @@
 (extern LLVMConstInt (* long-long bool) -> *)
 (extern LLVMConstIntOfString (* char* u8) -> *)
 (extern LLVMConstNull (*) -> *)
+(extern LLVMIsConstant (*) -> bool)
+(extern LLVMConstIntGetSExtValue (*) -> long-long)
+(extern LLVMGetUndef (*) -> *)
 
 (extern LLVMAppendBasicBlock (* char*) -> *)
+(extern LLVMDeleteBasicBlock (*) -> void)
 (extern LLVMGetInsertBlock (*) -> *)
 (extern LLVMGetBasicBlockParent (*) -> *)
 (extern LLVMPositionBuilderAtEnd (* *) -> void)
