@@ -81,10 +81,7 @@
 (defun add-initialiser (var init)
   (set $initialisers (cons (cons var init) $initialisers)))
 
-(defun mangle-name (name)
-  (let ((ret (format nil "nuc(~)" name)))
-    ;(format true "(m-n ~) -> ~" name ret)
-    ret))
+(defun mangle-name (name) (format nil "nuc(~)" name))
 
 ;; TODO: write this properly
 (defun << (x y) (* x (expt 2 y)))
@@ -109,7 +106,6 @@
                 (context-file context) (context-func context)))
 
 (defun declare-function (name ret-type arg-types)
-  ;(format true "(d-f ~ ~ ~)" name ret-type arg-types)
   (LLVMAddFunction
     $module
     name
@@ -119,7 +115,6 @@
 ;; be integrated into the environment somehow?
 
 (defun get-binding (context name)
-  ;(format true "(g-b ... ~)" name)
   (find (lambda (binding) (eq? (binding-name binding) name))
         (context-env context)))
 

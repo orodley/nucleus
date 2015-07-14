@@ -100,7 +100,6 @@
          (terms (map (lambda (clause) (compile-expr context (second clause)))
                       clauses))
          (new-context (extend-env-with-terms context names terms)))
-    ;(format true "After extending environment with variables ~, the new environment is ~" names (context-env new-context))
     (compile-progn new-context body)))
 
 (defun builtin-macro-let* (context args)

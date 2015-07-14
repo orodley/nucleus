@@ -9,7 +9,7 @@
 (defun tl? (term) (third term))
 
 (defun coerce (context term typ)
-  ;(format true "(coerce ... ~ ~)" term typ)
+  (when $output-debug-info (format true "(coerce ... ~ ~)" term typ))
   (cond
     ((eq? (tt term) typ) term)
     ((eq? (tt term) '?) (make-term typ (static-val<-dynamic-val context typ (tv term)) (tl? term)))
@@ -127,7 +127,6 @@
       (and (eq? t2 'int) (eq? t1 'i32))))
 
 (defun static-val<-dynamic-val (context type-spec val)
-  ;(format true "(s-v<-d-v ... ~ ~)" type-spec val)
   (cond
     ((eq? type-spec '*)
      (check-type val LLVM-FOREIGN-T)
@@ -195,7 +194,6 @@
     (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
 (defun dynamic-val<-static-val (context type-spec val)
-  ;(format true "(d-v<-s-v ... ~ ~)" type-spec val)
   (cond
     ((eq? type-spec '*)
       (add-lowtag
@@ -222,7 +220,6 @@
        (llvm-i64<-int (+ EXTTAG-LOWTAG (<< FLOAT-EXTTAG LOWTAG-BITS)))
        ""))
     ((eq? type-spec 'bool)
-     ;(format true "d-v<-s-v: val = ~" val)
      (let ((zero (LLVMConstInt (LLVMTypeOf val) 0 false)))
        (LLVMBuildSelect $builder
                         (LLVMBuildICmp $builder LLVMIntEQ val zero "")
@@ -251,7 +248,7 @@
     (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))  ))
 
 (defun implicit-conversion (context term typ)
-  ;(format true "(implicit-conversion ... ~ ~)" term typ)
+  (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))
   (cond
     ((and (integral? (tt term)) (integral? typ))
      (LLVMBuildIntCast

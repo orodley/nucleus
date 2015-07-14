@@ -13,6 +13,8 @@
 (defvar $module)
 (defvar $builder)
 
+(defvar $output-debug-info)
+
 (defun parse-args (args)
   (let ((parsed (%parse-args args (list nil))))
     (cons (reverse (car parsed)) (cdr parsed))))
@@ -22,7 +24,7 @@
     acc
     (let ((arg (first args)))
       (cond
-        ((or (string-eq? arg "-ir") (string-eq? arg "-asm"))
+        ((or (string-eq? arg "-ir") (string-eq? arg "-asm") (string-eq? arg "-d"))
          (set-cdr acc (cons (cons arg true) (cdr acc))))
         ((string-eq? arg "-link")
          (when (nil? (cdr args)) (panic! "'-link' must be followed by linker args"))
@@ -49,6 +51,7 @@
             (output-llvm-ir (get-arg parsed-args "-ir" false))
             (output-asm (get-arg parsed-args "-asm" false))
             (linker-args (string-split (get-arg parsed-args "-link" "") (list 10 32))))
+       (set $output-debug-info (get-arg parsed-args "-d" false))
        (when (and output-llvm-ir output-asm)
          (panic! "Cannot specify both of '-ir' and '-asm'"))
        (let* ((input-filename (ensure-absolute (first non-flag-args) (current-dir)))
@@ -147,11 +150,10 @@
       (write-string-ln "Usage: nucc <input filename>"))))
 
 (defun process-toplevel-form (context form)
-  ;(format true "(p-t-l .. ~)" form)
+  (when $output-debug-info (format true "(p-t-l .. ~)" form))
   ;; NOTE: Once we have 'defmacro' we'll need to another pass over the toplevel
   ;; forms to find 'defmacro's and compile their dependency tree
   (set form (macroexpand context form))
-  ;(format true "macroexpanded = ~" form)
   (case (first form)
     ('defun
      (unless (length>= form 3)
@@ -237,6 +239,7 @@
 
 (defun process-file (context filename-and-backups)
   (let ((filename (first filename-and-backups)))
+    (when $output-debug-info (format true "Processing file '~'" filename))
     (cond
       ((file-exists? filename)
        (let ((old-file (context-file context)))
@@ -266,7 +269,7 @@
 ;; TODO: This is basically a subset of what compile-lambda does, we should
 ;; combine the two.
 (defun compile-function (context func)
-  ;(format true "(c-f ... ~)" func)
+  (when $output-debug-info (format true "(c-f ... ~)" func))
   ;; if it's extern we don't need to compile it, the implmentation already
   ;; exists and will be found at link time
   (when (eq? (func-impl-type func) 'nucleus)
@@ -294,9 +297,9 @@
         compiled))))
 
 (defun compile-expr (context expr)
-  ;(format true "(c-e ... ~)" expr)
+  (when $output-debug-info (format true "(c-e ... ~)" expr))
   (let ((term (%compile-expr context expr)))
-    ;(format true "(c-e ... ~) -> ~" expr term)
+    (when $output-debug-info (format true "(c-e ... ~) -> ~" expr term))
     term))
 
 (defun %compile-expr (context expr)
