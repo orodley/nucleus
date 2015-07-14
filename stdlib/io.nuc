@@ -168,7 +168,10 @@
   (let ((c (%read-char stream)))
     (cond
       ((whitespace? c) (read-list stream list-head))
-      ((eq? c 41) nil)
+      ((eq? c 59) ; 59 = ';'
+       (skip-comment stream)
+       (read-list stream list-head))
+      ((eq? c 41) nil) ; 41 = ')'
       (true (back-up-char c)
             (let ((next (read-from-stream stream)))
               (set-cdr list-head (if (eq? next (symbol<-string "."))

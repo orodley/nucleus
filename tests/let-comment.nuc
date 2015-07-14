@@ -1,6 +1,8 @@
-(defun foo ()
+; status-code: 3
+
+(defun main ()
   (let* ((a 1)
          (b 2)
          ;(c 3)
          )
-    (+ a b c)))
+    (set $status-code (+ a b))))
