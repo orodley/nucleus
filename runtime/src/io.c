@@ -128,7 +128,7 @@ nuc_val rt_read_char_from_stream(nuc_val stream_val)
 	{
 		String_stream *str_stream = &stream->impl.string_stream;
 		if (str_stream->read_pos == str_stream->write_pos)
-			return EOF;
+			return INT_TO_NUC_VAL(EOF);
 		else
 			return INT_TO_NUC_VAL(str_stream->chars[str_stream->read_pos++]);
 	}
