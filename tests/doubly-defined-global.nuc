@@ -1,0 +1,6 @@
+; compile-stderr: redefinition of
+
+(defvar foo)
+(defvar foo)
+
+(defun main ())
