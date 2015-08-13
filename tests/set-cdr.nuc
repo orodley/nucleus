@@ -1,0 +1,4 @@
+; status-code: 0
+
+(defun main ()
+  (set-cdr (cons nil nil) (cons nil nil)))

@@ -2,6 +2,7 @@
 ;; TODO: These should probably use the LLVM target info API instead
 (defvar PTR-BYTES 8)
 (defvar CHAR (LLVMIntType 8))
+(defvar BYTE (LLVMIntType 8))
 (defvar CHAR* (LLVMPointerType CHAR 0))
 (defvar INT (LLVMIntType 32))
 (defvar LONG (LLVMIntType 64))
@@ -15,7 +16,7 @@
 (defvar NUC-VAL-BITS 64)
 
 (defvar NUC-VAL (LLVMIntType NUC-VAL-BITS))
-(defvar CONS-CELL (LLVMStructType (list NUC-VAL NUC-VAL) 2 false))
+(defvar CONS-CELL (LLVMStructType (list NUC-VAL NUC-VAL BYTE) 3 false))
 (defvar CONS-CELL-PTR (LLVMPointerType CONS-CELL 0))
 (defvar CLOSURE
   (LLVMStructType

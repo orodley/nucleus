@@ -59,7 +59,13 @@
                                  "a.out"
                                  (second non-flag-args)))
               (llvm-context (LLVMGetGlobalContext))
-              (context (make-context (copy-list $constants) nil nil)))
+              ;; This description string is cribbed from the x86_64 target in
+              ;; clang, because there is zero documentation (that I can find)
+              ;; on the format of target description strings, or anything
+              ;; provided for common architectures.
+              (target-data (LLVMCreateTargetData
+                             "e-m:e-i64:64-f80:128-n8:16:32:64-S128"))
+              (context (make-context (copy-list $constants) nil nil target-data)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
          (process-toplevel-form context '(defvar $status-code 0))
@@ -162,7 +168,18 @@
             (arg-list (third form))
             (names-and-types (parse-arg-list context arg-list))
             (arg-names (car names-and-types))
-            (arg-types (cdr names-and-types))
+            (arg-types
+              (map (lambda (typ)
+                     ;; This is kinda messy - "cons" as a type-spec is used to
+                     ;; mean "any kind of cons type" when coercing (e.g.: for
+                     ;; the 'car' builtin function).  However, obviously when a
+                     ;; function is declared to take something of type 'cons'
+                     ;; it can't take any cons type, it wants '(cons ? ?)'.
+                     ;; So, we convert it here.
+                     ;; TODO: We should probably come up with a different type
+                     ;; spec for the 'any cons type' case.
+                     (if (eq? typ 'cons) '(cons ? ?) typ))
+                   (cdr names-and-types)))
             (body (cdddr form))
             (return-type (cond
                            ((and (not (nil? body)) (eq? (first body) '->))

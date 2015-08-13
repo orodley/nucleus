@@ -12,6 +12,9 @@
 (extern LLVMGetNamedGlobal (* char*) -> *)
 (extern LLVMSetInitializer (* *) -> void)
 
+(extern LLVMCreateTargetData (char*) -> *)
+(extern LLVMABISizeOfType (* *) -> long-long)
+
 (extern LLVMConstInt (* long-long bool) -> *)
 (extern LLVMConstIntOfString (* char* u8) -> *)
 (extern LLVMConstNull (*) -> *)
@@ -29,6 +32,7 @@
   (LLVMGetBasicBlockParent (LLVMGetInsertBlock builder)))
 
 (extern LLVMTypeOf (*) -> *)
+(extern LLVMGetElementType (*) -> *)
 (extern LLVMGetIntTypeWidth (*) -> uint)
 
 (extern LLVMIntType (uint) -> *)
@@ -65,7 +69,8 @@
 (extern LLVMBuildSelect (* * * * char*) -> *)
 (extern LLVMBuildCall (* * array uint char*) -> *)
 (defun llvm-build-call (builder func args name)
-  ;(format true "(l-b-c ... ~)" name)
+  (when $output-debug-info
+    (format true "(l-b-c ... ~)" args))
   (LLVMBuildCall builder func args (length args) name))
 (extern LLVMBuildGEP (* * array uint char*) -> *)
 (extern LLVMBuildStructGEP (* * uint char*) -> *)
@@ -139,7 +144,7 @@
       (set-cdr list-head (cons param nil))
       (%llvm-params func (cdr list-head)))))
 
-(defun llvm-phi (builder phi-type pairs)
-  (let ((phi (LLVMBuildPhi builder phi-type "")))
+(defun llvm-phi (builder phi-type pairs name)
+  (let ((phi (LLVMBuildPhi builder phi-type name)))
     (LLVMAddIncoming phi (map car pairs) (map cdr pairs) (length pairs))
     phi))

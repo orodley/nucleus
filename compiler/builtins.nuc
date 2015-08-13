@@ -8,6 +8,9 @@
     (cons '% builtin%)
     (cons '/ builtin/)
     (cons 'cons builtin-cons)
+    (cons 'scons builtin-scons)
+    (cons 'set-car builtin-set-car)
+    (cons 'set-cdr builtin-set-cdr)
     (cons 'car builtin-car)
     (cons 'cdr builtin-cdr)
     (cons 'eq? builtin-eq?)
@@ -112,6 +115,9 @@
 (defun special-form-progn (context args)
   (compile-progn context args))
 
+;;; TODO: It would be nice if we knew in advance whether the result is actually
+;;; used, so that we can omit potentially costly conversions to make both
+;;; branches the same type.
 (defun special-form-if (context args)
   (let* ((condition (coerce context (compile-expr context (first args)) 'bool))
          (start-block (LLVMGetInsertBlock $builder))
@@ -132,11 +138,14 @@
            (then-resultant-block (LLVMGetInsertBlock $builder))
            (else-term (compile-in-block context else-expr else-block))
            (else-resultant-block (LLVMGetInsertBlock $builder))
-           (then-type (tt then-term))
-           (else-type (tt else-term))
+           (then-type (expand-type (tt then-term)))
+           (else-type (expand-type (tt else-term)))
            (result-type
-             (if (type-eq? then-type else-type)
-               then-type
+             (cond
+               ((type-eq? then-type else-type)
+                then-type)
+               ((and (cons-type? then-type) (cons-type? else-type))
+                '(cons ? ?))
                ;; TODO: If both types are different static types then we need a
                ;; dynamic value, but we shouldn't just throw away the static
                ;; type information - we should keep it as a union type and do
@@ -146,15 +155,20 @@
                ;; type of the argument of car is 'cons' (or (cons A B) once we
                ;; have a proper cons type), which is disjoint from the type of
                ;; the if expression, (or string bool).
-               '?)))
+               (true '?))))
       (cond
         ((not (LLVMIsConstant (tv condition)))
          ;; We wait until here to do this, because if the condition is constant
          ;; we do an unconditional branch.
-         (let ((then-term (%build-branch context then-term result-type
-                                         then-resultant-block after-block))
-               (else-term (%build-branch context else-term result-type
-                                         else-resultant-block after-block)))
+         (let* ((then-term (%build-branch context then-term result-type
+                                          then-resultant-block after-block))
+                ;; We need to recompute the resultant blocks in this case,
+                ;; because '%build-branch' does a 'coerce', which can add
+                ;; additional basic blocks.
+                (then-resultant-block (LLVMGetInsertBlock $builder))
+                (else-term (%build-branch context else-term result-type
+                                          else-resultant-block after-block))
+                (else-resultant-block (LLVMGetInsertBlock $builder)))
            (LLVMPositionBuilderAtEnd $builder after-block)
            (make-term
              result-type
@@ -162,7 +176,8 @@
              ;; based on the the given terms and do the coercions itself.
              (llvm-phi $builder (llvm-type<-type-spec context result-type)
                        (list (cons (tv then-term) then-resultant-block)
-                             (cons (tv else-term) else-resultant-block)))
+                             (cons (tv else-term) else-resultant-block))
+                       "if-non-constant")
              false)))
         ;; If we detect that the condition is constant, we can tell more about
         ;; the result type. We could also remove the other branch, but LLVM
@@ -180,7 +195,8 @@
            (make-term else-type
                       (llvm-phi $builder t
                                 (list (cons (LLVMGetUndef t) then-resultant-block)
-                                      (cons (tv else-term) else-resultant-block)))
+                                      (cons (tv else-term) else-resultant-block))
+                                "if-constant-false")
                       false)))
         ((eq? (LLVMConstIntGetSExtValue (tv condition)) 1)
          (link-blocks $builder then-resultant-block after-block)
@@ -190,7 +206,8 @@
            (make-term then-type
                       (llvm-phi $builder t
                                 (list (cons (tv then-term) then-resultant-block)
-                                      (cons (LLVMGetUndef t) else-resultant-block)))
+                                      (cons (LLVMGetUndef t) else-resultant-block))
+                                "if-constant-true")
                       false)))))))
 
 (defun compile-in-block (context expr block)
@@ -391,14 +408,27 @@
 (defun %LLVMBuildFDiv (builder val1 val2 name) (LLVMBuildFDiv builder val1 val2 name))
 
 (defun builtin-cons (context args)
-  (make-term
-    'cons ; TODO: this should be a higher-order type determined by the type of the input terms
-    (llvm-build-call
-      $builder
-      (runtime-func "rt_cons" CONS-CELL-PTR (list NUC-VAL NUC-VAL))
-      (map (lambda (term) (tv (coerce context term '?))) args)
-      "cons")
-    false))
+  (let* ((cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
+                                     CONS-CELL-PTR ""))
+         (cons-term (make-term '(cons ? ?) cons-ptr false)))
+    (set-car-value cons-ptr (tv (coerce context (first args) '?)))
+    (set-cdr-value cons-ptr (tv (coerce context (second args) '?)))
+    ;; gr is undefined here - it needs to be explicitly set before this value
+    ;; can be used anything that can deal with guarded references anyway.
+    cons-term))
+
+(defun builtin-scons (context args)
+  (let* ((type-spec (list 'cons (tt (first args)) (tt (second args))))
+         (cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
+                                     CONS-CELL-PTR ""))
+         (cons-term (make-term type-spec cons-ptr false)))
+    (when $output-debug-info (format true "cons type = ~" type-spec))
+    (set-car-value cons-ptr (LLVMBuildBitCast $builder (tv (first args))
+                                              NUC-VAL ""))
+    (set-cdr-value cons-ptr (LLVMBuildBitCast $builder (tv (second args))
+                                              NUC-VAL ""))
+    (set-gr-value cons-ptr (llvm-i8<-int 0))
+    cons-term))
 
 ;;; TODO: An interesting idea is to make car and cdr return lvalues so that we
 ;;; can do stuff like (set (car foo) bar). Have to give it a try and see if
@@ -406,33 +436,155 @@
 ;;; type for references, and make functions choose to return references. e.g.:
 ;;; (defun first ((c cons)) -> (ref ?) (car c))
 ;;; otherwise the 'lvalueness' gets swallowed upon returning from the function.
-;;; TODO: These should coerce their argument to a cons once we have proper
-;;; static typing for conses.
+
+(defun builtin-c[ad]r (context cons-term field-getter gr-getter field-type field-name)
+  (make-term
+    field-type
+    (if (type-eq? (tt cons-term) '(cons ? ?))
+      ;; Dynamic cons - just grab the value out.
+      (field-getter (tv cons-term))
+      ;; Static cons - check if it's a guarded reference, and convert the value
+      ;; if it is.
+      ;;
+      ;; TODO: Once we track known compile-time information about guarded
+      ;; references, we can check that here and only branch if we don't know
+      ;; what it is statically.
+      (let* ((llvm-field-type (llvm-type<-type-spec context field-type))
+             (raw-field-value (field-getter (tv cons-term)))
+             (current-func (get-current-func $builder))
+             (gr-block (LLVMAppendBasicBlock current-func "gr-cons"))
+             (non-gr-block (LLVMAppendBasicBlock current-func "non-gr-cons"))
+             (after-block (LLVMAppendBasicBlock current-func "after-field-access")))
+        (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) gr-block non-gr-block)
+        (LLVMPositionBuilderAtEnd $builder gr-block)
+        (let* ((coerced-field-value
+                 (tv (coerce context
+                             (make-term '? raw-field-value false)
+                             field-type)))
+               (gr-resultant-block (LLVMGetInsertBlock $builder)))
+          (LLVMBuildBr $builder after-block)
+          (LLVMPositionBuilderAtEnd $builder non-gr-block)
+          (let ((static-field-value
+                  (LLVMBuildBitCast $builder raw-field-value llvm-field-type "")))
+            (LLVMBuildBr $builder after-block)
+            (LLVMPositionBuilderAtEnd $builder after-block)
+            (llvm-phi $builder llvm-field-type
+                      (list (cons coerced-field-value gr-block)
+                            (cons static-field-value non-gr-block))
+                      field-name)))))
+    false))
 
 (defun builtin-car (context args)
-  (let ((cons-ptr (tv (coerce context (first args) 'cons))))
-    (make-term
-      '? ; TODO: this should be determined by the type of the input term
-      (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 0 "") "car")
-      false)))
+  (let ((cons-term (coerce context (first args) 'cons)))
+    (builtin-c[ad]r context cons-term get-car-value get-car-gr-value
+                    (car-type (tt cons-term)) "car")))
 
 (defun builtin-cdr (context args)
-  (let ((cons-ptr (tv (coerce context (first args) 'cons))))
-    (make-term
-      '? ; TODO: this should be determined by the type of the input term
-      (LLVMBuildLoad $builder (LLVMBuildStructGEP $builder cons-ptr 1 "") "cdr")
-      false)))
+  (let ((cons-term (coerce context (first args) 'cons)))
+    (builtin-c[ad]r context cons-term get-cdr-value get-cdr-gr-value
+                    (cdr-type (tt cons-term)) "cdr")))
+
+(defun builtin-set-c[ad]r (context cons-term val-term field-setter
+                                   field-getter gr-getter field-type field-name)
+  (cond
+    ((type-eq? (tt val-term) '?)
+     ;; The value we're assigning is dynamic.
+     (cond
+       ((type-eq? field-type '?)
+        ;; The value we're assigning is dynamic and so is the field - just
+        ;; stick it in, no conversions or checks necessary.
+        (field-setter (tv cons-term) (tv val-term)))
+       (true
+         ;; The value we're assigning is dynamic but the field isn't, so we
+         ;; need to first check the runtime type of the value we're assigning
+         ;; and then check if this is a guarded reference. If it is, just
+         ;; assign. Otherwise, convert to the correct static type first.
+         ;;
+         ;; TODO: Once we track known compile-time information about guarded
+         ;; references, we can check that here and only branch if we don't know
+         ;; what it is statically.
+         ;;
+         ;; TODO: This is another use case for a 'coerce' form that assumes the
+         ;; runtime type is correct - we always check up front to make sure it
+         ;; matches the field, so we don't need to check again once we discover
+         ;; it's not a guarded reference and convert.
+         (check-type (tv val-term) (type-id<-type-spec context field-type))
+         (let* ((current-func (get-current-func $builder))
+                (original-block (LLVMGetInsertBlock $builder))
+                (non-gr-block (LLVMAppendBasicBlock current-func "non-gr-cons"))
+                (after-block (LLVMAppendBasicBlock current-func "after-set-field")))
+           (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) after-block non-gr-block)
+           (LLVMPositionBuilderAtEnd $builder non-gr-block)
+           (let* ((coerced-value
+                    (LLVMBuildBitCast
+                      $builder (tv (coerce context val-term field-type)) NUC-VAL ""))
+                  (non-gr-resultant-block (LLVMGetInsertBlock $builder)))
+             (LLVMBuildBr $builder after-block)
+             (LLVMPositionBuilderAtEnd $builder after-block)
+             (field-setter (tv cons-term)
+                           (llvm-phi
+                             $builder NUC-VAL
+                             (list (cons coerced-value non-gr-resultant-block)
+                                   (cons (tv val-term) original-block))
+                             "final-value")))))))
+    ((type-eq? field-type '?)
+     ;; The field is dynamic, but the value being assigned isn't. We convert
+     ;; the static value into a dynamic value and stick it in.
+     (field-setter (tv cons-term)
+                   (LLVMBuildBitCast
+                     $builder (tv (coerce context val-term field-type)) NUC-VAL "")))
+    ((not (type-eq? field-type (tt val-term)))
+     ;; Wrong static type
+     (fail! context
+            (format nil "Static type error: tried to use a term of type '~' where '~' was expected"
+                    (tt val-term) field-type)))
+    (true
+      ;; Correct static type, but we still don't know whether this is a guarded
+      ;; reference, so we must check, and do the conversion if so.
+      ;;
+      ;; TODO: Once we track known compile-time information about guarded
+      ;; references, we can check that here and only branch if we don't know
+      ;; what it is statically.
+      (let* ((current-func (get-current-func $builder))
+             (original-block (LLVMGetInsertBlock $builder))
+             (gr-block (LLVMAppendBasicBlock current-func "gr-cons"))
+             (after-block (LLVMAppendBasicBlock current-func "after-set-field")))
+        (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) gr-block after-block)
+        (LLVMPositionBuilderAtEnd $builder gr-block)
+        (let* ((coerced-value (tv (coerce context val-term field-type)))
+               (gr-resultant-block (LLVMGetInsertBlock $builder)))
+          (LLVMBuildBr $builder after-block)
+          (LLVMPositionBuilderAtEnd $builder after-block)
+          (field-setter (tv cons-term)
+                        (llvm-phi
+                          $builder NUC-VAL
+                          (list (cons coerced-value gr-resultant-block)
+                                (cons (tv val-term) original-block))
+                          "final-value"))))))
+  val-term)
+
+(defun builtin-set-car (context args)
+  (let ((cons-term (coerce context (first args) 'cons)))
+    (builtin-set-c[ad]r context cons-term (second args) set-car-value
+                        get-car-value get-car-gr-value (car-type (tt cons-term))
+                        "car")))
+
+(defun builtin-set-cdr (context args)
+  (let ((cons-term (coerce context (first args) 'cons)))
+    (builtin-set-c[ad]r context cons-term (second args) set-cdr-value
+                        get-cdr-value get-cdr-gr-value (cdr-type (tt cons-term))
+                        "cdr")))
 
 (defun builtin-eq? (context args)
   (let ((term1 (first args))
         (term2 (second args)))
     (cond
-      ((and (eq? (tt term1) '?) (eq? (tt term2) '?))
+      ((and (type-eq? (tt term1) '?) (type-eq? (tt term2) '?))
        ;; TODO: If we have two dynamic values that are both foreign pointers
        ;; they can be different as they are boxed. In that case we need to
        ;; unbox them.
        (simple-int-cmp (tv term1) (tv term2)))
-      ((eq? (tt term1) '?)
+      ((type-eq? (tt term1) '?)
        ;; We compare the runtime type, and if they're the same we compare the
        ;; actual value.
        ;; TODO: This is a little inefficient as coerce checks the type after
@@ -455,21 +607,23 @@
          (LLVMPositionBuilderAtEnd $builder wrong-type-block)
          (LLVMBuildBr $builder after-block)
          (LLVMPositionBuilderAtEnd $builder correct-type-block)
-         (let ((ct-term (builtin-eq?
-                          context (list (coerce context term1 (tt term2)) term2))))
+         (let* ((ct-term (builtin-eq?
+                           context (list (coerce context term1 (tt term2)) term2)))
+                (ct-resultant-block (LLVMGetInsertBlock $builder)))
            (LLVMBuildBr $builder after-block)
            (LLVMPositionBuilderAtEnd $builder after-block)
            (make-term
              'bool
              (llvm-phi $builder (llvm-type<-type-spec context 'bool)
-                       (list (cons (tv ct-term) correct-type-block)
-                             (cons (llvm-i32<-int 0) wrong-type-block)))
+                       (list (cons (tv ct-term) ct-resultant-block)
+                             (cons (llvm-i32<-int 0) wrong-type-block))
+                       "eq?")
              false))))
-      ((eq? (tt term2) '?)
+      ((type-eq? (tt term2) '?)
        ;; Reverse the order so we go into the case above where the type of the
        ;; first term is ?
        (builtin-eq? context (list term2 term1)))
-      ((eq? (tt term1) (tt term2))
+      ((type-eq? (tt term1) (tt term2))
        (simple-int-cmp (tv term1) (tv term2)))
       ((and (numeric? (tt term1)) (numeric? (tt term2)))
        (let* ((type-and-vals (arithmetic-conversion context (list term1 term2)))

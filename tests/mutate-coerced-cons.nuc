@@ -1,0 +1,9 @@
+; run-stdout: (0 1)
+
+(defun main ()
+  (let ((c (scons 0 nil)))
+    (foo c)
+    (print c)))
+
+(defun foo (c)
+  (set-cdr c (cons 1 nil)))

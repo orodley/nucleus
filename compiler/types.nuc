@@ -1,9 +1,16 @@
-;;; TODO: Replace with a struct once they exist
 ;;; A 'term' is the compile-time form of a nucleus value. It has a corresponding
 ;;; LLVMValueRef, type, and boolean indicating whether it is an lvalue (i.e.
 ;;; can be assigned to). If the type is unknown, it defaults to ?, the dynamic
 ;;; type.
-(defun make-term (typ val lvalue?) (list typ val lvalue?))
+;;; TODO: Replace with a struct once they exist
+;;; TODO: It could be really useful to keep track of known null vs. non-null
+;;; information about cons terms, to avoid some runtime checks. Sometimes we
+;;; literally just allocated the thing so those cases are easy pickings.
+(defun make-term (typ val lvalue?)
+  (assert! (eq? (type val) foreign-t) "val should be an llvm ValueRef")
+  (assert! (or (symbol? typ) (cons? typ)) "typ should be a type-spec")
+  (assert! (or (eq? lvalue? true) (eq? lvalue? false)) "lvalue? should be a bool")
+  (list typ val lvalue?))
 (defun tt (term) (first term))
 (defun tv (term) (second term))
 (defun tl? (term) (third term))
@@ -11,18 +18,15 @@
 (defun coerce (context term typ)
   (when $output-debug-info (format true "(coerce ... ~ ~)" term typ))
   (cond
-    ((eq? (tt term) typ) term)
-    ((eq? (tt term) '?) (make-term typ (static-val<-dynamic-val context typ (tv term)) (tl? term)))
-    ((eq? typ '?)
+    ((type-eq? (tt term) typ) term)
+    ((type-eq? (tt term) '?)
+     (make-term typ (static-val<-dynamic-val context typ (tv term)) (tl? term)))
+    ((type-eq? typ '?)
      (make-term typ (dynamic-val<-static-val context (tt term) (tv term)) (tl? term)))
     (true
       (make-term typ (implicit-conversion context term typ) (tl? term)))))
 
-(defun consistent? (type1 type2)
-  (cond
-    ((eq? type1 type2) true)
-    ((eq? type1 '?) true)
-    ((eq? type2 '?) true)))
+;; TODO: append "-type"
 
 (defun numeric? (typ) (or (integral? typ) (floating-point? typ)))
 
@@ -31,9 +35,82 @@
                  u8 i8 i16 i32 i64)))
 
 (defun floating-point? (typ)
-  (eq? typ 'float))
+  (type-eq? typ 'float))
 
-(defun type-width (context typ)
+(defun cons-type? (typ)
+  (or (eq? typ 'cons) (and (cons? typ) (eq? (first typ) 'cons))))
+
+(defun type-eq? (t1 t2)
+  (or (eq? t1 t2)
+      (and (cons-type? t1) (cons-type? t2)
+           (or (eq? t1 'cons) (eq? t2 'cons)
+               (and (type-eq? (second t1) (second t2))
+                    (type-eq? (third t1) (third t2)))))
+      (and (eq? t1 'int) (eq? t2 'i32))
+      (and (eq? t2 'int) (eq? t1 'i32))))
+
+(defun car-type (typ)
+  (expand-type (if (or (eq? typ 'cons) (eq? typ '?)) '? (second typ))))
+(defun cdr-type (typ)
+  (expand-type (if (or (eq? typ 'cons) (eq? typ '?)) '? (third typ))))
+
+(defun expand-type (typ)
+  (if (eq? typ 'cons)
+    (list 'cons '? '?)
+    typ))
+
+(defun guarded-ref<-static-cons (context cons-ptr src-type dest-type)
+  (assert! (and (cons-type? src-type) (cons-type? dest-type))
+           "src-type and dest-type must be cons types")
+  (let ((convert-car? (not (type-eq? (car-type src-type) (car-type dest-type))))
+        (convert-cdr? (not (type-eq? (cdr-type src-type) (cdr-type dest-type)))))
+    (when $output-debug-info
+      (format true "(g-r<-s-c ... ~ ~)" cons-ptr src-type dest-type))
+    (cond
+      ((not (or convert-car? convert-cdr?)) cons-ptr)
+      ((LLVMIsConstant cons-ptr)
+       ;; Don't bother checking at runtime if we know it's null at compile-time
+       (LLVMConstNull CONS-CELL-PTR))
+      (true
+        (let* ((current-func (get-current-func $builder))
+               (before-block (LLVMGetInsertBlock $builder))
+               (non-nil-block (LLVMAppendBasicBlock current-func "non-nil-static-cons"))
+               (after-block (LLVMAppendBasicBlock current-func "after-static-cons")))
+          (assert! (or convert-car? convert-cdr?) "Shouldn't have gotten called if the types are already correct")
+          (LLVMBuildCondBr
+            $builder
+            (LLVMBuildICmp $builder LLVMIntEQ cons-ptr (LLVMConstNull CONS-CELL-PTR) "")
+            after-block non-nil-block)
+          (LLVMPositionBuilderAtEnd $builder non-nil-block)
+          (when convert-car?
+            (let* ((car-value 
+                     (LLVMBuildBitCast
+                       $builder (get-car-value cons-ptr)
+                       (llvm-type<-type-spec context (car-type src-type)) ""))
+                   (coerced-car
+                     (coerce context (make-term (car-type src-type) car-value false) '?)))
+              (set-car-value cons-ptr (LLVMBuildBitCast $builder (tv coerced-car) NUC-VAL ""))))
+          (when convert-cdr?
+            (let* ((cdr-value 
+                     (LLVMBuildBitCast
+                       $builder (get-cdr-value cons-ptr)
+                       (llvm-type<-type-spec context (cdr-type src-type)) ""))
+                   (coerced-cdr
+                     (coerce context (make-term (cdr-type src-type) cdr-value false) '?)))
+              (set-cdr-value cons-ptr (LLVMBuildBitCast $builder (tv coerced-cdr) NUC-VAL ""))))
+          (set-gr-value cons-ptr
+                        (LLVMBuildOr $builder (get-gr-value cons-ptr)
+                                     (llvm-i8<-int
+                                       (cond
+                                         ((and convert-car? convert-cdr?) 3)
+                                         (convert-car? 2)
+                                         (convert-cdr? 1)))
+                                     ""))
+          (LLVMBuildBr $builder after-block)
+          (LLVMPositionBuilderAtEnd $builder after-block)
+          cons-ptr)))))
+
+(defun type-size (context typ)
   (LLVMGetIntTypeWidth (llvm-type<-type-spec context typ)))
 
 (defun remove-lowtag (val)
@@ -71,34 +148,39 @@
 ;;; type object.
 
 (defun llvm-type<-type-spec (context type-spec)
-  (case type-spec
-    ;; FFI stuff
-    ('* UINTPTR)
-    ('char (LLVMIntType 8))
-    ('char* CHAR*)
-    ('void VOID)
-    ('int INT) ('uint INT) ('bool INT)
-    ('long LONG)
-    ('long-long LONG-LONG)
-    ('array (LLVMPointerType UINTPTR 0))
+  (if (cons? type-spec)
+    (case (first type-spec)
+      ('cons CONS-CELL-PTR)
+      (default (fail! context (format nil "Unsupported compound type '~'"
+                                      (first type-spec)))))
+    (case type-spec
+      ;; FFI stuff
+      ('* UINTPTR)
+      ('char (LLVMIntType 8))
+      ('char* CHAR*)
+      ('void VOID)
+      ('int INT) ('uint INT) ('bool INT)
+      ('long LONG)
+      ('long-long LONG-LONG)
+      ('array (LLVMPointerType UINTPTR 0))
 
-    ;; Fixed width integer types.
-    ;; TODO: We need to do unsigned types properly.
-    ('u8 (LLVMIntType 8))
-    ('i8 (LLVMIntType 8))
-    ('i16 (LLVMIntType 16))
-    ('i32 (LLVMIntType 32))
-    ('i64 (LLVMIntType 64))
+      ;; Fixed width integer types.
+      ;; TODO: We need to do unsigned types properly.
+      ('u8 (LLVMIntType 8))
+      ('i8 (LLVMIntType 8))
+      ('i16 (LLVMIntType 16))
+      ('i32 (LLVMIntType 32))
+      ('i64 (LLVMIntType 64))
 
-    ;; Primitive nucleus types
-    ('? NUC-VAL)
-    ('symbol (LLVMIntType 32))
-    ('bool (LLVMIntType 32))
-    ('string STRING-PTR)
-    ('cons CONS-CELL-PTR)
-    ('float (LLVMFloatType))
+      ;; Primitive nucleus types
+      ('? NUC-VAL)
+      ('symbol (LLVMIntType 32))
+      ('bool (LLVMIntType 32))
+      ('string STRING-PTR)
+      ('cons CONS-CELL-PTR)
+      ('float (LLVMFloatType))
 
-    (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
+      (default (fail! context (format nil "Unsupported type-spec '~'" type-spec))))))
 
 (defun type-id<-type-spec (context type-spec)
   (case type-spec
@@ -121,14 +203,9 @@
 
     (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
-(defun type-eq? (t1 t2)
-  (or (eq? t1 t2)
-      (and (eq? t1 'int) (eq? t2 'i32))
-      (and (eq? t2 'int) (eq? t1 'i32))))
-
 (defun static-val<-dynamic-val (context type-spec val)
   (cond
-    ((eq? type-spec '*)
+    ((type-eq? type-spec '*)
      (check-type val LLVM-FOREIGN-T)
      (LLVMBuildIntToPtr
        $builder
@@ -139,7 +216,7 @@
          "")
        UINTPTR
        ""))
-    ((eq? type-spec 'char*)
+    ((type-eq? type-spec 'char*)
      (check-type val LLVM-STRING-T)
      (llvm-build-call
        $builder
@@ -163,31 +240,53 @@
          "")
        (llvm-type<-type-spec context type-spec)
        ""))
-    ((eq? type-spec 'bool)
+    ((type-eq? type-spec 'bool)
      (check-type val LLVM-BOOL-T)
      (LLVMBuildSelect $builder (LLVMBuildICmp $builder LLVMIntEQ val LLVM-TRUE "")
                       (llvm-i32<-int 1) (llvm-i32<-int 0) ""))
-    ((eq? type-spec 'string)
+    ((type-eq? type-spec 'string)
      (check-type val LLVM-STRING-T)
      (LLVMBuildIntToPtr $builder (remove-lowtag val) STRING-PTR ""))
-    ((eq? type-spec 'array)
+    ((type-eq? type-spec 'array)
      (check-type val LLVM-CONS-T)
      (llvm-build-call
        $builder
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context type-spec) (list NUC-VAL))
        (list val)
        "array<-list"))
-    ((eq? type-spec 'symbol)
+    ((type-eq? type-spec 'symbol)
      (check-type val LLVM-SYMBOL-T)
      (LLVMBuildIntCast
        $builder
        (LLVMBuildLShr $builder val (llvm-i64<-int LOWTAG-BITS) "remove-symbol-lowtag")
        (llvm-type<-type-spec context type-spec)
        ""))
-    ((eq? type-spec 'cons)
+    ((type-eq? type-spec 'cons)
+     ;; To convert a cons containing dynamically typed values into a statically
+     ;; typed cons, we just set the guarded reference flag, and leave the
+     ;; values contained unconverted. This is necessary because there could be
+     ;; references to this cons which expect it to contain dynamically typed
+     ;; values. It is complicated by the fact that the cons could be nil - in
+     ;; that case we can't set the flag, we just pass on the nil value.
      (check-type val LLVM-CONS-T)
-     (LLVMBuildIntToPtr $builder (remove-lowtag val) CONS-CELL-PTR ""))
-    ((eq? type-spec 'type)
+     (if (LLVMIsConstant val)
+       (LLVMConstNull CONS-CELL-PTR)
+       (let* ((current-func (get-current-func $builder))
+              (cons-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val)
+                                           CONS-CELL-PTR ""))
+              (non-nil-block (LLVMAppendBasicBlock current-func "add-gr-flag-non-nil-cons"))
+              (after-block (LLVMAppendBasicBlock current-func "add-gr-flag-after")))
+       (LLVMBuildCondBr
+         $builder
+         (LLVMBuildICmp $builder LLVMIntEQ cons-ptr
+                        (LLVMConstNull CONS-CELL-PTR) "")
+         after-block non-nil-block)
+       (LLVMPositionBuilderAtEnd $builder non-nil-block)
+       (set-gr-value cons-ptr (llvm-i8<-int 3))
+       (LLVMBuildBr $builder after-block)
+       (LLVMPositionBuilderAtEnd $builder after-block)
+       cons-ptr)))
+    ((type-eq? type-spec 'type)
      ;; TODO: We should have a separate exttag for types so that we can do a
      ;; check-type here.
      (LLVMBuildLShr $builder val (llvm-i64<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
@@ -195,16 +294,16 @@
 
 (defun dynamic-val<-static-val (context type-spec val)
   (cond
-    ((eq? type-spec '*)
+    ((type-eq? type-spec '*)
       (add-lowtag
         (let ((box (gc-alloc PTR-BYTES)))
           (LLVMBuildStore $builder (LLVMBuildPtrToInt $builder val NUC-VAL "") box)
           box)
         FOREIGN-LOWTAG))
-    ((eq? type-spec 'void) LLVM-NIL)
+    ((type-eq? type-spec 'void) LLVM-NIL)
     ((integral? type-spec)
      (fixnum<-llvm-int (LLVMBuildIntCast $builder val NUC-VAL "cast-int-to-nuc-val")))
-    ((eq? type-spec 'float)
+    ((type-eq? type-spec 'float)
      (LLVMBuildOr
        $builder
        (LLVMBuildShl
@@ -219,13 +318,14 @@
          "")
        (llvm-i64<-int (+ EXTTAG-LOWTAG (<< FLOAT-EXTTAG LOWTAG-BITS)))
        ""))
-    ((eq? type-spec 'bool)
+    ((type-eq? type-spec 'bool)
      (let ((zero (LLVMConstInt (LLVMTypeOf val) 0 false)))
        (LLVMBuildSelect $builder
                         (LLVMBuildICmp $builder LLVMIntEQ val zero "")
                         LLVM-FALSE LLVM-TRUE "")))
-    ((eq? type-spec 'string) (add-lowtag val STRING-LOWTAG))
-    ((eq? type-spec 'symbol)
+    ((type-eq? type-spec 'string)
+     (add-lowtag val STRING-LOWTAG))
+    ((type-eq? type-spec 'symbol)
      (LLVMBuildOr
        $builder
        (LLVMBuildShl $builder (LLVMBuildZExt $builder val NUC-VAL "")
@@ -233,19 +333,16 @@
                      "")
        (llvm-i64<-int SYMBOL-LOWTAG)
        ""))
-    ((eq? type-spec 'cons)
-     (add-lowtag val CONS-LOWTAG))
-    ((eq? type-spec 'type)
+    ((type-eq? type-spec 'cons)
+     (add-lowtag (guarded-ref<-static-cons context val type-spec '(cons ? ?))
+                 CONS-LOWTAG))
+    ((type-eq? type-spec 'type)
      (LLVMBuildOr
        $builder
-       (LLVMBuildShl
-         $builder
-         val
-         (llvm-i32<-int (+ LOWTAG-BITS EXTTAG-BITS))
-         "")
+       (LLVMBuildShl $builder val (llvm-i32<-int (+ LOWTAG-BITS EXTTAG-BITS)) "")
        (llvm-i32<-int (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
        ""))
-    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))  ))
+    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
 
 (defun implicit-conversion (context term typ)
   (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))
@@ -274,22 +371,24 @@
        (tv term)
        (llvm-type<-type-spec context typ)
        ""))
-    ((and (eq? (tt term) 'string) (eq? typ 'char*))
+    ((and (type-eq? (tt term) 'string) (type-eq? typ 'char*))
      (LLVMBuildBitCast
        $builder
        (LLVMBuildStructGEP $builder (tv term) 1 "")
        CHAR*
        ""))
     ;; TODO: this sucks
-    ((and (eq? (tt term) 'cons) (eq? typ 'array))
+    ((and (type-eq? (tt term) 'cons) (type-eq? typ 'array))
      (llvm-build-call
        $builder
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context typ) (list NUC-VAL))
-       (list (add-lowtag (tv term) CONS-LOWTAG))
+       (list (add-lowtag (guarded-ref<-static-cons context (tv term) (tt term)
+                                                   '(cons ? ?))
+                         CONS-LOWTAG))
        "array<-list"))
     (true (fail! context
                  (format nil
-                         "Static type error: tried to use a term of type '~' where '~' was wanted"
+                         "Static type error: tried to use a term of type '~' where '~' was expected"
                          (tt term) typ)))))
 
 ;;; Given a list of terms (which are arguments to some arithmetic builtin) this
@@ -298,22 +397,22 @@
   (let ((max-type 'u8))
     (each (lambda (term)
             (let ((typ (tt term)))
-              (unless (or (eq? typ '?) (numeric? typ))
+              (unless (or (type-eq? typ '?) (numeric? typ))
                 (fail! context (format nil "Static type error: tried to use a term of type '~' where a numeric type was expected"
                                        typ)))
               (cond
                 ;; TODO: change this when we have doubles
                 ((floating-point? typ)
                  (set max-type typ))
-                ((> (type-width context typ)
-                    (type-width context max-type))
+                ((> (type-size context typ)
+                    (type-size context max-type))
                  (set max-type typ)))))
           terms)
     ;; We need to make sure we have an actual integral type at this point, not
     ;; a tagged value.
     ;; TODO: We shouldn't assume it's an integer just because it's dynamic, we
     ;; need to check for float too.
-    (if (eq? max-type '?)
+    (if (type-eq? max-type '?)
       (set max-type 'i64))
     (cons max-type
           (map (lambda (term) (tv (coerce context term max-type)))

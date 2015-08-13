@@ -4,37 +4,6 @@
 #include "nuc.h"
 #include "gc.h"
 
-// TODO: Does this (and possibly the next two) really need to be here, rather
-// than just compiled inline?
-Cons *rt_cons(nuc_val car, nuc_val cdr)
-{
-	Cons *c = gc_alloc(sizeof *c);
-	c->car = car;
-	c->cdr = cdr;
-
-	return c;
-}
-
-nuc_val rt_set_car(nuc_val cons, nuc_val new_car)
-{
-	CHECK(cons, CONS_TYPE);
-
-	Cons *c = (Cons *)REMOVE_LOWTAG(cons);
-	c->car = new_car;
-
-	return new_car;
-}
-
-nuc_val rt_set_cdr(nuc_val cons, nuc_val new_cdr)
-{
-	CHECK(cons, CONS_TYPE);
-
-	Cons *c = (Cons *)REMOVE_LOWTAG(cons);
-	c->cdr = new_cdr;
-
-	return new_cdr;
-}
-
 size_t rt_list_length(Cons *cons)
 {
 	size_t len = 1;

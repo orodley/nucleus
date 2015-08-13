@@ -22,6 +22,9 @@ nuc_val rt_type(nuc_val val)
 			UNREACHABLE;
 		case FLOAT_EXTTAG: return FLOAT_TYPE;
 		}
+
+		printf("Got an invalid exttag '%d'\n", (int)EXTTAG(val));
+		UNREACHABLE;
 	}
 
 	printf("Got an invalid lowtag '%d'\n", (int)LOWTAG(val));
@@ -43,6 +46,8 @@ static const char *type_name(nuc_val type)
 
 // TODO: doesn't handle exttags
 // TODO: use libbacktrace for better error messages
+// TODO: make a wrapper that only takes the first two arguments: this is called
+// implicitly all over the place and it's a large call sequence at the moment.
 void rt_check_type(nuc_val val, nuc_val expected_type,
 		const char *file, const char *func, int line)
 {

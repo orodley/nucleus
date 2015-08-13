@@ -82,6 +82,7 @@ typedef struct Cons
 {
 	nuc_val car;
 	nuc_val cdr;
+	uint8_t guarded_reference_flags;
 } Cons;
 
 // NIL is just a null cons pointer. This is the same as just taking the cons

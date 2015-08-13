@@ -19,13 +19,16 @@
 (defvar $functions nil)
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-context (env file func) (list env file func))
+(defun make-context (env file func target-data) (list env file func target-data))
 (defun context-env (context) (first context))
 (defun context-file (context) (second context))
 (defun context-func (context) (third context))
+(defun context-target-data (context) (fourth context))
 (defun context-set-env (context new-env) (set-car context new-env))
 (defun context-set-file (context new-file) (set-car (cdr context) new-file))
 (defun context-set-func (context new-func) (set-car (cddr context) new-func))
+(defun context-set-target-data (context new-target-data)
+  (set-car (cdddr context) new-target-data))
 
 ;;; TODO: Replace with a struct once they exist
 ;;; TODO: Do we really need this? Couldn't we just have an alist with
@@ -87,9 +90,12 @@
 (defun << (x y) (* x (expt 2 y)))
 
 (defun extend-env-with-terms (context names terms)
+  (when $output-debug-info
+    (format true "(e-e-w-t ... ~ ~)" names terms))
   (let ((env (context-env context))
         (file (context-file context))
-        (func (context-func context)))
+        (func (context-func context))
+        (target-data (context-target-data context)))
     (each (lambda (name-and-term)
             (let* ((name (car name-and-term))
                    (term (cdr name-and-term))
@@ -99,11 +105,12 @@
               (LLVMBuildStore $builder (tv term) var-on-stack)
               (set env (cons (make-var name var-on-stack (tt term)) env))))
           (zip names terms))
-    (make-context env file func)))
+    (make-context env file func target-data)))
 
 (defun extend-env-with-bindings (context bindings)
   (make-context (append bindings (context-env context))
-                (context-file context) (context-func context)))
+                (context-file context) (context-func context)
+                (context-target-data context)))
 
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction
@@ -122,6 +129,31 @@
   (llvm-build-call
     $builder (runtime-func "gc_alloc" (LLVMPointerType NUC-VAL 0) (list SIZE-T))
     (list (llvm-i64<-int size)) "gc_alloc"))
+
+(defun get-car-ptr (cons-ptr) (LLVMBuildStructGEP $builder cons-ptr 0 "car"))
+(defun get-cdr-ptr (cons-ptr) (LLVMBuildStructGEP $builder cons-ptr 1 "cdr"))
+(defun get-gr-ptr (cons-ptr) (LLVMBuildStructGEP $builder cons-ptr 2 "gr"))
+
+(defun get-car-value (cons-ptr) (LLVMBuildLoad $builder (get-car-ptr cons-ptr) ""))
+(defun get-cdr-value (cons-ptr) (LLVMBuildLoad $builder (get-cdr-ptr cons-ptr) ""))
+(defun get-gr-value (cons-ptr) (LLVMBuildLoad $builder (get-gr-ptr cons-ptr) ""))
+(defun get-car-gr-value (cons-ptr)
+  (LLVMBuildICmp $builder LLVMIntNE
+                 (LLVMBuildAnd $builder (get-gr-value cons-ptr) (llvm-i8<-int 2) "")
+                 (llvm-i8<-int 0)
+                 ""))
+(defun get-cdr-gr-value (cons-ptr)
+  (LLVMBuildICmp $builder LLVMIntNE
+                 (LLVMBuildAnd $builder (get-gr-value cons-ptr) (llvm-i8<-int 1) "")
+                 (llvm-i32<-int 0)
+                 ""))
+
+(defun set-car-value (cons-ptr val) (LLVMBuildStore $builder val (get-car-ptr cons-ptr)))
+(defun set-cdr-value (cons-ptr val) (LLVMBuildStore $builder val (get-cdr-ptr cons-ptr)))
+(defun set-gr-value (cons-ptr val) (LLVMBuildStore $builder val (get-gr-ptr cons-ptr)))
+
+(defun cons-size (context)
+  (LLVMABISizeOfType (context-target-data context) CONS-CELL))
 
 (defun compile-progn (context forms)
   (%compile-progn context (if (nil? forms) (list 'nil) forms)))
@@ -220,6 +252,8 @@
 ;;; TODO: We need RTTI for closures and proper static function types so we can
 ;;; do more complete type checking, at compile-time or runtime depending on
 ;;; whether the type can be deduced.
+;;; TODO: We should at least check it has the 'lambda' lowtag even if we can't
+;;; do the full check.
 (defun call-closure (context val args)
   (let* ((closure (LLVMBuildIntToPtr
                     $builder (remove-lowtag val) (LLVMPointerType CLOSURE 0) ""))
@@ -298,7 +332,8 @@
           (LLVMBuildBr $builder after-block)
           (LLVMPositionBuilderAtEnd $builder after-block)
           (llvm-phi $builder NUC-VAL (list (cons then-result then-block)
-                                           (cons else-result else-block))))))))
+                                           (cons else-result else-block))
+                    "closure-call"))))))
 
 (defun make-lambda (context func arity captures)
   (let* ((ary-type (LLVMArrayType (LLVMPointerType NUC-VAL 0) (length captures)))

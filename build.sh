@@ -24,7 +24,7 @@ else
 fi
 
 cd "$script_dir"
-llvm_libs='core analysis bitwriter'
+llvm_libs='core analysis bitwriter target'
 link_flags="$(llvm-config --ldflags --libs $llvm_libs --system-libs)"
 
 echo Building the runtime...

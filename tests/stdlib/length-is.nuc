@@ -1,0 +1,4 @@
+; status-code: 2
+
+(defun main ()
+  (set $status-code (if (length-is? (list 1 2) 1) 1 2)))

@@ -1,0 +1,4 @@
+; status-code: 98
+
+(defun main ()
+  (set $status-code (char-at "abc" 1)))

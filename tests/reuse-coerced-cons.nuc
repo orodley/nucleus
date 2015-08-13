@@ -1,0 +1,10 @@
+; run-stdout: (1 . 2)
+
+(defun main ()
+  (let ((c (cons "foo" "bar")))
+    (foo c)
+    (print c)))
+
+(defun foo (c)
+  (set-car c 1)
+  (set-cdr c 2))
