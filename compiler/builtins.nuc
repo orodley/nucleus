@@ -423,10 +423,8 @@
                                      CONS-CELL-PTR ""))
          (cons-term (make-term type-spec cons-ptr false)))
     (when $output-debug-info (format true "cons type = ~" type-spec))
-    (set-car-value cons-ptr (LLVMBuildBitCast $builder (tv (first args))
-                                              NUC-VAL ""))
-    (set-cdr-value cons-ptr (LLVMBuildBitCast $builder (tv (second args))
-                                              NUC-VAL ""))
+    (set-car-value cons-ptr (i64<-term context (first args)))
+    (set-cdr-value cons-ptr (i64<-term context (second args)))
     (set-gr-value cons-ptr (llvm-i8<-int 0))
     cons-term))
 
@@ -464,8 +462,7 @@
                (gr-resultant-block (LLVMGetInsertBlock $builder)))
           (LLVMBuildBr $builder after-block)
           (LLVMPositionBuilderAtEnd $builder non-gr-block)
-          (let ((static-field-value
-                  (LLVMBuildBitCast $builder raw-field-value llvm-field-type "")))
+          (let ((static-field-value (term<-i64 context raw-field-value field-type)))
             (LLVMBuildBr $builder after-block)
             (LLVMPositionBuilderAtEnd $builder after-block)
             (llvm-phi $builder llvm-field-type
@@ -515,9 +512,7 @@
                 (after-block (LLVMAppendBasicBlock current-func "after-set-field")))
            (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) after-block non-gr-block)
            (LLVMPositionBuilderAtEnd $builder non-gr-block)
-           (let* ((coerced-value
-                    (LLVMBuildBitCast
-                      $builder (tv (coerce context val-term field-type)) NUC-VAL ""))
+           (let* ((coerced-value (i64<-term context (coerce context val-term field-type)))
                   (non-gr-resultant-block (LLVMGetInsertBlock $builder)))
              (LLVMBuildBr $builder after-block)
              (LLVMPositionBuilderAtEnd $builder after-block)
@@ -531,8 +526,7 @@
      ;; The field is dynamic, but the value being assigned isn't. We convert
      ;; the static value into a dynamic value and stick it in.
      (field-setter (tv cons-term)
-                   (LLVMBuildBitCast
-                     $builder (tv (coerce context val-term field-type)) NUC-VAL "")))
+                   (i64<-term context (coerce context val-term field-type))))
     ((not (type-eq? field-type (tt val-term)))
      ;; Wrong static type
      (fail! context
