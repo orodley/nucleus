@@ -1,0 +1,8 @@
+; run-stdout: false\nfalse\n
+
+(defun preq (x)
+  (println (eq? x 0)))
+
+(defun main ()
+  (preq 256)
+  (preq 512))

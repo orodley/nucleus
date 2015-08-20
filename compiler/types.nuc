@@ -403,7 +403,7 @@
                          (tt term) typ)))))
 
 ;;; Given a list of terms (which are arguments to some arithmetic builtin) this
-;;; converts them both to the "maximum" type, where f64 > f32 > i64 > i32 > i16 > i8
+;;; converts them all to the "maximum" type, where f64 > f32 > i64 > i32 > i16 > i8
 (defun arithmetic-conversion (context terms)
   (let ((max-type 'u8))
     (each (lambda (term)

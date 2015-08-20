@@ -601,8 +601,17 @@
          (LLVMPositionBuilderAtEnd $builder wrong-type-block)
          (LLVMBuildBr $builder after-block)
          (LLVMPositionBuilderAtEnd $builder correct-type-block)
-         (let* ((ct-term (builtin-eq?
-                           context (list (coerce context term1 (tt term2)) term2)))
+         (let* ((converted (if (numeric? (tt term2))
+                             (arithmetic-conversion context (list term1 term2))
+                             (list (tt term2)
+                                   (tv (coerce context term1 (tt term2)))
+                                   (tv term2))))
+                (typ (first converted))
+                (ct-term (builtin-eq?
+                           context
+                           (list
+                             (make-term typ (second converted) false)
+                             (make-term typ (third converted) false))))
                 (ct-resultant-block (LLVMGetInsertBlock $builder)))
            (LLVMBuildBr $builder after-block)
            (LLVMPositionBuilderAtEnd $builder after-block)
