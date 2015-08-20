@@ -1,0 +1,3 @@
+; run-stdout: 128
+
+(defun main () (print 128))

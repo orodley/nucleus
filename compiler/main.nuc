@@ -322,7 +322,7 @@
 (defun %compile-expr (context expr)
   (case (type expr)
     (fixnum-t
-      (let* ((required-bits (+ 1 (int (ceiling (log2 (float expr))))))
+      (let* ((required-bits (+ 1 (int (floor (+ 1 (log2 (float expr)))))))
              (constant-type
                (cond
                  ((<= required-bits 8) 'i8)
