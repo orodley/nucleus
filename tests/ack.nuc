@@ -1,0 +1,9 @@
+; run-stdout: 509
+
+(defun ack (m n)
+  (cond ((eq? m 0) (+ n 1))
+        ((eq? n 0) (ack (- m 1) 1))
+        (true (ack (- m 1) (ack m (- n 1))))))
+
+(defun main ()
+  (print (ack 3 6)))
