@@ -146,9 +146,8 @@
 (defun check-type (val type-as-llvm-val)
   (llvm-build-call
     $builder
-    (runtime-func "rt_check_type" VOID (list NUC-VAL NUC-VAL CHAR* CHAR* INT))
-    (list val type-as-llvm-val (LLVMConstNull CHAR*) (LLVMConstNull CHAR*)
-          (llvm-i32<-int 0))
+    (runtime-func "rt_check_type" VOID (list NUC-VAL NUC-VAL))
+    (list val type-as-llvm-val)
     ""))
 
 (defun llvm-i64<-int (x) (LLVMConstInt (LLVMIntType 64) x false))

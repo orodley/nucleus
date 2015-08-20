@@ -48,7 +48,7 @@ static const char *type_name(nuc_val type)
 // TODO: use libbacktrace for better error messages
 // TODO: make a wrapper that only takes the first two arguments: this is called
 // implicitly all over the place and it's a large call sequence at the moment.
-void rt_check_type(nuc_val val, nuc_val expected_type,
+void rt_check_type_from_c(nuc_val val, nuc_val expected_type,
 		const char *file, const char *func, int line)
 {
 	nuc_val given_type = rt_type(val);
@@ -60,4 +60,9 @@ void rt_check_type(nuc_val val, nuc_val expected_type,
 
 		exit(1);
 	}
+}
+
+void rt_check_type(nuc_val val, nuc_val expected_type)
+{
+	rt_check_type_from_c(val, expected_type, NULL, NULL, 0);
 }

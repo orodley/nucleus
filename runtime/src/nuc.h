@@ -97,7 +97,7 @@ typedef struct String
 
 
 #define CHECK(val, type_tag) \
-	rt_check_type(val, type_tag, __FILE__, __func__, __LINE__)
+	rt_check_type_from_c(val, type_tag, __FILE__, __func__, __LINE__)
 
 // Functions we want to use across the runtime.
 // All the functions that need to be called from the stdlib or have calls
@@ -107,6 +107,7 @@ String *rt_make_string(size_t length, char *bytes);
 Cons *rt_cons(nuc_val car, nuc_val cdr);
 char *rt_nuc_str_to_c_str(nuc_val nuc_str);
 size_t rt_list_length(Cons *cons);
-void rt_check_type(nuc_val val, nuc_val type_tag, const char *file, const char *func, int line);
+void rt_check_type_from_c(nuc_val val, nuc_val type_tag, const char *file, const char *func, int line);
+void rt_check_type(nuc_val val, nuc_val type_tag);
 
 #endif
