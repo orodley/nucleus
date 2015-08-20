@@ -58,3 +58,8 @@ nuc_val rt_rand()
 
 	return INT_TO_NUC_VAL(rand());
 }
+
+void rt_raw_print(nuc_val val)
+{
+	printf("0x%016lx\n", val);
+}
