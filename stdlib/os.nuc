@@ -9,6 +9,9 @@
 (extern (rt_get_stdout %get-stdout) () -> ?)
 (defvar $stdout (%get-stdout))
 
+(extern (rt_get_stderr %get-stderr) () -> ?)
+(defvar $stderr (%get-stderr))
+
 (extern (rt_open open) (?) -> ?)
 (extern (rt_close close) (?) -> ?)
 

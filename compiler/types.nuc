@@ -7,7 +7,8 @@
 ;;; information about cons terms, to avoid some runtime checks. Sometimes we
 ;;; literally just allocated the thing so those cases are easy pickings.
 (defun make-term (typ val lvalue?)
-  (assert! (eq? (type val) foreign-t) "val should be an llvm ValueRef")
+  (assert! (eq? (type val) foreign-t)
+           (format nil "val should be an llvm ValueRef (got ~)" val))
   (assert! (or (symbol? typ) (cons? typ)) "typ should be a type-spec")
   (assert! (or (eq? lvalue? true) (eq? lvalue? false)) "lvalue? should be a bool")
   (list typ val lvalue?))
@@ -59,7 +60,9 @@
     (LLVMPointerTypeKind (LLVMBuildPtrToInt $builder (tv term) NUC-VAL ""))
     (LLVMIntegerTypeKind (LLVMBuildIntCast $builder (tv term) NUC-VAL ""))
     (default (fail! context
-                    (format nil "i64<-term not implemented for ~" (tt term))))))
+                    (format nil "i64<-term not implemented for ~" (tt term))
+                    NUC-VAL
+                    false))))
 
 (defun term<-i64 (context val dest-type)
   (let ((llvm-type (llvm-type<-type-spec context dest-type)))
@@ -67,7 +70,9 @@
       (LLVMPointerTypeKind (LLVMBuildIntToPtr $builder val llvm-type ""))
       (LLVMIntegerTypeKind (LLVMBuildIntCast $builder val llvm-type ""))
       (default (fail! context
-                      (format nil "term<-i64 not implemented for ~" dest-type))))))
+                      (format nil "term<-i64 not implemented for ~" dest-type)
+                      llvm-type
+                      false)))))
 
 (defun expand-type (typ)
   (if (eq? typ 'cons)
@@ -161,8 +166,11 @@
   (if (cons? type-spec)
     (case (first type-spec)
       ('cons CONS-CELL-PTR)
-      (default (fail! context (format nil "Unsupported compound type '~'"
-                                      (first type-spec)))))
+      (default
+        (fail! context (format nil "Unsupported compound type '~'"
+                               (first type-spec))
+               nil false)
+        NUC-VAL))
     (case type-spec
       ;; FFI stuff
       ('* UINTPTR)
@@ -190,7 +198,9 @@
       ('cons CONS-CELL-PTR)
       ('float (LLVMFloatType))
 
-      (default (fail! context (format nil "Unsupported type-spec '~'" type-spec))))))
+      (default
+        (fail! context (format nil "Unsupported type-spec '~'" type-spec) nil false)
+        NUC-VAL))))
 
 (defun type-id<-type-spec (context type-spec)
   (case type-spec
@@ -211,7 +221,9 @@
     ('string LLVM-STRING-T)
     ('cons LLVM-CONS-T)
 
-    (default (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
+    (default
+      (fail! context (format nil "Unsupported type-spec '~'" type-spec) nil false)
+      LLVM-CONS-T)))
 
 (defun static-val<-dynamic-val (context type-spec val)
   (cond
@@ -300,7 +312,10 @@
      ;; TODO: We should have a separate exttag for types so that we can do a
      ;; check-type here.
      (LLVMBuildLShr $builder val (llvm-i64<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
-    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
+    (true (fail! context
+                 (format nil "Unsupported type-spec '~'" type-spec)
+                 CONS-CELL-PTR
+                 false))))
 
 (defun dynamic-val<-static-val (context type-spec val)
   (cond
@@ -352,7 +367,7 @@
        (LLVMBuildShl $builder val (llvm-i32<-int (+ LOWTAG-BITS EXTTAG-BITS)) "")
        (llvm-i32<-int (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
        ""))
-    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec)))))
+    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec) NUC-VAL false))))
 
 (defun implicit-conversion (context term typ)
   (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))
@@ -399,17 +414,26 @@
     (true (fail! context
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was expected"
-                         (tt term) typ)))))
+                         (tt term) typ)
+                 (llvm-type<-type-spec context typ)
+                 false))))
 
 ;;; Given a list of terms (which are arguments to some arithmetic builtin) this
 ;;; converts them all to the "maximum" type, where f64 > f32 > i64 > i32 > i16 > i8
 (defun arithmetic-conversion (context terms)
-  (let ((max-type 'u8))
+  (let ((max-type 'u8)
+        (terms
+          (map
+            (lambda (term)
+              (if (or (type-eq? (tt term) '?) (numeric? (tt term)))
+                term
+                (fail! context
+                       (format nil "Static type error: tried to use a term of type '~' where a numeric type was expected" (tt term))
+                       'i64
+                       false)))
+            terms)))
     (each (lambda (term)
             (let ((typ (tt term)))
-              (unless (or (type-eq? typ '?) (numeric? typ))
-                (fail! context (format nil "Static type error: tried to use a term of type '~' where a numeric type was expected"
-                                       typ)))
               (cond
                 ;; TODO: change this when we have doubles
                 ((floating-point? typ)

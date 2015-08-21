@@ -86,9 +86,9 @@
          (new-value (compile-expr context (second args))))
     (cond
       ((nil? binding)
-       (fail! context (format nil "Undefined variable '~'" name)))
+       (fail! context (format nil "Undefined variable '~'" name) (tt new-value) false))
       ((not (binding-lvalue? binding))
-       (fail! context (format nil "Cannot assign to constant '~'" name)))
+       (fail! context (format nil "Cannot assign to constant '~'" name) (tt new-value) false))
       (true (LLVMBuildStore $builder (tv (coerce context new-value
                                                  (tt (binding-term binding))))
                             (tv (binding-term binding)))))
@@ -102,8 +102,11 @@
          (names (map first clauses))
          (terms (map (lambda (clause) (compile-expr context (second clause)))
                       clauses))
-         (new-context (extend-env-with-terms context names terms)))
-    (compile-progn new-context body)))
+         (original-env (context-env context)))
+    (extend-env-with-terms context names terms)
+    (let ((let-term (compile-progn context body)))
+      (context-set-env context original-env)
+      let-term)))
 
 (defun builtin-macro-let* (context args)
   ;; TODO: Life without quasiquote is painful
@@ -157,7 +160,8 @@
                ;; the if expression, (or string bool).
                (true '?))))
       (cond
-        ((not (LLVMIsConstant (tv condition)))
+        ((or (not (LLVMIsConstant (tv condition)))
+             (LLVMIsUndef (tv condition)))
          ;; We wait until here to do this, because if the condition is constant
          ;; we do an unconditional branch.
          (let* ((then-term (%build-branch context then-term result-type
@@ -273,7 +277,7 @@
                     (list (global-string (string<-symbol to-quote)))
                     "intern-const")
                   false))
-      (default (fail! context (format nil "Don't know how to quote '~'" to-quote))))))
+      (default (fail! context (format nil "Don't know how to quote '~'" to-quote) '? false)))))
 
 (defun builtin-macro-and (context operands)
   (if (nil? operands)
@@ -356,7 +360,7 @@
 
 (defun comparison (context cmp int-cmp float-cmp operands)
   (unless (length-is? operands 2)
-    (fail! context (format nil "~ can only take two operands" cmp)))
+    (fail! context (format nil "~ can only take two operands" cmp) 'bool false))
   (let* ((type-and-vals (arithmetic-conversion context operands))
          (typ (car type-and-vals))
          (vals (cdr type-and-vals)))
@@ -531,7 +535,9 @@
      ;; Wrong static type
      (fail! context
             (format nil "Static type error: tried to use a term of type '~' where '~' was expected"
-                    (tt val-term) field-type)))
+                    (tt val-term) field-type)
+            (tt val-term)
+            false))
     (true
       ;; Correct static type, but we still don't know whether this is a guarded
       ;; reference, so we must check, and do the conversion if so.

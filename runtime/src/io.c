@@ -159,6 +159,11 @@ nuc_val rt_get_stdout()
 	return os_stream_to_stream(stdout);
 }
 
+nuc_val rt_get_stderr()
+{
+	return os_stream_to_stream(stderr);
+}
+
 nuc_val rt_open(nuc_val string)
 {
 	char *filename = rt_nuc_str_to_c_str(string);

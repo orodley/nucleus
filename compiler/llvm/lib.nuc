@@ -19,6 +19,7 @@
 (extern LLVMConstIntOfString (* char* u8) -> *)
 (extern LLVMConstNull (*) -> *)
 (extern LLVMIsConstant (*) -> bool)
+(extern LLVMIsUndef (*) -> bool)
 (extern LLVMConstIntGetSExtValue (*) -> long-long)
 (extern LLVMGetUndef (*) -> *)
 

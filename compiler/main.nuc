@@ -65,7 +65,8 @@
               ;; provided for common architectures.
               (target-data (LLVMCreateTargetData
                              "e-m:e-i64:64-f80:128-n8:16:32:64-S128"))
-              (context (make-context (copy-list $constants) nil nil target-data)))
+              (context
+                (make-context (copy-list $constants) nil nil target-data nil)))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
          (process-toplevel-form context '(defvar $status-code 0))
@@ -113,45 +114,56 @@
                "truncate-status-code")))
          (when (LLVMVerifyModule $module LLVMPrintMessageAction NULL)
            (LLVMDumpModule $module)
-           (panic! "ICE: Module failed LLVMVerifyModule. Module has been dumped"))
-         ;; TODO: not portable
-         (let ((tmp-bc-file (format nil "/tmp/~.bc" (random)))
-               (tmp-o-file (format nil "/tmp/~.o" (random))))
-           (LLVMWriteBitcodeToFile $module tmp-bc-file)
-           (cond
-             (output-llvm-ir
-               (let ((llvm-dis-success
-                       (zero? (exec "llvm-dis"
-                                    (list tmp-bc-file "-o" output-filename)))))
-                 ;; TODO: Don't fork just to remove a file...
-                 (exec "rm" (list tmp-bc-file))
-                 (unless llvm-dis-success
-                   (panic! "llvm-dis failed"))))
-             (output-asm
-               (let ((llc-success (zero? (exec "llc"
-                                               (list tmp-bc-file "-filetype=asm"
-                                                     "-o" output-filename)))))
-                 (exec "rm" (list tmp-bc-file))
-                 (unless llc-success
-                   (panic! "llc failed"))))
-             (true
-               ;; TODO: A more intelligent way of finding the runtime
-               (unless (zero? (exec "llvm-link" (list tmp-bc-file
-                                                      "runtime/nuc-runtime.bc"
-                                                      "-o" tmp-bc-file)))
-                 (exec "rm" (list tmp-bc-file))
-                 (panic! "llvm-link failed"))
-               (unless (zero? (exec "llc" (list tmp-bc-file "-filetype=obj"
-                                                "-o" tmp-o-file)))
-                 (exec "rm" (list tmp-bc-file))
-                 (panic! "llc failed"))
-               (unless (zero? (exec "g++" (append (list "-lm"
-                                                        tmp-o-file
-                                                        "-o" output-filename)
-                                                  linker-args)))
-                 (exec "rm" (list tmp-bc-file tmp-o-file))
-                 (panic! "g++ failed"))
-               (exec "rm" (list tmp-bc-file tmp-o-file))))))))
+           (fail! context
+                  "ICE: Module failed LLVMVerifyModule. Module has been dumped"
+                  nil
+                  false))
+         (cond
+           ((not (nil? (context-errors context)))
+            (set $status-code 1)
+            (format $stderr "~ errors generated:" (length (context-errors context)))
+            (write-string-ln-to-stream $stderr "")
+            (each (lambda (err) (write-string-ln-to-stream $stderr err))
+                  (reverse (context-errors context))))
+           (true
+             ;; TODO: not portable
+             (let ((tmp-bc-file (format nil "/tmp/~.bc" (random)))
+                   (tmp-o-file (format nil "/tmp/~.o" (random))))
+               (LLVMWriteBitcodeToFile $module tmp-bc-file)
+               (cond
+                 (output-llvm-ir
+                   (let ((llvm-dis-success
+                           (zero? (exec "llvm-dis"
+                                        (list tmp-bc-file "-o" output-filename)))))
+                     ;; TODO: Don't fork just to remove a file...
+                     (exec "rm" (list tmp-bc-file))
+                     (unless llvm-dis-success
+                       (panic! "llvm-dis failed"))))
+                 (output-asm
+                   (let ((llc-success (zero? (exec "llc"
+                                                   (list tmp-bc-file "-filetype=asm"
+                                                         "-o" output-filename)))))
+                     (exec "rm" (list tmp-bc-file))
+                     (unless llc-success
+                       (panic! "llc failed"))))
+                 (true
+                   ;; TODO: A more intelligent way of finding the runtime
+                   (unless (zero? (exec "llvm-link" (list tmp-bc-file
+                                                          "runtime/nuc-runtime.bc"
+                                                          "-o" tmp-bc-file)))
+                     (exec "rm" (list tmp-bc-file))
+                     (panic! "llvm-link failed"))
+                   (unless (zero? (exec "llc" (list tmp-bc-file "-filetype=obj"
+                                                    "-o" tmp-o-file)))
+                     (exec "rm" (list tmp-bc-file))
+                     (panic! "llc failed"))
+                   (unless (zero? (exec "g++" (append (list "-lm"
+                                                            tmp-o-file
+                                                            "-o" output-filename)
+                                                      linker-args)))
+                     (exec "rm" (list tmp-bc-file tmp-o-file))
+                     (panic! "g++ failed"))
+                   (exec "rm" (list tmp-bc-file tmp-o-file))))))))))
     (true
       (write-string-ln "Usage: nucc <input filename>"))))
 
@@ -163,7 +175,7 @@
   (case (first form)
     ('defun
      (unless (length>= form 3)
-       (fail! context (format nil "Malformed 'defun' form: ~" form)))
+       (fail! context (format nil "Malformed 'defun' form: ~" form) nil false))
      (let* ((name (second form))
             (arg-list (third form))
             (names-and-types (parse-arg-list context arg-list))
@@ -188,12 +200,14 @@
                               t))
                            (true '?))))
        (unless (and (symbol? name) (list? arg-list))
-         (fail! context (format nil "Malformed 'defun' form: ~" form)))
+         (fail! context (format nil "Malformed 'defun' form: ~" form) nil false))
        (add-func context name arg-names arg-types return-type 'nucleus body)))
     ('defvar
      (when (length>= form 4)
        (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
-                              (length form))))
+                              (length form))
+              nil
+              false))
      (let* ((name (second form))
             (value (if (length-is? form 3) (third form) 'nil))
             (init (llvm-i64<-int (if (int? value)
@@ -207,7 +221,9 @@
      (unless (length-is? (cdr form) 4)
        (fail!
          context (format nil "Invalid number of arguments to 'cfun' (got ~, expected 4)"
-                         (length (cdr form)))))
+                         (length (cdr form)))
+         nil
+         false))
      (let* ((names (second form))
             (extern-name (if (cons? names) (first names) names))
             (nuc-name (if (cons? names) (second names) names))
@@ -226,7 +242,9 @@
      (unless (length-is? (cdr form) 1)
        (fail!
          context (format nil "Invalid number of arguments to 'include' (got ~, expected 1)"
-                         (length (cdr form)))))
+                         (length (cdr form)))
+         nil
+         false))
      (let* ((including-file (context-file context))
             (filename (if (string-ends-with? (second form) ".nuc")
                         (second form)
@@ -237,7 +255,7 @@
     ;; TODO: should this be called 'c'enum? It's just a regular enum really.
     ('cenum
      (when (nil? (cdr form))
-       (fail! context "An enum must have one or more values"))
+       (fail! context "An enum must have one or more values" nil false))
      ;; TODO: support negative integer literals
      (let ((enum-variant-value (- 0 1)))
        (each
@@ -252,7 +270,7 @@
                (fixnum<-llvm-int (llvm-i64<-int value)))))
          (cdr form))))
     (default
-      (fail! context (format nil "Invalid top-level form '~'" (first form))))))
+      (fail! context (format nil "Invalid top-level form '~'" (first form)) nil false))))
 
 (defun process-file (context filename-and-backups)
   (let ((filename (first filename-and-backups)))
@@ -267,7 +285,7 @@
            (each (lambda (form) (process-toplevel-form context form)) forms))
          (context-set-file context old-file)))
       ((nil? (cdr filename-and-backups))
-       (fail! context (format nil "Could not find file ~" filename)))
+       (fail! context (format nil "Could not find file ~" filename) nil false))
       (true (process-file context (rest filename-and-backups))))))
 
 (defun macroexpand (context sexpr)
@@ -291,18 +309,18 @@
   ;; exists and will be found at link time
   (when (eq? (func-impl-type func) 'nucleus)
     (let* ((args (func-arg-names func))
-           (env (context-env context))
+           (original-env (context-env context))
            (llvm-func (func-llvm-func func))
            (params (llvm-params llvm-func)))
       (assert! (not (null? llvm-func)) "Function should have been declared")
       (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
       ;; TODO: set LLVM param names
-      (set context (extend-env-with-terms
-                     context
-                     args
-                     (map2 (lambda (typ val) (make-term typ val true))
-                           (func-arg-types func)
-                           params)))
+      (extend-env-with-terms
+        context
+        args
+        (map2 (lambda (typ val) (make-term typ val true))
+              (func-arg-types func)
+              params))
       (context-set-func context func)
       (let ((compiled (LLVMBuildRet $builder
                                     (tv (coerce context
@@ -310,7 +328,12 @@
                                                 (func-return-type func))))))
         (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
           (LLVMDumpValue llvm-func)
-          (fail! context "ICE: Function failed LLVMVerifyFunction. Function has been dumped"))
+          (fail!
+            context
+            "ICE: Function failed LLVMVerifyFunction. Function has been dumped"
+            nil
+            false))
+        (context-set-env context original-env)
         compiled))))
 
 (defun compile-expr (context expr)
@@ -330,7 +353,11 @@
                  ((<= required-bits 32) 'i32)
                  ((<= required-bits 64) 'i64)
                  (true
-                   (fail! context "Integer too big to fit into an i64! (How did we even read it?)")))))
+                   (fail!
+                     context
+                     "Integer too big to fit into an i64! (How did we even read it?)"
+                     '?
+                     false)))))
         (make-term constant-type
                    (LLVMConstInt (llvm-type<-type-spec context constant-type)
                                  expr
@@ -343,7 +370,7 @@
                  ((nil? binding)
                   (let ((func (get-func expr)))
                     (if (nil? func)
-                      (fail! context (format nil "Undefined variable '~'" expr))
+                      (fail! context (format nil "Undefined variable '~'" expr) '? true)
                       (make-lambda context
                                    (func-llvm-func func)
                                    (LLVMCountParams (func-llvm-func func))
@@ -352,9 +379,7 @@
         (if (tl? term)
           (make-term
             (tt term)
-            (LLVMBuildLoad $builder
-                           (tv (binding-term binding))
-                           (string<-symbol expr))
+            (LLVMBuildLoad $builder (tv term) (string<-symbol expr))
             false)
           term)))
     (cons-t (compile-form context expr))
@@ -367,8 +392,9 @@
                   "make-string-literal")
                 false))
     (default (fail! context
-                    (format nil "Don't know how to compile this type of expression: ~"
-                            expr)))))
+                    (format nil "Don't know how to compile this type of expression: ~" expr)
+                    '?
+                    false))))
 
 (defun compile-form (context form)
   (let* ((name (car form))
@@ -399,4 +425,6 @@
                     false)
                   (fail! context
                          (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
-                                 name (length args) (LLVMCountParams llvm-func))))))))))))
+                                 name (length args) (LLVMCountParams llvm-func))
+                         (func-return-type func)
+                         false))))))))))

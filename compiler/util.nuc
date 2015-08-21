@@ -19,16 +19,22 @@
 (defvar $functions nil)
 
 ;;; TODO: Replace with a struct once they exist
-(defun make-context (env file func target-data) (list env file func target-data))
+(defun make-context (env file func target-data errors)
+  (list env file func target-data errors))
 (defun context-env (context) (first context))
 (defun context-file (context) (second context))
 (defun context-func (context) (third context))
 (defun context-target-data (context) (fourth context))
+(defun context-errors (context) (fifth context))
 (defun context-set-env (context new-env) (set-car context new-env))
 (defun context-set-file (context new-file) (set-car (cdr context) new-file))
 (defun context-set-func (context new-func) (set-car (cddr context) new-func))
 (defun context-set-target-data (context new-target-data)
   (set-car (cdddr context) new-target-data))
+(defun context-set-errors (context new-errors)
+  (set-car (cddddr context) new-errors))
+(defun push-error (context error-string)
+  (context-set-errors context (cons error-string (context-errors context))))
 
 ;;; TODO: Replace with a struct once they exist
 ;;; TODO: Do we really need this? Couldn't we just have an alist with
@@ -50,12 +56,35 @@
 ;;; TODO: Rather than panicing, this should return a term containing an LLVM
 ;;; 'undef' value, and stick the error into a list in the context. That way we
 ;;; can report multiple errors at once.
-(defun fail! (context message)
+(defun fail! (context message result-type lvalue?)
   (let* ((func (context-func context))
+         (typ (cond
+                ((eq? (type result-type) foreign-t)
+                 result-type)
+                ((not (nil? result-type))
+                 (llvm-type<-type-spec context result-type))
+                (true nil)))
+         (final-type (if (and lvalue? (not (nil? result-type)))
+                       (LLVMPointerType typ 0)
+                       typ))
+         (val (if (not (nil? result-type))
+                (LLVMGetUndef final-type)
+                nil))
          (str (if (nil? func)
                 "toplevel form"
-                (format nil "function ~" (func-name func)))))
-    (panic! (format nil "Error compiling ~: ~" str message))))
+                (format nil "function ~" (func-name func))))
+         (error-message (format nil "Error compiling ~: ~" str message)))
+    ;; When debugging it can be helpful to see errors even if we fail before
+    ;; compilation is finished for some reason.
+    (when $output-debug-info
+      (format true "Got an error: ~" error-message))
+    (push-error context error-message)
+    (cond
+      ((eq? (type result-type) foreign-t)
+       val)
+      ((not (nil? result-type))
+       (make-term result-type val lvalue?))
+      (true (panic! (format nil "Incorrect value passed for result-type: ~" result-type))))))
 
 (defun add-func (context name arg-names arg-types return-type impl-type body)
   (let* ((llvm-return-type (llvm-type<-type-spec context return-type))
@@ -67,7 +96,10 @@
          (func (make-func name arity arg-names arg-types return-type impl-type body llvm-func)))
     (cond
       ((not (nil? (get-func name)))
-       (fail! context (format nil "Duplicate definition of function '~'" name)))
+       (fail! context
+              (format nil "Duplicate definition of function '~'" name)
+              nil
+              false))
       (true
         (set $functions (cons (cons name func) $functions))))))
 
@@ -92,10 +124,7 @@
 (defun extend-env-with-terms (context names terms)
   (when $output-debug-info
     (format true "(e-e-w-t ... ~ ~)" names terms))
-  (let ((env (context-env context))
-        (file (context-file context))
-        (func (context-func context))
-        (target-data (context-target-data context)))
+  (let ((env (context-env context)))
     (each (lambda (name-and-term)
             (let* ((name (car name-and-term))
                    (term (cdr name-and-term))
@@ -105,12 +134,10 @@
               (LLVMBuildStore $builder (tv term) var-on-stack)
               (set env (cons (make-var name var-on-stack (tt term)) env))))
           (zip names terms))
-    (make-context env file func target-data)))
+    (context-set-env context env)))
 
 (defun extend-env-with-bindings (context bindings)
-  (make-context (append bindings (context-env context))
-                (context-file context) (context-func context)
-                (context-target-data context)))
+  (context-set-env context (append bindings (context-env context))))
 
 (defun declare-function (name ret-type arg-types)
   (LLVMAddFunction
@@ -170,13 +197,13 @@
                           (case (type arg)
                             (cons-t (first arg))
                             (symbol-t arg)
-                            (default (fail! context (format nil "Invalid argument expression: ~" arg)))))
+                            (default (fail! context (format nil "Invalid argument expression: ~" arg) nil false))))
                         arg-list))
         (arg-types (map (lambda (arg)
                           (case (type arg)
                             (cons-t (second arg))
                             (symbol-t '?)
-                            (default (fail! context (format nil "Invalid argument expression: ~" arg)))))
+                            (default (fail! context (format nil "Invalid argument expression: ~" arg) nil false))))
                         arg-list)))
     (cons arg-names arg-types)))
 
@@ -203,50 +230,50 @@
     ;; TODO: set LLVM param names
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock func "entry"))
     (let* ((params (llvm-params func))
-           (new-context
-             (extend-env-with-terms
-               (extend-env-with-bindings
-                 context
-                 (map2 (lambda (i binding)
-                         (make-var
-                           (binding-name binding)
-                           (LLVMBuildBitCast
-                             $builder
-                             (LLVMBuildLoad
-                               $builder
-                               (LLVMBuildGEP
-                                 $builder
-                                 (LLVMBuildGEP $builder (first params)
-                                               (map llvm-i32<-int (list 0 2))
-                                               2
-                                               "")
-                                 (map llvm-i64<-int (list 0 i))
-                                 2
-                                 "get-var-from-closure")
-                               "")
-                             (LLVMPointerType
-                               (llvm-type<-type-spec
-                                 context (tt (binding-term binding)))
-                               0)
-                             "")
-                           (tt (binding-term binding))))
-                       (range (length captured-bindings))
-                       captured-bindings))
-               arg-names
-               (map2 (lambda (typ val) (make-term typ val true))
-                     (repeat (length arg-list) '?)
-                     (if (nil? captured-bindings)
-                       (llvm-params func)
-                       (cdr (llvm-params func)))))))
+           (original-env (context-env context)))
+      (extend-env-with-bindings
+        context
+        (map2 (lambda (i binding)
+                (make-var
+                  (binding-name binding)
+                  (LLVMBuildBitCast
+                    $builder
+                    (LLVMBuildLoad
+                      $builder
+                      (LLVMBuildGEP
+                        $builder
+                        (LLVMBuildGEP $builder (first params)
+                                      (map llvm-i32<-int (list 0 2))
+                                      2
+                                      "")
+                        (map llvm-i64<-int (list 0 i))
+                        2
+                        "get-var-from-closure")
+                      "")
+                    (LLVMPointerType
+                      (llvm-type<-type-spec
+                        context (tt (binding-term binding)))
+                      0)
+                    "")
+                  (tt (binding-term binding))))
+              (range (length captured-bindings))
+              captured-bindings))
+      (extend-env-with-terms
+        context
+        arg-names
+        (map2 (lambda (typ val) (make-term typ val true))
+              (repeat (length arg-list) '?)
+              (if (nil? captured-bindings)
+                (llvm-params func)
+                (cdr (llvm-params func)))))
       ;; TODO: once we're parsing lambda return type declarations this should
       ;; use them rather than always using ?
-      (LLVMBuildRet $builder (tv (coerce context
-                                         (compile-progn new-context body)
-                                         '?))))
-    (when (LLVMVerifyFunction func LLVMPrintMessageAction)
-      (LLVMDumpValue func)
-      (fail! context (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name)))
-    (context-set-func context old-func)
+      (LLVMBuildRet $builder (tv (coerce context (compile-progn context body) '?)))
+      (when (LLVMVerifyFunction func LLVMPrintMessageAction)
+        (LLVMDumpValue func)
+        (fail! context (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name) nil false))
+      (context-set-func context old-func)
+      (context-set-env context original-env))
     func))
 
 ;;; TODO: We need RTTI for closures and proper static function types so we can
