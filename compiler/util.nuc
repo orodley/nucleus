@@ -80,11 +80,9 @@
       (format true "Got an error: ~" error-message))
     (push-error context error-message)
     (cond
-      ((eq? (type result-type) foreign-t)
-       val)
-      ((not (nil? result-type))
-       (make-term result-type val lvalue?))
-      (true (panic! (format nil "Incorrect value passed for result-type: ~" result-type))))))
+      ((eq? (type result-type) foreign-t) val)
+      ((not (nil? result-type)) (make-term result-type val lvalue?))
+      (true nil))))
 
 (defun add-func (context name arg-names arg-types return-type impl-type body)
   (let* ((llvm-return-type (llvm-type<-type-spec context return-type))

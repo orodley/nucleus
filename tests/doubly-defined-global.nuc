@@ -1,4 +1,4 @@
-; compile-stderr: redefinition of
+; compile-stderr: Redefinition of
 
 (defvar foo)
 (defvar foo)
