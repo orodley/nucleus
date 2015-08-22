@@ -2,6 +2,7 @@
 
 (extern (rt_write_char_to_stream write-char-to-stream) (? ?) -> ?)
 (extern (rt_read_char_from_stream read-char-from-stream) (?) -> ?)
+(extern (rt_unread_char back-up-char) (? ?) -> ?)
 (extern (rt_write_string_to_stream write-string-to-stream) (? ?) -> ?)
 (extern (rt_write_string_ln_to_stream write-string-ln-to-stream) (? ?) -> ?)
 (extern (rt_write_addr_to_stream %write-addr-to-stream) (? ?) -> ?)
@@ -79,23 +80,6 @@
      (write-string-to-stream stream ")"))))
 
 
-(defvar $unread-char nil)
-
-(defun %read-char (stream)
-  (cond
-    ((nil? $unread-char)
-     (read-char-from-stream stream))
-    (true
-      (let ((c $unread-char))
-        (set $unread-char nil)
-        c))))
-
-(defun back-up-char (c)
-  (if (nil? $unread-char)
-    (set $unread-char c)
-    ;; We should only ever need to do this once before reading another char
-    (panic! "Tried to back up when there was already an unread char")))
-
 ;;; When and only when EOF is reached, read returns a value eq? to this
 (defvar EOF (cons nil nil))
 
@@ -115,7 +99,7 @@
        (%read-all (cdr list-head) stream)))))
 
 (defun read-from-stream (stream)
-  (let ((c (%read-char stream)))
+  (let ((c (read-char-from-stream stream)))
     (cond
       ((eq? c 59)
        (skip-comment stream)
@@ -143,12 +127,12 @@
           (symbol<-string (string<-char-list list-head)))))))
 
 (defun skip-comment (stream)
-  (let ((c (%read-char stream)))
+  (let ((c (read-char-from-stream stream)))
     (unless (eq? c 10) ; '\n'
       (skip-comment stream))))
 
 (defun read-string (stream list-head)
-  (let ((c (%read-char stream)))
+  (let ((c (read-char-from-stream stream)))
     (cond
       ((eq? c 34) nil)
       (true
@@ -156,23 +140,23 @@
         (read-string stream (cdr list-head))))))
 
 (defun read-fixnum (stream acc)
-  (let ((c (%read-char stream)))
+  (let ((c (read-char-from-stream stream)))
     (cond
       ((and (<= 48 c) (<= c 57))
        (read-fixnum stream (+ (* acc 10) (- c 48))))
       (true
-        (back-up-char c)
+        (back-up-char stream c)
         acc))))
 
 (defun read-list (stream list-head)
-  (let ((c (%read-char stream)))
+  (let ((c (read-char-from-stream stream)))
     (cond
       ((whitespace? c) (read-list stream list-head))
       ((eq? c 59) ; 59 = ';'
        (skip-comment stream)
        (read-list stream list-head))
       ((eq? c 41) nil) ; 41 = ')'
-      (true (back-up-char c)
+      (true (back-up-char stream c)
             (let ((next (read-from-stream stream)))
               (set-cdr list-head (if (eq? next (symbol<-string "."))
                                    (read-from-stream stream)
@@ -180,13 +164,13 @@
             (read-list stream (cdr list-head))))))
 
 (defun read-symbol (stream list-head)
-  (let ((c (%read-char stream)))
+  (let ((c (read-char-from-stream stream)))
     (cond
       ((symbol-char? c)
        (set-cdr list-head (cons c nil))
        (read-symbol stream (cdr list-head)))
       (true
-        (back-up-char c)))))
+        (back-up-char stream c)))))
 
 ;; TODO: this should check for the nucleus EOF, not the C one
 (defun eof? (c)

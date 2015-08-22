@@ -6,6 +6,8 @@
 #include "gc.h"
 #include "nuc.h"
 
+#define NOT_IMPLEMENTED assert(!"Not implemented")
+
 typedef struct String_stream
 {
 	char *chars;
@@ -27,6 +29,14 @@ typedef struct Stream
 		FILE *os_stream;
 		String_stream string_stream;
 	} impl;
+
+	// Used to support limited backtracking - the nucleus parser only needs
+	// one character worth.
+	char unread_char;
+
+	char *source_name;
+	int current_line;
+	int current_col;
 } Stream;
 
 static void string_stream_ensure_room_for(String_stream *stream, size_t size);
@@ -51,7 +61,7 @@ nuc_val rt_write_char_to_stream(nuc_val stream_val, nuc_val char_val)
 		break;
 	}
 	default:
-		assert(!"Not implemented");
+		NOT_IMPLEMENTED;
 	}
 
 	return c;
@@ -85,7 +95,7 @@ static void write_bytes_to_stream(Stream *stream, char *bytes, size_t length)
 		break;
 	}
 	default:
-		assert(!"Not implemented");
+		NOT_IMPLEMENTED;
 	}
 }
 
@@ -121,6 +131,13 @@ nuc_val rt_read_char_from_stream(nuc_val stream_val)
 	CHECK(stream_val, FOREIGN_TYPE);
 	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
 
+	if (stream->unread_char != '\0') {
+		char c = stream->unread_char;
+		stream->unread_char = '\0';
+
+		return INT_TO_NUC_VAL(c);
+	}
+
 	switch (stream->type) {
 	case OS:
 		return INT_TO_NUC_VAL(fgetc(stream->impl.os_stream));
@@ -136,32 +153,50 @@ nuc_val rt_read_char_from_stream(nuc_val stream_val)
 		return INT_TO_NUC_VAL(c);
 	}
 	default:
-		assert(!"Not implemented");
+		NOT_IMPLEMENTED;
 	}
 }
 
-static nuc_val os_stream_to_stream(FILE *os_stream)
+nuc_val rt_unread_char(nuc_val stream_val, nuc_val char_val)
+{
+	CHECK(stream_val, FOREIGN_TYPE);
+	CHECK(char_val, FIXNUM_TYPE);
+	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
+	char c = NUC_VAL_TO_INT(char_val);
+
+	assert(stream->unread_char == '\0');
+
+	stream->unread_char = c;
+
+	return NIL;
+}
+
+static nuc_val os_stream_to_stream(FILE *os_stream, char *file_name)
 {
 	Stream *stream = gc_alloc(sizeof *stream);
 	stream->type = OS;
 	stream->impl.os_stream = os_stream;
+	stream->unread_char = '\0';
+	stream->source_name = file_name;
+	stream->current_line = 1;
+	stream->current_col = 1;
 
 	return ((nuc_val)stream) | FOREIGN_LOWTAG;
 }
 
 nuc_val rt_get_stdin()
 {
-	return os_stream_to_stream(stdin);
+	return os_stream_to_stream(stdin, "<stdin>");
 }
 
 nuc_val rt_get_stdout()
 {
-	return os_stream_to_stream(stdout);
+	return os_stream_to_stream(stdout, "<stdout>");
 }
 
 nuc_val rt_get_stderr()
 {
-	return os_stream_to_stream(stderr);
+	return os_stream_to_stream(stderr, "<stderr>");
 }
 
 nuc_val rt_open(nuc_val string)
@@ -176,7 +211,7 @@ nuc_val rt_open(nuc_val string)
 
 		exit(1);
 	}
-	return os_stream_to_stream(fp);
+	return os_stream_to_stream(fp, filename);
 }
 
 nuc_val rt_close(nuc_val stream_val)
@@ -192,7 +227,7 @@ nuc_val rt_close(nuc_val stream_val)
 		free(stream->impl.string_stream.chars);
 		break;
 	default:
-		assert(!"Not implemented");
+		NOT_IMPLEMENTED;
 	}
 
 	return NIL;
@@ -210,6 +245,10 @@ nuc_val rt_make_string_stream(nuc_val initial_contents_val)
 
 	Stream *stream = gc_alloc(sizeof *stream);
 	stream->type = STRING;
+	stream->unread_char = '\0';
+	stream->source_name = "<string stream>";
+	stream->current_line = 1;
+	stream->current_col = 1;
 
 	size_t initial_size = initial_contents->length * STRING_STREAM_GROWTH_FACTOR;
 	if (initial_size < MINIMUM_INITIAL_STRING_STREAM_SIZE)
