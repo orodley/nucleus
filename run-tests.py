@@ -114,8 +114,11 @@ def run_test(result):
             + indent(result['compile-stderr'])
         return result
 
-    program_proc = subprocess.Popen(["./" + result['binary']],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    binary_path = os.path.abspath(result['binary'])
+    test_dir = os.path.abspath(os.path.dirname(result['name']))
+    program_proc = subprocess.Popen(binary_path,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE,
+        cwd=test_dir)
     result['run-stdout'], result['run-stderr'] = \
         program_proc.communicate(result['stdin'])
     result['status-code'] = program_proc.returncode
