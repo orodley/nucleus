@@ -39,6 +39,22 @@ typedef struct Stream
 	int current_col;
 } Stream;
 
+nuc_val rt_stream_get_line(nuc_val stream_val)
+{
+	CHECK(stream_val, FOREIGN_TYPE);
+	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
+
+	return INT_TO_NUC_VAL(stream->current_line);
+}
+
+nuc_val rt_stream_get_col(nuc_val stream_val)
+{
+	CHECK(stream_val, FOREIGN_TYPE);
+	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
+
+	return INT_TO_NUC_VAL(stream->current_col);
+}
+
 static void string_stream_ensure_room_for(String_stream *stream, size_t size);
 
 
@@ -138,23 +154,34 @@ nuc_val rt_read_char_from_stream(nuc_val stream_val)
 		return INT_TO_NUC_VAL(c);
 	}
 
+	char c;
 	switch (stream->type) {
 	case OS:
-		return INT_TO_NUC_VAL(fgetc(stream->impl.os_stream));
+		c = fgetc(stream->impl.os_stream);
+
+		break;
 	case STRING:
 	{
 		String_stream *str_stream = &stream->impl.string_stream;
-		char c;
 		if (str_stream->read_pos == str_stream->write_pos)
 			c = EOF;
 		else
 			c = str_stream->chars[str_stream->read_pos++];
 
-		return INT_TO_NUC_VAL(c);
+		break;
 	}
 	default:
 		NOT_IMPLEMENTED;
 	}
+
+	if (c == '\n') {
+		stream->current_line++;
+		stream->current_col = 1;
+	} else {
+		stream->current_col++;
+	}
+
+	return INT_TO_NUC_VAL(c);
 }
 
 nuc_val rt_unread_char(nuc_val stream_val, nuc_val char_val)

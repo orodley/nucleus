@@ -1,5 +1,7 @@
 ;;;; This file defines all functions relating to input and output.
 
+(extern (rt_stream_get_line stream-line) (?) -> ?)
+(extern (rt_stream_get_col stream-col) (?) -> ?)
 (extern (rt_write_char_to_stream write-char-to-stream) (? ?) -> ?)
 (extern (rt_read_char_from_stream read-char-from-stream) (?) -> ?)
 (extern (rt_unread_char back-up-char) (? ?) -> ?)

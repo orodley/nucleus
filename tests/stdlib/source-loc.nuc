@@ -1,0 +1,27 @@
+; status-code: 0
+
+(defun assert-pos! (stream expected-line expected-col)
+  (let ((actual-line (stream-line stream))
+        (actual-col (stream-col stream)))
+    (unless (and (eq? actual-line expected-line)
+                 (eq? actual-col expected-col))
+      (panic! (format nil "Expected location (~, ~), got (~, ~)"
+                      expected-line expected-col
+                      actual-line actual-col)))))
+
+(defun main ()
+  (let ((stream (open "source-loc.in")))
+    (assert-pos! stream 1 1)
+    (read-char-from-stream stream)
+    (read-char-from-stream stream)
+    (assert-pos! stream 1 3)
+    (read-char-from-stream stream)
+    (read-char-from-stream stream)
+    (assert-pos! stream 2 1)
+    (read-char-from-stream stream)
+    (read-char-from-stream stream)
+    (read-char-from-stream stream)
+    (read-char-from-stream stream)
+    (read-char-from-stream stream)
+    (read-char-from-stream stream)
+    (assert-pos! stream 3 4)))
