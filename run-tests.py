@@ -122,7 +122,7 @@ def run_test(result):
     result['run-stdout'], result['run-stderr'] = \
         program_proc.communicate(result['stdin'])
     result['status-code'] = program_proc.returncode
-    os.remove(result['binary'])
+    os.remove(binary_path)
 
     if result['run-stderr'] != '':
         result['passed'] = False;
