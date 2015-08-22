@@ -1,13 +1,17 @@
 #!/bin/sh
 
 just_stage1=false
+save_snapshot=true
 script_dir=$(dirname "$(realpath "$0")")
 
 OPTIND=1
-while getopts '1' opt; do
+while getopts '1d' opt; do
 	case "$opt" in
 		1)
 			just_stage1=true
+			;;
+		d)
+			save_snapshot=false
 			;;
 		'?')
 			echo "Unknown option"
@@ -87,12 +91,14 @@ mv stage2 nucc
 echo Compilation finished, all is well
 echo New compiler at $(realpath nucc)
 
-# If we don't have a snapshot for this commit, save one
-# TODO: This should check that the new snapshot is different to the old one, as
-# not all commits change the compiler.
-snapshots_dir="$script_dir/snapshots"
-snapshot_name="$snapshots_dir/nucc_$(git rev-parse --short=12 HEAD)"
-if [ ! -f "$snapshot_name" ]; then
-	echo "Saving a shapshot to $snapshot_name"
-	cp nucc "$snapshot_name"
+if [ "$save_snapshot" = true ]; then
+	# If we don't have a snapshot for this commit, save one
+	# TODO: This should check that the new snapshot is different to the old one, as
+	# not all commits change the compiler.
+	snapshots_dir="$script_dir/snapshots"
+	snapshot_name="$snapshots_dir/nucc_$(git rev-parse --short=12 HEAD)"
+	if [ ! -f "$snapshot_name" ]; then
+		echo "Saving a shapshot to $snapshot_name"
+		cp nucc "$snapshot_name"
+	fi
 fi
