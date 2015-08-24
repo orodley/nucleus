@@ -1,4 +1,4 @@
-; compile-stderr: 3 errors
+; compile-stderr: 3 error(s)
 
 (defun main ()
   (+ x y z))

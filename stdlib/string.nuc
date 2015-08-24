@@ -35,7 +35,7 @@
 
 (defun string-strip-prefix (str prefix)
   (if (string-starts-with? str prefix)
-    (substring str 0 (string-length prefix))
+    (substring str (string-length prefix) (string-length str))
     str))
 
 (defun string-trim-left (str chars)

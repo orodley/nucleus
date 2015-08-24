@@ -61,8 +61,8 @@
     (LLVMIntegerTypeKind (LLVMBuildIntCast $builder (tv term) NUC-VAL ""))
     (default (fail! context
                     (format nil "i64<-term not implemented for ~" (tt term))
-                    NUC-VAL
-                    false))))
+                    $dummy-source-loc ; TODO: better source loc
+                    NUC-VAL false))))
 
 (defun term<-i64 (context val dest-type)
   (let ((llvm-type (llvm-type<-type-spec context dest-type)))
@@ -71,8 +71,8 @@
       (LLVMIntegerTypeKind (LLVMBuildIntCast $builder val llvm-type ""))
       (default (fail! context
                       (format nil "term<-i64 not implemented for ~" dest-type)
-                      llvm-type
-                      false)))))
+                      $dummy-source-loc ; TODO: better source loc
+                      llvm-type false)))))
 
 (defun expand-type (typ)
   (if (eq? typ 'cons)
@@ -162,6 +162,8 @@
 ;;; TODO: this should probably have an extra phase - converting into a nucleus
 ;;; type object.
 
+;; TODO: This should have a way of taking a token for the type spec, so we can
+;; blame the user when they enter an incorrect type
 (defun llvm-type<-type-spec (context type-spec)
   (if (cons? type-spec)
     (case (first type-spec)
@@ -169,6 +171,7 @@
       (default
         (fail! context (format nil "Unsupported compound type '~'"
                                (first type-spec))
+               $dummy-source-loc ; TODO: better source loc
                nil false)
         NUC-VAL))
     (case type-spec
@@ -199,7 +202,10 @@
       ('float (LLVMFloatType))
 
       (default
-        (fail! context (format nil "Unsupported type-spec '~'" type-spec) nil false)
+        (fail! context
+               (format nil "Unsupported type-spec '~'" type-spec)
+               $dummy-source-loc ; TODO: better source loc
+               nil false)
         NUC-VAL))))
 
 (defun type-id<-type-spec (context type-spec)
@@ -222,7 +228,10 @@
     ('cons LLVM-CONS-T)
 
     (default
-      (fail! context (format nil "Unsupported type-spec '~'" type-spec) nil false)
+      (fail! context
+             (format nil "Unsupported type-spec '~'" type-spec)
+             $dummy-source-loc ; TODO: better source loc
+             nil false)
       LLVM-CONS-T)))
 
 (defun static-val<-dynamic-val (context type-spec val)
@@ -314,8 +323,8 @@
      (LLVMBuildLShr $builder val (llvm-i64<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
     (true (fail! context
                  (format nil "Unsupported type-spec '~'" type-spec)
-                 CONS-CELL-PTR
-                 false))))
+                 $dummy-source-loc ; TODO: better source loc
+                 CONS-CELL-PTR false))))
 
 (defun dynamic-val<-static-val (context type-spec val)
   (cond
@@ -367,7 +376,10 @@
        (LLVMBuildShl $builder val (llvm-i32<-int (+ LOWTAG-BITS EXTTAG-BITS)) "")
        (llvm-i32<-int (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
        ""))
-    (true (fail! context (format nil "Unsupported type-spec '~'" type-spec) NUC-VAL false))))
+    (true (fail! context
+                 (format nil "Unsupported type-spec '~'" type-spec)
+                 $dummy-source-loc ; TODO: better source loc
+                 NUC-VAL false))))
 
 (defun implicit-conversion (context term typ)
   (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))
@@ -415,8 +427,8 @@
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was expected"
                          (tt term) typ)
-                 (llvm-type<-type-spec context typ)
-                 false))))
+                 $dummy-source-loc ; TODO: better source loc
+                 (llvm-type<-type-spec context typ) false))))
 
 ;;; Given a list of terms (which are arguments to some arithmetic builtin) this
 ;;; converts them all to the "maximum" type, where f64 > f32 > i64 > i32 > i16 > i8
@@ -429,8 +441,8 @@
                 term
                 (fail! context
                        (format nil "Static type error: tried to use a term of type '~' where a numeric type was expected" (tt term))
-                       'i64
-                       false)))
+                       $dummy-source-loc ; TODO: better source loc
+                       'i64 false)))
             terms)))
     (each (lambda (term)
             (let ((typ (tt term)))

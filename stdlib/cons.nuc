@@ -95,9 +95,6 @@
     (cdr list-head)))
 
 (defun %map (list-head func lizt)
-  ;; TODO: once we have type annotations this will be unnecessary
-  (when (and (not (cons? lizt)) (not (nil? lizt)))
-    (panic! (format nil "Bad object '~' passed into %map!" lizt)))
   (unless (nil? lizt)
     (set-cdr list-head (cons (func (car lizt)) nil))
     (%map (cdr list-head) func (cdr lizt))))

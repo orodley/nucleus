@@ -2,6 +2,7 @@
 
 (extern (rt_stream_get_line stream-line) (?) -> ?)
 (extern (rt_stream_get_col stream-col) (?) -> ?)
+(extern (rt_stream_get_source_name stream-source-name) (?) -> ?)
 (extern (rt_write_char_to_stream write-char-to-stream) (? ?) -> ?)
 (extern (rt_read_char_from_stream read-char-from-stream) (?) -> ?)
 (extern (rt_unread_char back-up-char) (? ?) -> ?)
@@ -88,45 +89,79 @@
 (defun read ()
   (read-from-stream $stdin))
 
-(defun read-all (stream)
+(defun read-all-with-source-loc (stream)
   (let ((list-head (cons nil nil)))
-    (%read-all list-head stream)
+    (%read-all-with-source-loc list-head stream)
     (cdr list-head)))
 
-(defun %read-all (list-head stream)
-  (let ((sexp (read-from-stream stream)))
+(defun %read-all-with-source-loc (list-head stream)
+  (let ((token (read-from-stream-with-source-loc stream)))
     (cond
-      ((not (eq? sexp EOF))
-       (set-cdr list-head (cons sexp nil))
-       (%read-all (cdr list-head) stream)))))
+      ((not (eq? (token-sexpr token) EOF))
+       (set-cdr list-head (cons token nil))
+       (%read-all-with-source-loc (cdr list-head) stream)))))
 
 (defun read-from-stream (stream)
+  (%read-from-stream stream false))
+
+(defun read-from-stream-with-source-loc (stream)
+  (%read-from-stream stream true))
+
+(defun make-token (sexpr source-name line col) (list sexpr source-name line col))
+(defun token-sexpr (token) (first token))
+(defun token-source-name (token) (second token))
+(defun token-line (token) (third token))
+(defun token-col (token) (fourth token))
+(defun token-source-loc (token) (rest token))
+
+(defun source-loc-source-name (source-loc) (first source-loc))
+(defun source-loc-line (source-loc) (second source-loc))
+(defun source-loc-col (source-loc) (third source-loc))
+
+(defun %read-from-stream (stream track-source-loc?)
+  (skip-any-comments-or-whitespace stream)
+  (let* ((source-name (stream-source-name stream))
+         (line (stream-line stream))
+         (col (stream-col stream))
+         (c (read-char-from-stream stream))
+         (sexpr
+           (cond
+             ((eq? c 34)
+              (let ((list-head (cons nil nil)))
+                (read-string stream list-head)
+                (string<-char-list (cdr list-head))))
+             ((and (<= 48 c) (<= c 57)) (read-fixnum stream (- c 48)))
+             ((eq? c 40)
+              (let ((list-head (cons nil nil)))
+                (read-list stream list-head track-source-loc?)
+                (cdr list-head)))
+             ((eq? c 39)
+              (let ((quoted (%read-from-stream stream track-source-loc?)))
+                (when (eq? quoted EOF)
+                  (panic! "Encountered single quote at EOF"))
+                (list (if track-source-loc?
+                        (make-token 'quote source-name line col)
+                        'quote)
+                      quoted)))
+             ((eof? c) EOF)
+             (true
+               (let ((list-head (cons c nil)))
+                 (read-symbol stream list-head)
+                 (symbol<-string (string<-char-list list-head)))))))
+    (if track-source-loc?
+      (make-token sexpr source-name line col)
+      sexpr)))
+
+(defun skip-any-comments-or-whitespace (stream)
   (let ((c (read-char-from-stream stream)))
     (cond
-      ((eq? c 59)
+      ((eq? c 59) ; 59 = ';'
        (skip-comment stream)
-       (read-from-stream stream))
+       (skip-any-comments-or-whitespace stream))
       ((whitespace? c)
-       (read-from-stream stream))
-      ((eq? c 34)
-       (let ((list-head (cons nil nil)))
-         (read-string stream list-head)
-         (string<-char-list (cdr list-head))))
-      ((and (<= 48 c) (<= c 57)) (read-fixnum stream (- c 48)))
-      ((eq? c 40)
-       (let ((list-head (cons nil nil)))
-         (read-list stream list-head)
-         (cdr list-head)))
-      ((eq? c 39)
-       (let ((quoted (read-from-stream stream)))
-         (when (eq? quoted EOF)
-           (panic! "Encountered single quote at EOF"))
-         (list 'quote quoted)))
-      ((eof? c) EOF)
+       (skip-any-comments-or-whitespace stream))
       (true
-        (let ((list-head (cons c nil)))
-          (read-symbol stream list-head)
-          (symbol<-string (string<-char-list list-head)))))))
+        (back-up-char stream c)))))
 
 (defun skip-comment (stream)
   (let ((c (read-char-from-stream stream)))
@@ -150,20 +185,19 @@
         (back-up-char stream c)
         acc))))
 
-(defun read-list (stream list-head)
+(defun read-list (stream list-head track-source-loc?)
+  (skip-any-comments-or-whitespace stream)
   (let ((c (read-char-from-stream stream)))
     (cond
-      ((whitespace? c) (read-list stream list-head))
-      ((eq? c 59) ; 59 = ';'
-       (skip-comment stream)
-       (read-list stream list-head))
-      ((eq? c 41) nil) ; 41 = ')'
-      (true (back-up-char stream c)
-            (let ((next (read-from-stream stream)))
-              (set-cdr list-head (if (eq? next (symbol<-string "."))
-                                   (read-from-stream stream)
-                                   (cons next nil))))
-            (read-list stream (cdr list-head))))))
+      ((eq? c 41) ; 41 = ')'
+       nil)
+      (true
+        (back-up-char stream c)
+        (let ((next (%read-from-stream stream track-source-loc?)))
+          (set-cdr list-head (if (eq? next (symbol<-string "."))
+                               (%read-from-stream stream track-source-loc?)
+                               (cons next nil))))
+        (read-list stream (cdr list-head) track-source-loc?)))))
 
 (defun read-symbol (stream list-head)
   (let ((c (read-char-from-stream stream)))

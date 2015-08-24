@@ -39,6 +39,15 @@ typedef struct Stream
 	int current_col;
 } Stream;
 
+nuc_val rt_stream_get_source_name(nuc_val stream_val)
+{
+	CHECK(stream_val, FOREIGN_TYPE);
+	Stream *stream = (Stream *)REMOVE_LOWTAG(stream_val);
+
+	char *str = stream->source_name;
+	return ((nuc_val)(rt_make_string(strlen(str), str))) | STRING_LOWTAG;
+}
+
 nuc_val rt_stream_get_line(nuc_val stream_val)
 {
 	CHECK(stream_val, FOREIGN_TYPE);
@@ -176,7 +185,10 @@ nuc_val rt_read_char_from_stream(nuc_val stream_val)
 
 	if (c == '\n') {
 		stream->current_line++;
-		stream->current_col = 1;
+
+		// We start at 0 here, as the first character of a line is the one
+		// after the newline.
+		stream->current_col = 0;
 	} else {
 		stream->current_col++;
 	}
@@ -206,7 +218,7 @@ static nuc_val os_stream_to_stream(FILE *os_stream, char *file_name)
 	stream->unread_char = '\0';
 	stream->source_name = file_name;
 	stream->current_line = 1;
-	stream->current_col = 1;
+	stream->current_col = 0;
 
 	return ((nuc_val)stream) | FOREIGN_LOWTAG;
 }

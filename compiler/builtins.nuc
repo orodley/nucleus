@@ -82,25 +82,33 @@
 (defun special-form-set (context args)
   (let* ((env (context-env context))
          (name (first args))
-         (binding (get-binding context name))
+         (binding (get-binding context (ts name)))
          (new-value (compile-expr context (second args))))
     (cond
       ((nil? binding)
-       (fail! context (format nil "Undefined variable '~'" name) (tt new-value) false))
+       (fail! context
+              (format nil "Undefined variable '~'" (ts name))
+              (token-source-loc name)
+              (tt new-value) false))
       ((not (binding-lvalue? binding))
-       (fail! context (format nil "Cannot assign to constant '~'" name) (tt new-value) false))
-      (true (LLVMBuildStore $builder (tv (coerce context new-value
-                                                 (tt (binding-term binding))))
+       (fail! context
+              (format nil "Cannot assign to constant '~'" (ts name))
+              (token-source-loc name)
+              (tt new-value) false))
+      (true (LLVMBuildStore $builder
+                            (tv (coerce context new-value
+                                        (tt (binding-term binding))))
                             (tv (binding-term binding)))))
     new-value))
 
 (defun special-form-let (context args)
-  ;; TODO: better error reporting for malformed 'let' clauses
+  ;; TODO: better error reporting for malformed 'let' forms
   ;; TODO: optional type annotations for 'let' variables
-  (let* ((clauses (first args))
+  (let* ((clauses (ts (first args)))
          (body (rest args))
-         (names (map first clauses))
-         (terms (map (lambda (clause) (compile-expr context (second clause)))
+         (names (map (lambda (clause) (first (ts clause))) clauses))
+         (terms (map (lambda (clause)
+                       (compile-expr context (second (ts clause))))
                       clauses))
          (original-env (context-env context)))
     (extend-env-with-terms context names terms)
@@ -110,10 +118,14 @@
 
 (defun builtin-macro-let* (context args)
   ;; TODO: Life without quasiquote is painful
-  (if (nil? (first args))
-    (cons 'progn (rest args))
-    (list 'let (list (caar args))
-          (cons 'let* (cons (cdar args) (rest args))))))
+  (if (nil? (ts (first args)))
+    (cons (dummy-token 'progn) (rest args))
+    (list
+      (dummy-token 'let)
+      (dummy-token (list (car (ts (first args)))))
+      (dummy-token (cons (dummy-token 'let*)
+                         (cons (dummy-token (cdr (ts (first args))))
+                               (rest args)))))))
 
 (defun special-form-progn (context args)
   (compile-progn context args))
@@ -124,11 +136,11 @@
 (defun special-form-if (context args)
   (let* ((condition (coerce context (compile-expr context (first args)) 'bool))
          (start-block (LLVMGetInsertBlock $builder))
-         (then-expr (second args))
+         (then-token (second args))
          ;; TODO: maybe during the 'macroexpansion' pass we insert missing
          ;; else branches? We could perhaps do some other things too, like what
          ;; GHC does with desugaring into 'Core'.
-         (else-expr (if (length-is? args 2) 'nil (third args)))
+         (else-token (if (length-is? args 2) (dummy-token 'nil) (third args)))
          (current-func (get-current-func $builder))
          (then-block (LLVMAppendBasicBlock current-func "then"))
          (else-block (LLVMAppendBasicBlock current-func "else"))
@@ -137,9 +149,9 @@
       $builder
       (LLVMBuildIntCast $builder (tv condition) (LLVMIntType 1) "")
       then-block else-block)
-    (let* ((then-term (compile-in-block context then-expr then-block))
+    (let* ((then-term (compile-in-block context then-token then-block))
            (then-resultant-block (LLVMGetInsertBlock $builder))
-           (else-term (compile-in-block context else-expr else-block))
+           (else-term (compile-in-block context else-token else-block))
            (else-resultant-block (LLVMGetInsertBlock $builder))
            (then-type (expand-type (tt then-term)))
            (else-type (expand-type (tt else-term)))
@@ -237,69 +249,89 @@
   (if (nil? clauses)
     'nil
     ;; TODO: Life without quasiquote is painful
-    (list 'if (caar clauses)
-          (cons 'progn (cdar clauses))
-          (cons 'cond (cdr clauses)))))
+    (list (dummy-token 'if)
+          (car (ts (car clauses)))
+          (dummy-token (cons (dummy-token 'progn) (cdr (ts (car clauses)))))
+          (dummy-token (cons (dummy-token 'cond) (cdr clauses))))))
 
 (defun builtin-macro-case (context args)
   (let ((expr (first args))
         (clauses (rest args))
-        (case-sym (gensym)))
+        (case-sym (dummy-token (gensym))))
     ;; TODO: Life without quasiquote is painful
-    (list 'let (list (list case-sym expr))
-          (cons 'cond
-                (map (lambda (clause)
-                       (cons (if (eq? (first clause) 'default)
-                               'true
-                               (list 'eq? case-sym (first clause)))
-                             (rest clause)))
-                     clauses)))))
+    (map dummy-token
+         (list 'let
+               (list (dummy-token (list case-sym expr)))
+               (cons (dummy-token 'cond)
+                     (map (lambda (clause)
+                            (dummy-token
+                              (cons (dummy-token
+                                      (if (eq? (ts (first (ts clause))) 'default)
+                                        'true
+                                        (list (dummy-token 'eq?)
+                                              case-sym
+                                              (first (ts clause)))))
+                                    (rest (ts clause)))))
+                          clauses))))))
 
 (defun special-form-quote (context args)
   (let ((to-quote (first args)))
-    (case (type to-quote)
+    (case (type (ts to-quote))
       (fixnum-t (compile-expr context to-quote))
-      (cons-t (if (nil? to-quote)
+      (cons-t (if (nil? (ts to-quote))
                 ;; This case never comes up directly from source, as 'nil' is
                 ;; read in as the symbol 'nil' not the constant. It only comes
                 ;; up in the recursive case below when quoting a cons.
                 NIL-TERM
-                (compile-expr context (list 'cons
-                                            (list 'quote (car to-quote))
-                                            (list 'quote (cdr to-quote))))))
+                (compile-expr
+                  context
+                  (dummy-token
+                    (map dummy-token
+                         (list 'cons
+                               (list (dummy-token 'quote)
+                                     (car (ts to-quote)))
+                               (list (dummy-token 'quote)
+                                     (dummy-token (cdr (ts to-quote))))))))))
       (symbol-t (make-term
                   'symbol
                   (llvm-build-call
                     $builder
                     (runtime-func "rt_intern_symbol"
-                                  (llvm-type<-type-spec context'symbol)
+                                  (llvm-type<-type-spec context 'symbol)
                                   (list CHAR*))
-                    (list (global-string (string<-symbol to-quote)))
+                    (list (global-string (string<-symbol (ts to-quote))))
                     "intern-const")
                   false))
-      (default (fail! context (format nil "Don't know how to quote '~'" to-quote) '? false)))))
+      (default (fail! context
+                      (format nil "Don't know how to quote '~'" (ts to-quote))
+                      (token-source-loc to-quote)
+                      '? false)))))
 
 (defun builtin-macro-and (context operands)
   (if (nil? operands)
     'true
-    (let ((operand-sym (gensym)))
+    (let ((operand-sym (dummy-token (gensym))))
       ;; TODO: Life without quasiquote is painful
-      (list 'let
-            (list (list operand-sym (first operands)))
-            (list 'if operand-sym
-                  (cons 'and (rest operands))
-                  'false)))))
+      (map dummy-token
+           (list 'let
+                 (list (dummy-token (list operand-sym (first operands))))
+                 (list (dummy-token 'if)
+                       operand-sym
+                       (dummy-token (cons (dummy-token 'and) (rest operands)))
+                       (dummy-token 'false)))))))
 
 (defun builtin-macro-or (context operands)
   (if (nil? operands)
     'false
-    (let ((operand-sym (gensym)))
+    (let ((operand-sym (dummy-token (gensym))))
       ;; TODO: Life without quasiquote is painful
-      (list 'let
-            (list (list operand-sym (first operands)))
-            (list 'if operand-sym
-                  'true
-                  (cons 'or (rest operands)))))))
+      (map dummy-token
+           (list 'let
+                 (list (dummy-token (list operand-sym (first operands))))
+                 (list (dummy-token 'if)
+                       operand-sym
+                       (dummy-token 'true)
+                       (dummy-token (cons (dummy-token 'or) (rest operands)))))))))
 
 ;;; TODO: Detect lambdas with identical bodies and use the same function.
 ;;; We'd also need to keep track if any errors were found when compiling the
@@ -313,39 +345,54 @@
                  (format nil "lambda_~" (set $lambda-counter
                                              (+ 1 $lambda-counter)))))
          (current-block (LLVMGetInsertBlock $builder))
-         (captures (find-captured-vars context body args))
-         (func (compile-lambda context name args body captures)))
+         (captures (find-captured-vars context body (map ts (ts args))))
+         ;; TODO: We should really give the source location of the 'lambda' or
+         ;; of the opening bracket, not of the arg list. This would require
+         ;; passing this source location through to all special forms though,
+         ;; which would mean changing the convention for functions implementing
+         ;; special forms.
+         (func (compile-lambda context (token-source-loc args) name args body captures)))
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
     (make-lambda context func (length args) captures)))
 
 (defun builtin-macro-format (context args)
   ;; TODO: Life without quasiquote is painful
-  (list '%format (first args) (second args)
-        (cons 'list (cddr args))))
+  (list (dummy-token '%format) (first args) (second args)
+        (dummy-token (cons (dummy-token 'list) (cddr args)))))
 
 (defun builtin-macro-list (context args)
   (if (nil? args)
     'nil
     ;; TODO: Life without quasiquote is painful
-    (list 'cons (first args) (cons 'list (rest args)))))
+    (list (dummy-token 'cons)
+          (first args)
+          (dummy-token (cons (dummy-token 'list) (rest args))))))
 
 (defun builtin-macro-unless (context args)
   (let ((condition (first args))
         (body (rest args)))
     ;; TODO: Life without quasiquote is painful
-    (list 'if condition 'nil (cons 'progn body))))
+    (list
+      (dummy-token 'if)
+      condition
+      (dummy-token 'nil)
+      (dummy-token (cons (dummy-token 'progn) body)))))
 
 (defun builtin-macro-when (context args)
   (let ((condition (first args))
         (body (rest args)))
     ;; TODO: Life without quasiquote is painful
-    (list 'if condition (cons 'progn body))))
+    (list
+      (dummy-token 'if)
+      condition
+      (dummy-token (cons (dummy-token 'progn) body)))))
 
 
 ;;; TODO: We don't need to bother removing the lowtag for some of these numeric
 ;;; functions when both are dynamic. Maybe we should come up with a nice way of
-;;; enabling this kind of optimisation.
+;;; enabling this kind of optimisation. Unless LLVM just figures it out
+;;; automatically anyway.
 
 (defun builtin-float (context args)
   (make-term
@@ -360,7 +407,11 @@
 
 (defun comparison (context cmp int-cmp float-cmp operands)
   (unless (length-is? operands 2)
-    (fail! context (format nil "~ can only take two operands" cmp) 'bool false))
+    (fail! context
+           (format nil "~ can only take two operands" cmp)
+           ;; TODO: keep builtin arg source loc
+           $dummy-source-loc
+           'bool false))
   (let* ((type-and-vals (arithmetic-conversion context operands))
          (typ (car type-and-vals))
          (vals (cdr type-and-vals)))
@@ -536,8 +587,11 @@
      (fail! context
             (format nil "Static type error: tried to use a term of type '~' where '~' was expected"
                     (tt val-term) field-type)
-            (tt val-term)
-            false))
+            ;; TODO: we need to keep around source location information for all
+            ;; arguments to builtin functions so we can accurately report the
+            ;; location in cases of compile-time errors.
+            $dummy-source-loc
+            (tt val-term) false))
     (true
       ;; Correct static type, but we still don't know whether this is a guarded
       ;; reference, so we must check, and do the conversion if so.
