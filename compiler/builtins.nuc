@@ -97,7 +97,9 @@
               (tt new-value) false))
       (true (LLVMBuildStore $builder
                             (tv (coerce context new-value
-                                        (tt (binding-term binding))))
+                                        (tt (binding-term binding))
+                                        ;; TODO: source loc
+                                        $dummy-source-loc))
                             (tv (binding-term binding)))))
     new-value))
 
@@ -134,7 +136,8 @@
 ;;; used, so that we can omit potentially costly conversions to make both
 ;;; branches the same type.
 (defun special-form-if (context args)
-  (let* ((condition (coerce context (compile-expr context (first args)) 'bool))
+  (let* ((condition (coerce context (compile-expr context (first args)) 'bool
+                            (token-source-loc (first args))))
          (start-block (LLVMGetInsertBlock $builder))
          (then-token (second args))
          ;; TODO: maybe during the 'macroexpansion' pass we insert missing
@@ -241,7 +244,8 @@
   ;; we have already compiled both branches, so we have to go back into the
   ;; block.
   (LLVMPositionBuilderAtEnd $builder branch-block)
-  (let ((result (coerce context term typ)))
+  ;; TODO: source loc
+  (let ((result (coerce context term typ $dummy-source-loc)))
     (LLVMBuildBr $builder after-block)
     result))
 
@@ -397,12 +401,22 @@
 (defun builtin-float (context args)
   (make-term
     'float
-    (implicit-conversion context (coerce context (first args) 'int) 'float)
+    ;; TODO: source loc
+    (implicit-conversion
+      context
+      (coerce context (first args) 'int $dummy-source-loc)
+      'float
+      $dummy-source-loc)
     false))
 (defun builtin-int (context args)
   (make-term
     'int
-    (implicit-conversion context (coerce context (first args) 'float) 'int)
+    ;; TODO: source loc
+    (implicit-conversion
+      context
+      (coerce context (first args) 'float $dummy-source-loc)
+      'int
+      $dummy-source-loc)
     false))
 
 (defun comparison (context cmp int-cmp float-cmp operands)
@@ -412,7 +426,8 @@
            ;; TODO: keep builtin arg source loc
            $dummy-source-loc
            'bool false))
-  (let* ((type-and-vals (arithmetic-conversion context operands))
+  ;; TODO: source loc
+  (let* ((type-and-vals (arithmetic-conversion context operands $dummy-source-loc))
          (typ (car type-and-vals))
          (vals (cdr type-and-vals)))
     (make-term
@@ -431,7 +446,8 @@
 (defun builtin->= (context args) (comparison context ">=" LLVMIntSGE LLVMRealOGE args))
 
 (defun arithmetic-builtin (context args int-op float-op name)
-  (let* ((type-and-vals (arithmetic-conversion context args))
+  ;; TODO: source loc
+  (let* ((type-and-vals (arithmetic-conversion context args $dummy-source-loc))
          (typ (car type-and-vals))
          (vals (cdr type-and-vals))
          (op (if (floating-point? typ) float-op int-op)))
@@ -466,8 +482,9 @@
   (let* ((cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
                                      CONS-CELL-PTR ""))
          (cons-term (make-term '(cons ? ?) cons-ptr false)))
-    (set-car-value cons-ptr (tv (coerce context (first args) '?)))
-    (set-cdr-value cons-ptr (tv (coerce context (second args) '?)))
+    ;; TODO: source loc
+    (set-car-value cons-ptr (tv (coerce context (first args) '? $dummy-source-loc)))
+    (set-cdr-value cons-ptr (tv (coerce context (second args) '? $dummy-source-loc)))
     ;; gr is undefined here - it needs to be explicitly set before this value
     ;; can be used anything that can deal with guarded references anyway.
     cons-term))
@@ -513,7 +530,9 @@
         (let* ((coerced-field-value
                  (tv (coerce context
                              (make-term '? raw-field-value false)
-                             field-type)))
+                             field-type
+                             ;; TODO: source loc
+                             $dummy-source-loc)))
                (gr-resultant-block (LLVMGetInsertBlock $builder)))
           (LLVMBuildBr $builder after-block)
           (LLVMPositionBuilderAtEnd $builder non-gr-block)
@@ -527,12 +546,14 @@
     false))
 
 (defun builtin-car (context args)
-  (let ((cons-term (coerce context (first args) 'cons)))
+  ;; TODO: source loc
+  (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-c[ad]r context cons-term get-car-value get-car-gr-value
                     (car-type (tt cons-term)) "car")))
 
 (defun builtin-cdr (context args)
-  (let ((cons-term (coerce context (first args) 'cons)))
+  ;; TODO: source loc
+  (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-c[ad]r context cons-term get-cdr-value get-cdr-gr-value
                     (cdr-type (tt cons-term)) "cdr")))
 
@@ -567,7 +588,9 @@
                 (after-block (LLVMAppendBasicBlock current-func "after-set-field")))
            (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) after-block non-gr-block)
            (LLVMPositionBuilderAtEnd $builder non-gr-block)
-           (let* ((coerced-value (i64<-term context (coerce context val-term field-type)))
+           (let* ((coerced-value (i64<-term context (coerce context val-term field-type
+                                                            ;; TODO: source loc
+                                                            $dummy-source-loc)))
                   (non-gr-resultant-block (LLVMGetInsertBlock $builder)))
              (LLVMBuildBr $builder after-block)
              (LLVMPositionBuilderAtEnd $builder after-block)
@@ -581,7 +604,9 @@
      ;; The field is dynamic, but the value being assigned isn't. We convert
      ;; the static value into a dynamic value and stick it in.
      (field-setter (tv cons-term)
-                   (i64<-term context (coerce context val-term field-type))))
+                   (i64<-term context (coerce context val-term field-type
+                                              ;; TODO: source loc
+                                              $dummy-source-loc))))
     ((not (type-eq? field-type (tt val-term)))
      ;; Wrong static type
      (fail! context
@@ -605,7 +630,9 @@
              (after-block (LLVMAppendBasicBlock current-func "after-set-field")))
         (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) gr-block after-block)
         (LLVMPositionBuilderAtEnd $builder gr-block)
-        (let* ((coerced-value (tv (coerce context val-term field-type)))
+        (let* ((coerced-value (tv (coerce context val-term field-type
+                                          ;; TODO: source loc
+                                          $dummy-source-loc)))
                (gr-resultant-block (LLVMGetInsertBlock $builder)))
           (LLVMBuildBr $builder after-block)
           (LLVMPositionBuilderAtEnd $builder after-block)
@@ -618,13 +645,15 @@
   val-term)
 
 (defun builtin-set-car (context args)
-  (let ((cons-term (coerce context (first args) 'cons)))
+  ;; TODO: source loc
+  (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-set-c[ad]r context cons-term (second args) set-car-value
                         get-car-value get-car-gr-value (car-type (tt cons-term))
                         "car")))
 
 (defun builtin-set-cdr (context args)
-  (let ((cons-term (coerce context (first args) 'cons)))
+  ;; TODO: source loc
+  (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-set-c[ad]r context cons-term (second args) set-cdr-value
                         get-cdr-value get-cdr-gr-value (cdr-type (tt cons-term))
                         "cdr")))
@@ -662,9 +691,15 @@
          (LLVMBuildBr $builder after-block)
          (LLVMPositionBuilderAtEnd $builder correct-type-block)
          (let* ((converted (if (numeric? (tt term2))
-                             (arithmetic-conversion context (list term1 term2))
+                             (arithmetic-conversion
+                               ;; TODO: Pass the source location of the 'eq?'
+                               ;; token in, so we can use it instead of a dummy
+                               ;; here
+                               context (list term1 term2) $dummy-source-loc)
                              (list (tt term2)
-                                   (tv (coerce context term1 (tt term2)))
+                                   (tv (coerce context term1 (tt term2)
+                                               ;; TODO: source loc of args
+                                               $dummy-source-loc))
                                    (tv term2))))
                 (typ (first converted))
                 (ct-term (builtin-eq?
@@ -689,7 +724,9 @@
       ((type-eq? (tt term1) (tt term2))
        (simple-int-cmp (tv term1) (tv term2)))
       ((and (numeric? (tt term1)) (numeric? (tt term2)))
-       (let* ((type-and-vals (arithmetic-conversion context (list term1 term2)))
+       (let* ((type-and-vals (arithmetic-conversion context (list term1 term2)
+                                                    ;; TODO: source loc
+                                                    $dummy-source-loc))
               (typ (car type-and-vals))
               (vals (cdr type-and-vals)))
          (if (floating-point? typ)

@@ -16,16 +16,22 @@
 (defun tv (term) (second term))
 (defun tl? (term) (third term))
 
-(defun coerce (context term typ)
+(defun coerce (context term typ blame-source-loc)
   (when $output-debug-info (format true "(coerce ... ~ ~)" term typ))
   (cond
     ((type-eq? (tt term) typ) term)
     ((type-eq? (tt term) '?)
-     (make-term typ (static-val<-dynamic-val context typ (tv term)) (tl? term)))
+     (make-term typ
+                (static-val<-dynamic-val context typ (tv term) blame-source-loc)
+                (tl? term)))
     ((type-eq? typ '?)
-     (make-term typ (dynamic-val<-static-val context (tt term) (tv term)) (tl? term)))
+     (make-term typ
+                (dynamic-val<-static-val context (tt term) (tv term) blame-source-loc)
+                (tl? term)))
     (true
-      (make-term typ (implicit-conversion context term typ) (tl? term)))))
+      (make-term typ
+                 (implicit-conversion context term typ blame-source-loc)
+                 (tl? term)))))
 
 ;; TODO: append "-type"
 
@@ -79,7 +85,7 @@
     (list 'cons '? '?)
     typ))
 
-(defun guarded-ref<-static-cons (context cons-ptr src-type dest-type)
+(defun guarded-ref<-static-cons (context cons-ptr src-type dest-type blame-source-loc)
   (assert! (and (cons-type? src-type) (cons-type? dest-type))
            "src-type and dest-type must be cons types")
   (let ((convert-car? (not (type-eq? (car-type src-type) (car-type dest-type))))
@@ -106,13 +112,15 @@
             (let* ((car-value
                      (term<-i64 context (get-car-value cons-ptr) (car-type src-type)))
                    (coerced-car
-                     (coerce context (make-term (car-type src-type) car-value false) '?)))
+                     (coerce context (make-term (car-type src-type) car-value false) '?
+                             blame-source-loc)))
               (set-car-value cons-ptr (i64<-term context coerced-car))))
           (when convert-cdr?
             (let* ((cdr-value
                      (term<-i64 context (get-cdr-value cons-ptr) (cdr-type src-type)))
                    (coerced-cdr
-                     (coerce context (make-term (cdr-type src-type) cdr-value false) '?)))
+                     (coerce context (make-term (cdr-type src-type) cdr-value false) '?
+                             blame-source-loc)))
               (set-cdr-value cons-ptr (i64<-term context coerced-cdr))))
           (set-gr-value cons-ptr
                         (LLVMBuildOr $builder (get-gr-value cons-ptr)
@@ -234,7 +242,7 @@
              nil false)
       LLVM-CONS-T)))
 
-(defun static-val<-dynamic-val (context type-spec val)
+(defun static-val<-dynamic-val (context type-spec val blame-source-loc)
   (cond
     ((type-eq? type-spec '*)
      (check-type val LLVM-FOREIGN-T)
@@ -323,10 +331,10 @@
      (LLVMBuildLShr $builder val (llvm-i64<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
     (true (fail! context
                  (format nil "Unsupported type-spec '~'" type-spec)
-                 $dummy-source-loc ; TODO: better source loc
+                 blame-source-loc
                  CONS-CELL-PTR false))))
 
-(defun dynamic-val<-static-val (context type-spec val)
+(defun dynamic-val<-static-val (context type-spec val blame-source-loc)
   (cond
     ((type-eq? type-spec '*)
       (add-lowtag
@@ -368,7 +376,8 @@
        (llvm-i64<-int SYMBOL-LOWTAG)
        ""))
     ((type-eq? type-spec 'cons)
-     (add-lowtag (guarded-ref<-static-cons context val type-spec '(cons ? ?))
+     (add-lowtag (guarded-ref<-static-cons context val type-spec '(cons ? ?)
+                                           blame-source-loc)
                  CONS-LOWTAG))
     ((type-eq? type-spec 'type)
      (LLVMBuildOr
@@ -378,10 +387,10 @@
        ""))
     (true (fail! context
                  (format nil "Unsupported type-spec '~'" type-spec)
-                 $dummy-source-loc ; TODO: better source loc
+                 blame-source-loc
                  NUC-VAL false))))
 
-(defun implicit-conversion (context term typ)
+(defun implicit-conversion (context term typ blame-source-loc)
   (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))
   (cond
     ((and (integral? (tt term)) (integral? typ))
@@ -420,19 +429,20 @@
        $builder
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context typ) (list NUC-VAL))
        (list (add-lowtag (guarded-ref<-static-cons context (tv term) (tt term)
-                                                   '(cons ? ?))
+                                                   '(cons ? ?)
+                                                   blame-source-loc)
                          CONS-LOWTAG))
        "array<-list"))
     (true (fail! context
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was expected"
                          (tt term) typ)
-                 $dummy-source-loc ; TODO: better source loc
+                 blame-source-loc
                  (llvm-type<-type-spec context typ) false))))
 
 ;;; Given a list of terms (which are arguments to some arithmetic builtin) this
 ;;; converts them all to the "maximum" type, where f64 > f32 > i64 > i32 > i16 > i8
-(defun arithmetic-conversion (context terms)
+(defun arithmetic-conversion (context terms blame-source-loc)
   (let ((max-type 'u8)
         (terms
           (map
@@ -441,7 +451,7 @@
                 term
                 (fail! context
                        (format nil "Static type error: tried to use a term of type '~' where a numeric type was expected" (tt term))
-                       $dummy-source-loc ; TODO: better source loc
+                       blame-source-loc
                        'i64 false)))
             terms)))
     (each (lambda (term)
@@ -461,5 +471,5 @@
     (if (type-eq? max-type '?)
       (set max-type 'i64))
     (cons max-type
-          (map (lambda (term) (tv (coerce context term max-type)))
+          (map (lambda (term) (tv (coerce context term max-type blame-source-loc)))
                terms))))

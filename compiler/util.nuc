@@ -95,7 +95,7 @@
       (true nil))))
 
 (defun dummy-token (sexpr)
-  (make-token sexpr "<compiler generated>" 0 0))
+  (make-token sexpr "<unknown>" 0 0))
 
 (defvar $dummy-source-loc (token-source-loc (dummy-token nil)))
 
@@ -304,7 +304,9 @@
                 (cdr (llvm-params func)))))
       ;; TODO: once we're parsing lambda return type declarations this should
       ;; use them rather than always using ?
-      (LLVMBuildRet $builder (tv (coerce context (compile-progn context body) '?)))
+      (LLVMBuildRet $builder (tv (coerce context (compile-progn context body) '?
+                                         (token-source-loc
+                                           (if (nil? body) source-loc (car (last body)))))))
       (when (LLVMVerifyFunction func LLVMPrintMessageAction)
         (LLVMDumpValue func)
         (fail! context
@@ -335,7 +337,6 @@
                "")
              "load-func-pointer-from-struct"))
          (current-func (get-current-func $builder))
-         (args (map (lambda (e) (compile-expr context e)) args))
          (args-len (length args))
          (captures
            (LLVMBuildGEP
@@ -352,7 +353,11 @@
           (else-block (LLVMAppendBasicBlock current-func "takes-closure"))
           (after-block (LLVMAppendBasicBlock current-func "after-call"))
           ;; TODO: Coerce based on RTTI
-          (coerced-args (map (lambda (term) (tv (coerce context term '?))) args)))
+          (coerced-args
+            (map (lambda (arg-token)
+                   (tv (coerce context (compile-expr context arg-token) '?
+                               (token-source-loc arg-token))))
+                 args)))
       (LLVMBuildCondBr
         $builder
         (LLVMBuildICmp $builder LLVMIntEQ

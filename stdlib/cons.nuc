@@ -51,6 +51,12 @@
 (defun seventh (lizt) (caddr (cddddr lizt)))
 (defun eighth (lizt) (cadddr (cddddr lizt)))
 
+(defun last (lizt)
+  (cond
+    ((nil? lizt) nil)
+    ((nil? (cdr lizt)) lizt)
+    (true (last (cdr lizt)))))
+
 (defun cons? (x)
   (eq? (type x) cons-t))
 

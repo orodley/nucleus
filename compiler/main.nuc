@@ -97,7 +97,8 @@
                      ;; TODO: statically typed globals
                      (LLVMBuildStore
                        $builder
-                       (tv (coerce context (compile-expr context expr) '?))
+                       (tv (coerce context (compile-expr context expr) '?
+                                   (token-source-loc expr)))
                        var)))
                  (reverse $initialisers))
            (llvm-build-call $builder entry-point nil "")
@@ -141,7 +142,8 @@
                       (write-string-to-stream $stderr (error-source-context err))
                       (write-string-ln-to-stream $stderr ":")
                       (write-string-to-stream $stderr "    ")
-                      (write-string-ln-to-stream $stderr (error-message err))))
+                      (write-string-ln-to-stream $stderr (error-message err))
+                      (write-string-ln-to-stream $stderr "")))
                   (reverse (context-errors context))))
            (true
              ;; TODO: not portable
@@ -371,7 +373,13 @@
       (let ((compiled (LLVMBuildRet $builder
                                     (tv (coerce context
                                                 (compile-progn context (func-body func))
-                                                (func-return-type func))))))
+                                                (func-return-type func)
+                                                (token-source-loc
+                                                  (if (nil? (func-body func))
+                                                    ;; TODO: track source loc
+                                                    ;; of the defun form itself
+                                                    $dummy-source-loc
+                                                    (car (last (func-body func))))))))))
         (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
           (LLVMDumpValue llvm-func)
           (fail!
@@ -472,7 +480,8 @@
                      (arg-terms (map2 (lambda (e typ)
                                         (coerce context
                                                 (compile-expr context e)
-                                                typ))
+                                                typ
+                                                (token-source-loc e)))
                                       args
                                       (func-arg-types func))))
                 (if (eq? (LLVMCountParams llvm-func) (length args))
