@@ -193,10 +193,7 @@
        nil)
       (true
         (back-up-char stream c)
-        (let ((next (%read-from-stream stream track-source-loc?)))
-          (set-cdr list-head (if (eq? next (symbol<-string "."))
-                               (%read-from-stream stream track-source-loc?)
-                               (cons next nil))))
+        (set-cdr list-head (cons (%read-from-stream stream track-source-loc?) nil))
         (read-list stream (cdr list-head) track-source-loc?)))))
 
 (defun read-symbol (stream list-head)
