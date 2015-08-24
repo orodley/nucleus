@@ -91,7 +91,12 @@ mv stage2 nucc
 echo Compilation finished, all is well
 echo New compiler at $(realpath nucc)
 
-if [ "$save_snapshot" = true ]; then
+# If there are unsaved changes since the last commit, then we don't want to
+# save a snapshot because it won't actually correspond to the version of the
+# code at the current commit.
+clean="$(git status --porcelain --untracked-files=no)"
+
+if [ "$save_snapshot" = true ] && [ -z "$clean" ]; then
 	# If we don't have a snapshot for this commit, save one
 	# TODO: This should check that the new snapshot is different to the old one, as
 	# not all commits change the compiler.
