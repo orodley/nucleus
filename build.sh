@@ -42,8 +42,9 @@ compile()
 {
 	echo "Compiling $2 with $1"
 	"$1" -link "$link_flags" compiler/main.nuc "$2"
-	if [ $? -ne 0 ]; then
-		exit $?
+	compile_status="$?"
+	if [ "$compile_status" -ne 0 ]; then
+		exit "$compile_status"
 	fi
 }
 
