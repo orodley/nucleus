@@ -232,7 +232,9 @@
                   (format nil "Argument list must be a list: ~" (ts arg-list))
                   (token-source-loc arg-list)
                   nil false))
-         (add-func context (ts name) arg-names arg-types return-type 'nucleus body)))
+         (if (any? generic-type? arg-types)
+           (add-generic-func context (ts name) arg-names arg-types return-type body)
+           (add-func context (ts name) arg-names arg-types return-type 'nucleus body))))
       ('defvar
        (when (length>= form 4)
          (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
@@ -257,10 +259,11 @@
        (unless (length-is? (cdr form) 4)
          (fail!
            context
-           (format nil "Invalid number of arguments to 'cfun' (got ~, expected 4)"
+           (format nil "Invalid number of arguments to 'extern' (got ~, expected 4)"
                    (length (cdr form)))
            (token-source-loc (first form))
            nil false))
+       ;; TODO: Shouldn't this use add-func?
        (let* ((names (ts (second form)))
               (extern-name (if (cons? names) (ts (first names)) names))
               (nuc-name (if (cons? names) (ts (second names)) names))
@@ -349,46 +352,70 @@
           (true (macroexpand context (copy-source-loc token (builtin-macro args))))))
       token)))
 
-;; TODO: This is basically a subset of what compile-lambda does, we should
-;; combine the two.
 (defun compile-function (context func)
   (when $output-debug-info (format true "(c-func ... ~)" func))
   ;; if it's extern we don't need to compile it, the implmentation already
   ;; exists and will be found at link time
   (when (eq? (func-impl-type func) 'nucleus)
-    (let* ((args (func-arg-names func))
-           (original-env (context-env context))
-           (llvm-func (func-llvm-func func))
-           (params (llvm-params llvm-func)))
+    (context-set-func context func)
+    (%compile-function
+      context (func-arg-names func) (func-arg-types func)
+      (func-return-type func) (func-body func) (func-llvm-func func))))
+
+(defun compile-generic-function-impl (context generic-func concrete-arg-types)
+  (when $output-debug-info
+    (format true "(c-g-f-i ... ~ ~)" generic-func concrete-arg-types))
+  ;; TODO: change context-func to a string, so we can set from here
+  (let ((llvm-func (declare-function
+                     (mangle-generic-func-name (generic-func-name generic-func)
+                                               concrete-arg-types)
+                     (llvm-type<-type-spec context (generic-func-return-type generic-func))
+                     (map (lambda (t) (llvm-type<-type-spec context t))
+                          concrete-arg-types))))
+    (%compile-function
+      context
+      (generic-func-arg-names generic-func)
+      concrete-arg-types
+      (generic-func-return-type generic-func)
+      (generic-func-body generic-func)
+      llvm-func)
+    llvm-func))
+
+;; TODO: This is basically a subset of what compile-lambda does, we should
+;; combine the two.
+(defun %compile-function (context arg-names arg-types return-type body llvm-func)
+  (let* ((original-block (LLVMGetInsertBlock $builder))
+         (original-env (context-env context))
+         (params (llvm-params llvm-func)))
       (assert! (not (null? llvm-func)) "Function should have been declared")
       (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
       ;; TODO: set LLVM param names
       (extend-env-with-terms
         context
-        args
-        (map2 (lambda (typ val) (make-term typ val true))
-              (func-arg-types func)
-              params))
-      (context-set-func context func)
-      (let ((compiled (LLVMBuildRet $builder
-                                    (tv (coerce context
-                                                (compile-progn context (func-body func))
-                                                (func-return-type func)
-                                                (token-source-loc
-                                                  (if (nil? (func-body func))
-                                                    ;; TODO: track source loc
-                                                    ;; of the defun form itself
-                                                    $dummy-source-loc
-                                                    (car (last (func-body func))))))))))
-        (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
-          (LLVMDumpValue llvm-func)
-          (fail!
-            context
-            "ICE: Function failed LLVMVerifyFunction. Function has been dumped"
-            $dummy-source-loc ; TODO: track source loc in 'func's
-            nil false))
-        (context-set-env context original-env)
-        compiled))))
+        arg-names
+        (map2 (lambda (typ val) (make-term typ val true)) arg-types params))
+      (LLVMBuildRet
+        $builder
+        (tv (coerce
+              context
+              (compile-progn context body)
+              return-type
+              (token-source-loc
+                (if (nil? body)
+                  ;; TODO: track source loc
+                  ;; of the defun form itself
+                  $dummy-source-loc
+                  (car (last body)))))))
+      (unless (null? original-block) ; if we weren't in a block before it's null
+        (LLVMPositionBuilderAtEnd $builder original-block))
+      (context-set-env context original-env)
+      (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
+        (LLVMDumpValue llvm-func)
+        (fail!
+          context
+          "ICE: Function failed LLVMVerifyFunction. Function has been dumped"
+          $dummy-source-loc ; TODO: track source loc in 'func's
+          nil false))))
 
 (defun compile-expr (context expr)
   (when $output-debug-info
@@ -470,11 +497,44 @@
             (map (lambda (arg) (compile-expr context arg)) args))
           (let ((func (get-func (ts name))))
             (if (nil? func)
-              ;; Calling a closure pointer
-              ;; TODO: store RTTI in closures
-              (make-term '?
-                         (call-closure context (tv (compile-expr context name)) args)
-                         false)
+              (let ((generic-func (get-generic-func (ts name))))
+                (if (nil? generic-func)
+                  ;; Calling a closure pointer
+                  ;; TODO: store RTTI in closures
+                  (make-term '?
+                             (call-closure context (tv (compile-expr context name)) args)
+                             false)
+                  ;; Calling a generic function
+                  (if (not (eq? (length args) (generic-func-arity generic-func)))
+                    (fail! context
+                           (format nil "Invalid number of arguments to generic function '~' (got ~, expected ~)"
+                                   (ts name)
+                                   (length args)
+                                   (generic-func-arity generic-func))
+                           (token-source-loc token)
+                           (generic-func-return-type generic-func) false)
+                    (let* ((arg-terms (map (lambda (arg-token)
+                                             (compile-expr context arg-token))
+                                           args))
+                           (required-arg-types (get-concrete-arg-types
+                                                 context generic-func arg-terms))
+                           (coerced-args
+                             (map (lambda (c)
+                                    (let ((arg-term (car c))
+                                          (required-type (cadr c))
+                                          (source-loc (cddr c)))
+                                      (coerce context arg-term required-type
+                                              source-loc)))
+                                  (zip arg-terms
+                                       (zip required-arg-types
+                                            (map token-source-loc args)))))
+                           (llvm-func (get-generic-func-specialization
+                                        context generic-func required-arg-types
+                                        (token-source-loc token))))
+                      (make-term
+                        (generic-func-return-type generic-func)
+                        (llvm-build-call $builder llvm-func (map tv coerced-args) "")
+                        false)))))
               ;; Calling a static function
               (let* ((llvm-func (func-llvm-func func))
                      (arg-terms (map2 (lambda (e typ)

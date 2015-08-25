@@ -14,9 +14,25 @@
 (defun func-body (func) (seventh func))
 (defun func-llvm-func (func) (eighth func))
 
+;;; TODO: Replace with a struct once they exist
+(defun make-generic-func (name arity arg-names arg-types return-type body existing-impls)
+  (list name arity arg-names arg-types return-type body existing-impls))
+(defun generic-func-name (func) (first func))
+(defun generic-func-arity (func) (second func))
+(defun generic-func-arg-names (func) (third func))
+(defun generic-func-arg-types (func) (fourth func))
+(defun generic-func-return-type (func) (fifth func))
+(defun generic-func-body (func) (sixth func))
+(defun generic-func-existing-impls (func) (seventh func))
+(defun generic-func-add-impl (func impl-types impl)
+  (set-car (cddr (cddddr func))
+           (cons (cons impl-types impl)
+                 (generic-func-existing-impls func))))
+
 ;;; TODO: Replace with a hash table once that exists
 ;;; TODO: These should go in the context, along with $module and $builder
 (defvar $functions nil)
+(defvar $generic-functions nil)
 
 ;;; TODO: Replace with a struct once they exist
 (defun make-context (env file func target-data errors)
@@ -106,21 +122,100 @@
 (defun ts (token) (token-sexpr token))
 
 (defun add-func (context name arg-names arg-types return-type impl-type body)
-  (let* ((llvm-return-type (llvm-type<-type-spec context return-type))
-         (llvm-arg-types (map (lambda (t) (llvm-type<-type-spec context t))
-                              arg-types))
-         (arity (length arg-names))
-         (llvm-func (declare-function
-                      (mangle-name name) llvm-return-type llvm-arg-types))
-         (func (make-func name arity arg-names arg-types return-type impl-type body llvm-func)))
+  (when $output-debug-info (format true "Adding func ~" name))
+  (if (not (nil? (get-func name)))
+    (fail! context
+           (format nil "Duplicate definition of function '~'" name)
+           ;; TODO: In this case it would be nice to be able to report where
+           ;; the other version was. Maybe by issuing a separate (non-error)
+           ;; diagnostic with the source-loc of the other function?
+           $dummy-source-loc ; TODO: track source loc in 'func's
+           nil false)
+    (let* ((llvm-return-type (llvm-type<-type-spec context return-type))
+           (llvm-arg-types (map (lambda (t) (llvm-type<-type-spec context t))
+                                arg-types))
+           (arity (length arg-names))
+           (llvm-func (declare-function
+                        (mangle-name name) llvm-return-type llvm-arg-types))
+           (func (make-func name arity arg-names arg-types return-type impl-type body llvm-func)))
+      (set $functions (cons (cons name func) $functions)))))
+
+(defun add-generic-func (context name arg-names arg-types return-type body)
+  (when $output-debug-info (format true "Adding generic func ~" name))
+  (let* ((arity (length arg-names))
+         (generic-func (make-generic-func name arity arg-names
+                                          arg-types return-type body nil))
+         (dynamic-arg-types (map (lambda (arg-type)
+                                   (if (generic-type? arg-type) '? arg-type))
+                                 arg-types)))
+    ;; By the gradual guarantee, if the function fails to compile when all of
+    ;; the type variables are replaced with '?', it will fail with *any*
+    ;; concrete type. If that is the case, we know not to bother creating any
+    ;; other versions, and we can just issue one error message. To do this, we
+    ;; create a dummy non-generic version with a signature with all variables
+    ;; replaced with '?'.
+    ;;
+    ;; This is nice because we can still get type errors for any non-dynamic
+    ;; concrete types in the signature even if the function itself failed to
+    ;; compile. We also set its impl-type to 'extern', so that we don't bother
+    ;; to compile this non-generic version. It doesn't matter that it doesn't
+    ;; exist, as we'll fail before link time.
+    ;;
+    ;; TODO: We can't do the above yet, as we can't compile functions until we
+    ;; have processed the entire compilation unit. We need to delay it somehow,
+    ;; while still making sure it happens before any other functions are
+    ;; compiled, so that they refer to the non-generic version if it fails.
+    (set $generic-functions (cons (cons name generic-func) $generic-functions))))
+
+(defun generic-type? (type-spec)
+  ;; TODO: Support compound types containing type variables
+  (and (not (cons? type-spec))
+       (eq? (char-at (string<-symbol type-spec) 0) 36))) ; 36 = '$'
+
+(defun get-generic-func-specialization (context generic-func concrete-arg-types blame-source-loc)
+  (let ((existing (find (lambda (pair)
+                          (let ((arg-types (car pair))
+                                (impl (cdr pair)))
+                            (all? (lambda (c)
+                                    (type-eq? (car c) (cdr c)))
+                                  (zip arg-types concrete-arg-types))))
+                        (generic-func-existing-impls generic-func))))
     (cond
-      ((not (nil? (get-func name)))
+      ((not (nil? existing))
+       (cdr existing))
+      ((not (generic-func-compatible? generic-func concrete-arg-types))
        (fail! context
-              (format nil "Duplicate definition of function '~'" name)
-              $dummy-source-loc ; TODO: track source loc in 'func's
-              nil false))
+              (format nil "Incompatible types to generic function ~"
+                      (generic-func-name generic-func))
+              blame-source-loc
+              nil false)
+       (declare-function "(dummy)" (generic-func-return-type generic-func)
+                         concrete-arg-types))
       (true
-        (set $functions (cons (cons name func) $functions))))))
+        (let ((new-impl (compile-generic-function-impl
+                          context generic-func concrete-arg-types)))
+          (generic-func-add-impl generic-func concrete-arg-types new-impl)
+          new-impl)))))
+
+(defun generic-func-compatible? (generic-func concrete-arg-types)
+  (all? (lambda (c)
+          (let ((desired-type (car c))
+                (actual-type (cdr c)))
+            (or (generic-type? desired-type)
+                (type-eq? desired-type actual-type))))
+        (zip (generic-func-arg-types generic-func) concrete-arg-types)))
+
+(defun get-concrete-arg-types (context generic-func arg-terms)
+  (map2 (lambda (func-arg-type arg-term)
+          (if (generic-type? func-arg-type)
+            ;; TODO: require that two generic arguments with the same generic
+            ;; type name be constrained to the same concrete type.
+            (tt arg-term)
+            ;; Don't bother checking if they match, as the coercion will get
+            ;; that later anyway.
+            func-arg-type))
+        (generic-func-arg-types generic-func)
+        arg-terms))
 
 (defun add-global (context name type-spec)
   (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
@@ -129,6 +224,7 @@
     global))
 
 (defun get-func (name) (assoc-cdr name $functions))
+(defun get-generic-func (name) (assoc-cdr name $generic-functions))
 
 (defvar $initialisers nil)
 
@@ -136,6 +232,8 @@
   (set $initialisers (cons (cons var init) $initialisers)))
 
 (defun mangle-name (name) (format nil "nuc(~)" name))
+(defun mangle-generic-func-name (name concrete-arg-types)
+  (format nil "nuc(~$~)" name concrete-arg-types))
 
 ;; TODO: write this properly
 (defun << (x y) (* x (expt 2 y)))

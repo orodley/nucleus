@@ -139,6 +139,18 @@
     ((pred (car lizt)) (car lizt))
     (true (find pred (cdr lizt)))))
 
+(defun all? (pred lizt)
+  (cond
+    ((nil? lizt) true)
+    ((pred (car lizt)) (all? pred (cdr lizt)))
+    (true false)))
+
+(defun any? (pred lizt)
+  (cond
+    ((nil? lizt) false)
+    ((pred (car lizt)) true)
+    (true (any? pred (cdr lizt)))))
+
 (defun assoc (kar alist)
   (find (lambda (kons) (eq? (car kons) kar)) alist))
 
