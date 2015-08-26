@@ -206,16 +206,20 @@
         (zip (generic-func-arg-types generic-func) concrete-arg-types)))
 
 (defun get-concrete-arg-types (context generic-func arg-terms)
-  (map2 (lambda (func-arg-type arg-term)
-          (if (generic-type? func-arg-type)
-            ;; TODO: require that two generic arguments with the same generic
-            ;; type name be constrained to the same concrete type.
-            (tt arg-term)
-            ;; Don't bother checking if they match, as the coercion will get
-            ;; that later anyway.
-            func-arg-type))
-        (generic-func-arg-types generic-func)
-        arg-terms))
+  (let ((type-var-map nil))
+    (map2 (lambda (func-arg-type arg-term)
+            (if (generic-type? func-arg-type)
+              (let ((already-found (assoc-cdr func-arg-type type-var-map)))
+                (if (not (nil? already-found))
+                  already-found
+                  (let ((t (tt arg-term)))
+                    (set type-var-map (cons (cons func-arg-type t) type-var-map))
+                    t)))
+              ;; Don't bother checking if they match, as the coercion will get
+              ;; that later anyway.
+              func-arg-type))
+          (generic-func-arg-types generic-func)
+          arg-terms)))
 
 (defun add-global (context name type-spec)
   (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name name))))

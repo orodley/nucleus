@@ -1,0 +1,7 @@
+; compile-stderr: Static type error
+
+(defun foo ((x $T) (y $T))
+  (cons x y))
+
+(defun main ()
+  (foo 1 "foo"))
