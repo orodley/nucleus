@@ -1,0 +1,7 @@
+; compile-stderr: Static type error
+
+(defun identity ((x $T)) -> $T
+  x)
+
+(defun main ()
+  (+ 3 (identity "foo")))

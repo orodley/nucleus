@@ -24,9 +24,9 @@
 (defun generic-func-return-type (func) (fifth func))
 (defun generic-func-body (func) (sixth func))
 (defun generic-func-existing-impls (func) (seventh func))
-(defun generic-func-add-impl (func impl-types impl)
+(defun generic-func-add-impl (func impl-arg-types impl-ret-type impl)
   (set-car (cddr (cddddr func))
-           (cons (cons impl-types impl)
+           (cons (cons (cons impl-ret-type impl-arg-types) impl)
                  (generic-func-existing-impls func))))
 
 ;;; TODO: Replace with a hash table once that exists
@@ -104,6 +104,7 @@
     ;; compilation is finished for some reason.
     (when $output-debug-info
       (format true "Got an error: ~" message))
+    (break-on-me)
     (push-error context (make-error message source-context source-loc))
     (cond
       ((eq? (type result-type) foreign-t) val)
@@ -140,7 +141,8 @@
            (func (make-func name arity arg-names arg-types return-type impl-type body llvm-func)))
       (set $functions (cons (cons name func) $functions)))))
 
-(defun add-generic-func (context name arg-names arg-types return-type body)
+(defun add-generic-func (context name arg-names arg-types return-type
+                                 return-type-source-loc body)
   (when $output-debug-info (format true "Adding generic func ~" name))
   (let* ((arity (length arg-names))
          (generic-func (make-generic-func name arity arg-names
@@ -148,31 +150,39 @@
          (dynamic-arg-types (map (lambda (arg-type)
                                    (if (generic-type? arg-type) '? arg-type))
                                  arg-types)))
-    ;; By the gradual guarantee, if the function fails to compile when all of
-    ;; the type variables are replaced with '?', it will fail with *any*
-    ;; concrete type. If that is the case, we know not to bother creating any
-    ;; other versions, and we can just issue one error message. To do this, we
-    ;; create a dummy non-generic version with a signature with all variables
-    ;; replaced with '?'.
-    ;;
-    ;; This is nice because we can still get type errors for any non-dynamic
-    ;; concrete types in the signature even if the function itself failed to
-    ;; compile. We also set its impl-type to 'extern', so that we don't bother
-    ;; to compile this non-generic version. It doesn't matter that it doesn't
-    ;; exist, as we'll fail before link time.
-    ;;
-    ;; TODO: We can't do the above yet, as we can't compile functions until we
-    ;; have processed the entire compilation unit. We need to delay it somehow,
-    ;; while still making sure it happens before any other functions are
-    ;; compiled, so that they refer to the non-generic version if it fails.
-    (set $generic-functions (cons (cons name generic-func) $generic-functions))))
+    (if (and (generic-type? return-type)
+             (not (member? return-type arg-types)))
+      (fail! context
+             (format nil "Generic return type ~ must be constrained by generic argument types" return-type)
+             return-type-source-loc
+             nil false)
+      ;; By the gradual guarantee, if the function fails to compile when all of
+      ;; the type variables are replaced with '?', it will fail with *any*
+      ;; concrete type. If that is the case, we know not to bother creating any
+      ;; other versions, and we can just issue one error message. To do this,
+      ;; we create a dummy non-generic version with a signature with all
+      ;; variables replaced with '?'.
+      ;;
+      ;; This is nice because we can still get type errors for any non-dynamic
+      ;; concrete types in the signature even if the function itself failed to
+      ;; compile. We also set its impl-type to 'extern', so that we don't
+      ;; bother to compile this non-generic version. It doesn't matter that it
+      ;; doesn't exist, as we'll fail before link time.
+      ;;
+      ;; TODO: We can't do the above yet, as we can't compile functions until
+      ;; we have processed the entire compilation unit. We need to delay it
+      ;; somehow, while still making sure it happens before any other functions
+      ;; are compiled, so that they refer to the non-generic version if it
+      ;; fails.
+      (set $generic-functions (cons (cons name generic-func) $generic-functions)))))
 
 (defun generic-type? (type-spec)
   ;; TODO: Support compound types containing type variables
   (and (not (cons? type-spec))
        (eq? (char-at (string<-symbol type-spec) 0) 36))) ; 36 = '$'
 
-(defun get-generic-func-specialization (context generic-func concrete-arg-types blame-source-loc)
+(defun get-generic-func-specialization (context generic-func concrete-arg-types
+                                                concrete-ret-type blame-source-loc)
   (let ((existing (find (lambda (pair)
                           (let ((arg-types (car pair))
                                 (impl (cdr pair)))
@@ -189,12 +199,14 @@
                       (generic-func-name generic-func))
               blame-source-loc
               nil false)
-       (declare-function "(dummy)" (generic-func-return-type generic-func)
+       (declare-function "(dummy)" (concrete-ret-type generic-func)
                          concrete-arg-types))
       (true
         (let ((new-impl (compile-generic-function-impl
-                          context generic-func concrete-arg-types)))
-          (generic-func-add-impl generic-func concrete-arg-types new-impl)
+                          context generic-func concrete-arg-types
+                          concrete-ret-type)))
+          (generic-func-add-impl generic-func concrete-arg-types
+                                 concrete-ret-type new-impl)
           new-impl)))))
 
 (defun generic-func-compatible? (generic-func concrete-arg-types)
@@ -205,21 +217,31 @@
                 (type-eq? desired-type actual-type))))
         (zip (generic-func-arg-types generic-func) concrete-arg-types)))
 
-(defun get-concrete-arg-types (context generic-func arg-terms)
-  (let ((type-var-map nil))
-    (map2 (lambda (func-arg-type arg-term)
-            (if (generic-type? func-arg-type)
-              (let ((already-found (assoc-cdr func-arg-type type-var-map)))
-                (if (not (nil? already-found))
-                  already-found
-                  (let ((t (tt arg-term)))
-                    (set type-var-map (cons (cons func-arg-type t) type-var-map))
-                    t)))
-              ;; Don't bother checking if they match, as the coercion will get
-              ;; that later anyway.
-              func-arg-type))
-          (generic-func-arg-types generic-func)
-          arg-terms)))
+(defun get-concrete-types (context generic-func arg-terms)
+  (let* ((type-var-map nil)
+         (concrete-arg-types
+           (map2 (lambda (func-arg-type arg-term)
+                   (if (generic-type? func-arg-type)
+                     (let ((already-found (assoc-cdr func-arg-type type-var-map)))
+                       (if (not (nil? already-found))
+                         already-found
+                         (let ((t (tt arg-term)))
+                           (set type-var-map (cons (cons func-arg-type t) type-var-map))
+                           t)))
+                     ;; Don't bother checking if they match, as the coercion will get
+                     ;; that later anyway.
+                     func-arg-type))
+                 (generic-func-arg-types generic-func)
+                 arg-terms))
+         (ret-type (generic-func-return-type generic-func))
+         (concrete-ret-type
+           (if (generic-type? ret-type)
+             (let ((already-found (assoc-cdr ret-type type-var-map)))
+               (assert! (not (nil? already-found))
+                        "The return type is a type variable and is not constrained by argument type variables. Should have detected this when processing the function declaration")
+               already-found)
+             ret-type)))
+    (cons concrete-ret-type concrete-arg-types)))
 
 (defun add-global (context name type-spec)
   (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name name))))
@@ -236,8 +258,8 @@
   (set $initialisers (cons (cons var init) $initialisers)))
 
 (defun mangle-name (name) (format nil "nuc(~)" name))
-(defun mangle-generic-func-name (name concrete-arg-types)
-  (format nil "nuc(~$~)" name concrete-arg-types))
+(defun mangle-generic-func-name (name concrete-arg-types concrete-ret-type)
+  (format nil "nuc(~$~->~)" name concrete-arg-types concrete-ret-type))
 
 ;; TODO: write this properly
 (defun << (x y) (* x (expt 2 y)))

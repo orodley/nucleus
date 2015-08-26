@@ -215,13 +215,15 @@
                        (if (eq? typ 'cons) '(cons ? ?) typ))
                      (cdr names-and-types)))
               (body (cdddr form))
-              (return-type (cond
-                             ((and (not (nil? body))
-                                   (eq? (ts (first body)) '->))
-                              (let ((t (second body)))
-                                (set body (cddr body))
-                                (ts t)))
-                             (true '?))))
+              (return-type-token (cond
+                                   ((and (not (nil? body))
+                                         (eq? (ts (first body)) '->))
+                                    (let ((t (second body)))
+                                      (set body (cddr body))
+                                      t))
+                                   (true (dummy-token '?))))
+              (return-type (ts return-type-token))
+              (return-type-source-loc (token-source-loc return-type-token)))
          (unless (symbol? (ts name))
            (fail! context
                   (format nil "Function name must be a string: ~" (ts name))
@@ -232,8 +234,9 @@
                   (format nil "Argument list must be a list: ~" (ts arg-list))
                   (token-source-loc arg-list)
                   nil false))
-         (if (any? generic-type? arg-types)
-           (add-generic-func context (ts name) arg-names arg-types return-type body)
+         (if (any? generic-type? (cons return-type arg-types))
+           (add-generic-func context (ts name) arg-names arg-types return-type
+                             return-type-source-loc body)
            (add-func context (ts name) arg-names arg-types return-type 'nucleus body))))
       ('defvar
        (when (length>= form 4)
@@ -362,21 +365,23 @@
       context (func-arg-names func) (func-arg-types func)
       (func-return-type func) (func-body func) (func-llvm-func func))))
 
-(defun compile-generic-function-impl (context generic-func concrete-arg-types)
+(defun compile-generic-function-impl (context generic-func concrete-arg-types
+                                              concrete-ret-type)
   (when $output-debug-info
-    (format true "(c-g-f-i ... ~ ~)" generic-func concrete-arg-types))
+    (format true "(c-g-f-i ... ~ ~ ~)"
+            generic-func concrete-arg-types concrete-ret-type))
   ;; TODO: change context-func to a string, so we can set from here
   (let ((llvm-func (declare-function
-                     (mangle-generic-func-name (generic-func-name generic-func)
-                                               concrete-arg-types)
-                     (llvm-type<-type-spec context (generic-func-return-type generic-func))
+                     (mangle-generic-func-name
+                       (generic-func-name generic-func) concrete-arg-types concrete-ret-type)
+                     (llvm-type<-type-spec context concrete-ret-type)
                      (map (lambda (t) (llvm-type<-type-spec context t))
                           concrete-arg-types))))
     (%compile-function
       context
       (generic-func-arg-names generic-func)
       concrete-arg-types
-      (generic-func-return-type generic-func)
+      concrete-ret-type
       (generic-func-body generic-func)
       llvm-func)
     llvm-func))
@@ -516,8 +521,10 @@
                     (let* ((arg-terms (map (lambda (arg-token)
                                              (compile-expr context arg-token))
                                            args))
-                           (required-arg-types (get-concrete-arg-types
+                           (concrete-types (get-concrete-types
                                                  context generic-func arg-terms))
+                           (ret-type (car concrete-types))
+                           (required-arg-types (cdr concrete-types))
                            (coerced-args
                              (map (lambda (c)
                                     (let ((arg-term (car c))
@@ -530,9 +537,9 @@
                                             (map token-source-loc args)))))
                            (llvm-func (get-generic-func-specialization
                                         context generic-func required-arg-types
-                                        (token-source-loc token))))
+                                        ret-type (token-source-loc token))))
                       (make-term
-                        (generic-func-return-type generic-func)
+                        ret-type
                         (llvm-build-call $builder llvm-func (map tv coerced-args) "")
                         false)))))
               ;; Calling a static function

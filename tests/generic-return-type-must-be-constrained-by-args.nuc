@@ -1,0 +1,6 @@
+; compile-stderr: must be constrained
+
+(defun foo (x y) -> $T
+  (+ x y))
+
+(defun main ())
