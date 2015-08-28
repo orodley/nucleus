@@ -53,8 +53,9 @@ compile_ir()
 	echo "Compiling $2 with $1"
 	"$1" -ir compiler/main.nuc "$2"
 
-	if [ $? -ne 0 ]; then
-		exit $?
+	compile_status="$?"
+	if [ "$compile_status" -ne 0 ]; then
+		exit "$compile_status"
 	fi
 
 	# The module name will be different as we've specified a different filename
