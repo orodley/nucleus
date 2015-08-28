@@ -358,7 +358,7 @@
          (func (compile-lambda context (token-source-loc args) name args body captures)))
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
-    (make-lambda context func (length args) captures)))
+    (make-lambda context func (length (ts args)) captures)))
 
 (defun builtin-macro-format (context args)
   ;; TODO: Life without quasiquote is painful
@@ -451,8 +451,7 @@
          (typ (car type-and-vals))
          (vals (cdr type-and-vals))
          (op (if (floating-point? typ) float-op int-op)))
-    (make-term
-      typ (reduce (lambda (a b) (op $builder a b name false)) vals) false)))
+    (make-term typ (reduce (lambda (a b) (op $builder a b name)) vals) false)))
 (defun builtin+ (context args)
   (arithmetic-builtin context args %LLVMBuildAdd %LLVMBuildFAdd "+"))
 (defun builtin- (context args)

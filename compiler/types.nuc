@@ -47,12 +47,19 @@
 (defun cons-type? (typ)
   (or (eq? typ 'cons) (and (cons? typ) (eq? (first typ) 'cons))))
 
+(defun func-type? (typ)
+  (and (cons? typ) (eq? (first typ) 'func)))
+
 (defun type-eq? (t1 t2)
   (or (eq? t1 t2)
       (and (cons-type? t1) (cons-type? t2)
            (or (eq? t1 'cons) (eq? t2 'cons)
                (and (type-eq? (second t1) (second t2))
                     (type-eq? (third t1) (third t2)))))
+      (and (func-type? t1) (func-type? t2)
+           (eq? (length (second t1)) (length (second t2)))
+           (all? (lambda (c) (type-eq? (car c) (cdr c))) (zip (second t1) (second t2)))
+           (type-eq? (fourth t1) (fourth t2)))
       (and (eq? t1 'int) (eq? t2 'i32))
       (and (eq? t2 'int) (eq? t1 'i32))))
 
@@ -176,6 +183,7 @@
   (if (cons? type-spec)
     (case (first type-spec)
       ('cons CONS-CELL-PTR)
+      ('func CLOSURE-PTR)
       (default
         (fail! context (format nil "Unsupported compound type '~'"
                                (first type-spec))
@@ -300,7 +308,7 @@
        (LLVMBuildLShr $builder val (llvm-i64<-int LOWTAG-BITS) "remove-symbol-lowtag")
        (llvm-type<-type-spec context type-spec)
        ""))
-    ((type-eq? type-spec 'cons)
+    ((cons-type? type-spec)
      ;; To convert a cons containing dynamically typed values into a statically
      ;; typed cons, we just set the guarded reference flag, and leave the
      ;; values contained unconverted. This is necessary because there could be
@@ -325,6 +333,19 @@
        (LLVMBuildBr $builder after-block)
        (LLVMPositionBuilderAtEnd $builder after-block)
        cons-ptr)))
+    ((func-type? type-spec)
+     (check-type val LLVM-LAMBDA-T)
+     (assert! (and (all? (lambda (t) (eq? t '?)) (second type-spec))
+                   (eq? (fourth type-spec) '?))
+              "Can't coerce non-dynamic functions yet.")
+     (let ((closure-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val)
+                                           CLOSURE-PTR "")))
+       (llvm-build-call
+         $builder
+         (runtime-func "rt_check_arity" VOID (list CLOSURE-PTR INT))
+         (list closure-ptr (llvm-i32<-int (length (second type-spec))))
+         "")
+       closure-ptr))
     ((type-eq? type-spec 'type)
      ;; TODO: We should have a separate exttag for types so that we can do a
      ;; check-type here.
@@ -385,6 +406,11 @@
        (LLVMBuildShl $builder val (llvm-i32<-int (+ LOWTAG-BITS EXTTAG-BITS)) "")
        (llvm-i32<-int (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
        ""))
+    ((func-type? type-spec)
+     (assert! (and (all? (lambda (t) (eq? t '?)) (second type-spec))
+                   (eq? (fourth type-spec) '?))
+              "Can't coerce non-dynamic functions yet.")
+     (add-lowtag val LAMBDA-LOWTAG))
     (true (fail! context
                  (format nil "Unsupported type-spec '~'" type-spec)
                  blame-source-loc

@@ -24,6 +24,7 @@
                                     (LLVMPointerType (LLVMIntType 8) 0) 0))
     3
     false))
+(defvar CLOSURE-PTR (LLVMPointerType CLOSURE 0))
 (defvar STRING
   (LLVMStructType (list (LLVMIntType 64) (LLVMArrayType CHAR 0)) 2 false))
 (defvar STRING-PTR (LLVMPointerType STRING 0))

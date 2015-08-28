@@ -446,9 +446,12 @@
 ;;; whether the type can be deduced.
 ;;; TODO: We should at least check it has the 'lambda' lowtag even if we can't
 ;;; do the full check.
-(defun call-closure (context val args)
-  (let* ((closure (LLVMBuildIntToPtr
-                    $builder (remove-lowtag val) (LLVMPointerType CLOSURE 0) ""))
+(defun call-closure (context closure-term args)
+  (let* ((args-len (length args))
+         (closure (tv (coerce context closure-term
+                              (list 'func (repeat args-len '?) '-> '?)
+                              ;; TODO: source loc
+                              $dummy-source-loc)))
          (func-pointer
            (LLVMBuildLoad
              $builder
@@ -461,7 +464,6 @@
                "")
              "load-func-pointer-from-struct"))
          (current-func (get-current-func $builder))
-         (args-len (length args))
          (captures
            (LLVMBuildGEP
              $builder
@@ -554,12 +556,11 @@
                        0)
                      "")))
                captures)
-    ;; TODO: figure out the types of functions
     (make-term
-      '?
+      (list 'func (repeat arity '?) '-> '?)
       (llvm-build-call
         $builder
-        (runtime-func "rt_make_lambda" NUC-VAL
+        (runtime-func "rt_make_lambda" CLOSURE-PTR
                       (list UINTPTR (LLVMIntType 8) (LLVMIntType 32) UINTPTR))
         (list (LLVMBuildPtrToInt $builder func UINTPTR "func-pointer-to-int")
               (llvm-i8<-int arity)

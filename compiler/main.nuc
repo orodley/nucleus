@@ -352,7 +352,7 @@
            (copy-source-loc token
                             (map (lambda (e) (macroexpand context e)) sexpr)))
           ;; Call macroexpand again, as it could expand directly to another macro
-          (true (macroexpand context (copy-source-loc token (builtin-macro args))))))
+          (true (macroexpand context (copy-source-loc token (builtin-macro context args))))))
       token)))
 
 (defun compile-function (context func)
@@ -507,7 +507,7 @@
                   ;; Calling a closure pointer
                   ;; TODO: store RTTI in closures
                   (make-term '?
-                             (call-closure context (tv (compile-expr context name)) args)
+                             (call-closure context (compile-expr context name) args)
                              false)
                   ;; Calling a generic function
                   (if (not (eq? (length args) (generic-func-arity generic-func)))
