@@ -1,0 +1,15 @@
+; status-code: 15
+
+; This extra level of indirection is to ensure that the value is of type ?, not
+; of type (func (? ?) -> ?)
+(defun quux (f x y)
+  (foo f x y))
+
+(defun foo ((f (func (int int) -> int)) x y)
+  (f x y))
+
+(defun bar (x y)
+  (+ x (* x y)))
+
+(defun main ()
+  (set $status-code (quux bar 3 4)))

@@ -1,0 +1,9 @@
+; status-code: 15
+
+(defun foo (f x y) (f x y))
+
+(defun bar ((x int) (y int)) -> int
+  (+ x (* x y)))
+
+(defun main ()
+  (set $status-code (foo bar 3 4)))

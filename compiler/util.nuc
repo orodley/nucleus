@@ -592,6 +592,8 @@
       false)))
 
 (defun compile-proxy-function (context closure-term proxy-func-type)
+  (when $output-debug-info
+    (format true "(c-p-f ... ~ ~)" closure-term proxy-func-type))
   (let* ((original-arg-types (func-type-arg-types (tt closure-term)))
          (original-return-type (func-type-return-type (tt closure-term)))
          (original-block (LLVMGetInsertBlock $builder))

@@ -361,17 +361,26 @@
        cons-ptr)))
     ((func-type? type-spec)
      (check-type val LLVM-LAMBDA-T)
-     (assert! (or (and (all? (lambda (t) (eq? t '?)) (func-type-arg-types type-spec))
-                       (eq? (func-type-return-type type-spec) '?)))
-              "Can't coerce non-dynamic functions yet.")
-     (let* ((closure-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val)
-                                            CLOSURE-PTR "")))
+     (let ((closure-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val) CLOSURE-PTR ""))
+           (arity (func-type-arity type-spec)))
        (llvm-build-call
          $builder
          (runtime-func "rt_check_arity" VOID (list CLOSURE-PTR INT))
-         (list closure-ptr (llvm-i32<-int (func-type-arity type-spec)))
+         (list closure-ptr (llvm-i32<-int arity))
          "")
-       closure-ptr))
+       (if (or (any? (lambda (t) (not (eq? t '?)))
+                     (func-type-arg-types type-spec))
+               (not (eq? (func-type-return-type type-spec) '?)))
+         ;; All closures stored as dynamic values must take dynamic values as
+         ;; arguments and return dynamic values. If we are making a function that
+         ;; doesn't, we must generate a proxy that does the coercions at runtime.
+         (compile-proxy-function
+           context
+           (make-term (list 'func (repeat arity '?) '-> '?) closure-ptr false)
+           type-spec)
+         ;; Otherwise we're all good, as the function type we want already
+         ;; takes dynamic values and returns a dynamic value.
+         closure-ptr)))
     ((type-eq? type-spec 'type)
      ;; TODO: We should have a separate exttag for types so that we can do a
      ;; check-type here.
@@ -433,10 +442,14 @@
        (llvm-i32<-int (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
        ""))
     ((func-type? type-spec)
-     (assert! (and (all? (lambda (t) (eq? t '?)) (func-type-arg-types type-spec))
-                   (eq? (func-type-return-type type-spec) '?))
-              "Can't coerce non-dynamic functions yet.")
-     (add-lowtag val LAMBDA-LOWTAG))
+     (let ((closure-ptr
+             (if (and (all? (lambda (t) (eq? t '?)) (func-type-arg-types type-spec))
+                      (eq? (func-type-return-type type-spec) '?))
+               val
+               (compile-proxy-function
+                 context (make-term type-spec val false)
+                 (list 'func (repeat (func-type-arity type-spec) '?) '-> '?)))))
+       (add-lowtag closure-ptr LAMBDA-LOWTAG)))
     (true (fail! context
                  (format nil "Unsupported type-spec '~'" type-spec)
                  blame-source-loc
