@@ -340,6 +340,8 @@
 ;;; TODO: Detect lambdas with identical bodies and use the same function.
 ;;; We'd also need to keep track if any errors were found when compiling the
 ;;; other lambda and generate the same error (once we're doing errors properly).
+;;; TODO: We should mangle lambda names differently - at the moment if you call
+;;; a function 'lambda_0' or something it will conflict.
 
 (defvar $lambda-counter 0)
 (defun special-form-lambda (context args-and-body)
@@ -355,10 +357,12 @@
          ;; passing this source location through to all special forms though,
          ;; which would mean changing the convention for functions implementing
          ;; special forms.
-         (func (compile-lambda context (token-source-loc args) name args body captures)))
+         (func (compile-lambda context (token-source-loc args) name args body captures))
+         (arity (length (ts args))))
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
-    (make-lambda context func (length (ts args)) captures)))
+    ;; TODO: allow type annotations for lambdas, don't just use ?
+    (make-lambda context func (repeat arity '?) '? captures)))
 
 (defun builtin-macro-format (context args)
   ;; TODO: Life without quasiquote is painful

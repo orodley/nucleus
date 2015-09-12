@@ -1,4 +1,4 @@
-CFLAGS = -std=c99 -Wall -Wextra -Werror -Isrc
+CFLAGS = -std=c99 -O3 -Wall -Wextra -Wstrict-prototypes -Werror -Isrc
 BC = $(patsubst %.c, %.bc, $(wildcard src/*.c))
 
 .PHONY: all clean

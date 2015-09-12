@@ -188,7 +188,7 @@
       (write-string-ln "Usage: nucc <input filename>"))))
 
 (defun process-toplevel-form (context token)
-  (when $output-debug-info (format true "(p-t-l .. ~)" token))
+  (when $output-debug-info (format true "(p-t-f .. ~)" token))
   ;; NOTE: Once we have 'defmacro' we'll need to another pass over the toplevel
   ;; forms to find 'defmacro's and compile their dependency tree
   (let* ((token (macroexpand context token))
@@ -455,19 +455,19 @@
       (symbol-t
         (let* ((binding (get-binding context expr))
                (term
-                 (cond
-                   ((nil? binding)
-                    (let ((func (get-func expr)))
-                      (if (nil? func)
-                        (fail! context
-                               (format nil "Undefined variable '~'" expr)
-                               (token-source-loc token)
-                               '? true)
-                        (make-lambda context
-                                     (func-llvm-func func)
-                                     (LLVMCountParams (func-llvm-func func))
-                                     nil))))
-                   (true (binding-term binding)))))
+                 (if (not (nil? binding))
+                   (binding-term binding)
+                   (let ((func (get-func expr)))
+                     (if (nil? func)
+                       (fail! context
+                              (format nil "Undefined variable '~'" expr)
+                              (token-source-loc token)
+                              '? true)
+                       (make-lambda context
+                                    (func-llvm-func func)
+                                    (func-arg-types func)
+                                    (func-return-type func)
+                                    nil))))))
           (if (tl? term)
             (make-term
               (tt term)
@@ -492,6 +492,7 @@
   (let* ((form (ts token))
          (name (car form))
          (args (cdr form))
+         (arity (length args))
          (special-form (get-special-form (ts name))))
     (if (not (nil? special-form))
       (special-form context args)
@@ -505,16 +506,25 @@
               (let ((generic-func (get-generic-func (ts name))))
                 (if (nil? generic-func)
                   ;; Calling a closure pointer
-                  ;; TODO: store RTTI in closures
-                  (make-term '?
-                             (call-closure context (compile-expr context name) args)
-                             false)
+                  (let ((closure-term
+                          (coerce context
+                                  (compile-expr context name)
+                                  (list 'any-func arity)
+                                  (token-source-loc token))))
+                    (make-term
+                      (func-type-return-type (tt closure-term))
+                      (call-closure context closure-term
+                                    (map (lambda (arg)
+                                           (compile-expr context arg))
+                                         args)
+                                    false)
+                      false))
                   ;; Calling a generic function
-                  (if (not (eq? (length args) (generic-func-arity generic-func)))
+                  (if (not (eq? arity (generic-func-arity generic-func)))
                     (fail! context
                            (format nil "Invalid number of arguments to generic function '~' (got ~, expected ~)"
                                    (ts name)
-                                   (length args)
+                                   arity
                                    (generic-func-arity generic-func))
                            (token-source-loc token)
                            (generic-func-return-type generic-func) false)
@@ -551,13 +561,13 @@
                                                 (token-source-loc e)))
                                       args
                                       (func-arg-types func))))
-                (if (eq? (LLVMCountParams llvm-func) (length args))
+                (if (eq? (LLVMCountParams llvm-func) arity)
                   (make-term
                     (func-return-type func)
                     (llvm-build-call $builder llvm-func (map tv arg-terms) "")
                     false)
                   (fail! context
                          (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
-                                 (ts name) (length args) (LLVMCountParams llvm-func))
+                                 (ts name) arity (LLVMCountParams llvm-func))
                          (token-source-loc token)
                          (func-return-type func) false))))))))))

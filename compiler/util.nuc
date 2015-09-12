@@ -259,7 +259,13 @@
 
 (defun mangle-name (name) (format nil "nuc(~)" name))
 (defun mangle-generic-func-name (name concrete-arg-types concrete-ret-type)
-  (format nil "nuc(~$~->~)" name concrete-arg-types concrete-ret-type))
+  (format nil "nuc-generic(~$~->~)" name concrete-arg-types concrete-ret-type))
+(defvar $proxy-count 0)
+(defun mangle-proxy-func-name (original-arg-types proxy-arg-types)
+  (format nil "nuc-proxy(~_~->~)"
+          (set $proxy-count (+ $proxy-count 1))
+          original-arg-types
+          proxy-arg-types))
 
 ;; TODO: write this properly
 (defun << (x y) (* x (expt 2 y)))
@@ -403,7 +409,7 @@
                       (LLVMBuildGEP
                         $builder
                         (LLVMBuildGEP $builder (first params)
-                                      (map llvm-i32<-int (list 0 2))
+                                      (map llvm-i32<-int (list 0 3))
                                       2
                                       "")
                         (map llvm-i64<-int (list 0 i))
@@ -441,99 +447,113 @@
       (context-set-env context original-env))
     func))
 
-;;; TODO: We need RTTI for closures and proper static function types so we can
-;;; do more complete type checking, at compile-time or runtime depending on
-;;; whether the type can be deduced.
-;;; TODO: We should at least check it has the 'lambda' lowtag even if we can't
-;;; do the full check.
-(defun call-closure (context closure-term args)
-  (let* ((args-len (length args))
-         (closure (tv (coerce context closure-term
-                              (list 'func (repeat args-len '?) '-> '?)
-                              ;; TODO: source loc
-                              $dummy-source-loc)))
-         (func-pointer
-           (LLVMBuildLoad
-             $builder
-             ;; TODO: BuildStructGEP?
-             (LLVMBuildGEP
-               $builder
-               closure
-               (map llvm-i32<-int (list 0 0))
-               2
-               "")
-             "load-func-pointer-from-struct"))
-         (current-func (get-current-func $builder))
-         (captures
-           (LLVMBuildGEP
-             $builder
-             (LLVMBuildGEP $builder closure (map llvm-i32<-int (list 0 2)) 2 "")
-             (map llvm-i32<-int (list 0 0))
-             2
-             ""))
-         (first-capture (LLVMBuildLoad $builder captures "")))
-    ;; TODO: This is a case where a "declare in current scope" special form
-    ;; could be really useful - a bunch of assignments interspersed with
-    ;; side-effecting calls
-    (let ((then-block (LLVMAppendBasicBlock current-func "doesn't-take-closure"))
-          (else-block (LLVMAppendBasicBlock current-func "takes-closure"))
-          (after-block (LLVMAppendBasicBlock current-func "after-call"))
-          ;; TODO: Coerce based on RTTI
-          (coerced-args
-            (map (lambda (arg-token)
-                   (tv (coerce context (compile-expr context arg-token) '?
-                               (token-source-loc arg-token))))
-                 args)))
-      (LLVMBuildCondBr
-        $builder
-        (LLVMBuildICmp $builder LLVMIntEQ
-                       (LLVMBuildPtrToInt $builder first-capture UINTPTR "")
-                       (llvm-i64<-int 0) "")
-        then-block
-        else-block)
-      (LLVMPositionBuilderAtEnd $builder then-block)
-      (let ((then-result (llvm-build-call
-                           $builder
-                           (LLVMBuildIntToPtr
-                             $builder
-                             func-pointer
-                             (LLVMPointerType
-                               (LLVMFunctionType
-                                 NUC-VAL
-                                 (repeat args-len NUC-VAL)
-                                 args-len
-                                 false)
-                               0)
-                             "cast-to-correct-function-type")
-                           coerced-args
-                           "call-closure")))
-        (LLVMBuildBr $builder after-block)
-        (LLVMPositionBuilderAtEnd $builder else-block)
-        (let ((else-result
-                (llvm-build-call
-                  $builder
-                  (LLVMBuildIntToPtr
+(defun call-closure (context closure-term arg-terms proxy?)
+  (let* ((num-args (length arg-terms))
+         (arity (func-type-arity (tt closure-term))))
+    (when $output-debug-info
+      (format true "(call-closure ... ~ ~)" closure-term arg-terms))
+    (if (not (eq? num-args arity))
+      (fail! context
+             (format nil "Invalid number of args to closure (got ~, expected ~)"
+                     num-args arity)
+             ;; TODO: source loc
+             $dummy-source-loc
+             (fourth (tt closure-term)) true)
+      (let* ((current-func (get-current-func $builder))
+             (num-captures
+               (LLVMBuildLoad $builder
+                              (LLVMBuildStructGEP $builder (tv closure-term) 2 "")
+                              "num-captures"))
+             (func-pointer
+               (if proxy?
+                 (LLVMBuildPtrToInt
+                   $builder
+                   (LLVMBuildLoad
+                     $builder
+                     (LLVMBuildGEP
+                       $builder
+                       (LLVMBuildGEP $builder (tv closure-term)
+                                     (map llvm-i32<-int (list 0 3)) 2 "")
+                       (list (llvm-i64<-int 0)
+                             (LLVMBuildSub $builder num-captures (llvm-i32<-int 1) ""))
+                       2
+                       "get-wrapped-func-pointer-from-closure")
+                     "")
+                   UINTPTR
+                   "")
+                 (LLVMBuildLoad
+                   $builder
+                   (LLVMBuildStructGEP $builder (tv closure-term) 0 "")
+                   "load-func-pointer-from-struct")))
+             (arg-types (func-type-arg-types (tt closure-term)))
+             (llvm-arg-types
+               (map (lambda (type-spec)
+                      (llvm-type<-type-spec context type-spec))
+                    arg-types))
+             (llvm-return-type
+               (llvm-type<-type-spec
+                 context
+                 (func-type-return-type (tt closure-term)))))
+        ;; TODO: This is a case where a "declare in current scope" special form
+        ;; could be really useful - a bunch of assignments interspersed with
+        ;; side-effecting calls
+        (let ((then-block (LLVMAppendBasicBlock current-func "doesn't-take-closure"))
+              (else-block (LLVMAppendBasicBlock current-func "takes-closure"))
+              (after-block (LLVMAppendBasicBlock current-func "after-call"))
+              (coerced-args
+                (map2 (lambda (arg-term typ)
+                        ;; TODO: source loc
+                        (tv (coerce context arg-term typ $dummy-source-loc)))
+                      arg-terms
+                      arg-types)))
+          (LLVMBuildCondBr
+            $builder
+            (LLVMBuildICmp $builder LLVMIntEQ num-captures
+                           (llvm-i32<-int (if proxy? 1 0)) "")
+            then-block
+            else-block)
+          (LLVMPositionBuilderAtEnd $builder then-block)
+          (let ((then-result
+                  (llvm-build-call
                     $builder
-                    func-pointer
-                    (LLVMPointerType
-                      (LLVMFunctionType
-                        NUC-VAL
-                        (cons (LLVMPointerType CLOSURE 0)
-                              (repeat args-len NUC-VAL))
-                        (+ 1 args-len)
-                        false)
-                      0)
-                    "cast-to-correct-function-type")
-                  (cons closure coerced-args)
-                  "call-closure")))
-          (LLVMBuildBr $builder after-block)
-          (LLVMPositionBuilderAtEnd $builder after-block)
-          (llvm-phi $builder NUC-VAL (list (cons then-result then-block)
-                                           (cons else-result else-block))
-                    "closure-call"))))))
+                    (LLVMBuildIntToPtr
+                      $builder
+                      func-pointer
+                      (LLVMPointerType
+                        (LLVMFunctionType llvm-return-type
+                                          llvm-arg-types arity false)
+                        0)
+                      "cast-to-correct-function-type")
+                    coerced-args
+                    "call-closure")))
+            (LLVMBuildBr $builder after-block)
+            (LLVMPositionBuilderAtEnd $builder else-block)
+            (let ((else-result
+                    (llvm-build-call
+                      $builder
+                      (LLVMBuildIntToPtr
+                        $builder
+                        func-pointer
+                        (LLVMPointerType
+                          (LLVMFunctionType
+                            llvm-return-type
+                            (cons CLOSURE-PTR llvm-arg-types)
+                            (+ 1 arity)
+                            false)
+                          0)
+                        "cast-to-correct-function-type")
+                      (cons (tv closure-term) coerced-args)
+                      "call-closure")))
+              (LLVMBuildBr $builder after-block)
+              (LLVMPositionBuilderAtEnd $builder after-block)
+              (llvm-phi $builder llvm-return-type
+                        (list (cons then-result then-block)
+                              (cons else-result else-block))
+                        "closure-call"))))))))
 
-(defun make-lambda (context func arity captures)
-  (let* ((ary-type (LLVMArrayType (LLVMPointerType NUC-VAL 0) (length captures)))
+(defun make-lambda (context llvm-func arg-types return-type captures)
+  (let* ((arity (length arg-types))
+         (ary-type (LLVMArrayType (LLVMPointerType NUC-VAL 0) (length captures)))
          (captures-array
            (if (nil? captures)
              (LLVMConstNull ary-type)
@@ -557,12 +577,12 @@
                      "")))
                captures)
     (make-term
-      (list 'func (repeat arity '?) '-> '?)
+      (list 'func arg-types '-> return-type)
       (llvm-build-call
         $builder
         (runtime-func "rt_make_lambda" CLOSURE-PTR
                       (list UINTPTR (LLVMIntType 8) (LLVMIntType 32) UINTPTR))
-        (list (LLVMBuildPtrToInt $builder func UINTPTR "func-pointer-to-int")
+        (list (LLVMBuildPtrToInt $builder llvm-func UINTPTR "func-pointer-to-int")
               (llvm-i8<-int arity)
               (llvm-i32<-int (length captures))
               (if (nil? captures)
@@ -570,6 +590,45 @@
                 (LLVMBuildPtrToInt $builder captures-array UINTPTR "array-to-int")))
         "make-lambda")
       false)))
+
+(defun compile-proxy-function (context closure-term proxy-func-type)
+  (let* ((original-arg-types (func-type-arg-types (tt closure-term)))
+         (original-return-type (func-type-return-type (tt closure-term)))
+         (original-block (LLVMGetInsertBlock $builder))
+         (proxy-arg-types (func-type-arg-types proxy-func-type))
+         (proxy-return-type (func-type-return-type proxy-func-type))
+         (proxy-func (declare-function
+                       (mangle-proxy-func-name original-arg-types proxy-arg-types)
+                       (llvm-type<-type-spec context proxy-return-type)
+                       (cons CLOSURE-PTR
+                             (map (lambda (t) (llvm-type<-type-spec context t))
+                                  proxy-arg-types)))))
+    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock proxy-func "entry"))
+    (let* ((params (llvm-params proxy-func))
+           (closure-ptr (first params)))
+      (LLVMBuildRet
+        $builder
+        (tv (coerce
+              context
+              (make-term
+                original-return-type
+                (call-closure
+                  context
+                  (make-term (tt closure-term) (first params) false)
+                  (map2 (lambda (param typ) (make-term typ param false))
+                        (rest params)
+                        proxy-arg-types)
+                  true)
+                false)
+              proxy-return-type
+              $dummy-source-loc))))
+    (LLVMPositionBuilderAtEnd $builder original-block)
+    (llvm-build-call
+      $builder
+      (runtime-func "rt_proxy_for_lambda" CLOSURE-PTR (list CLOSURE-PTR UINTPTR))
+      (list (tv closure-term)
+            (LLVMBuildPtrToInt $builder proxy-func UINTPTR "func-pointer-to-int"))
+      "make-proxy-lambda")))
 
 (defun runtime-func (name return-type arg-types)
   (let ((func (LLVMGetNamedFunction $module name)))

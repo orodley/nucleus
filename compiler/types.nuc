@@ -33,6 +33,14 @@
                  (implicit-conversion context term typ blame-source-loc)
                  (tl? term)))))
 
+;; TODO: I think there are a few cases where an ad-hoc version of this was
+;; used inline which should now be using this instead.
+(defun compatible? (given-type desired-type)
+  (or (type-eq? given-type desired-type)
+      (type-eq? given-type '?)
+      (type-eq? desired-type '?)
+      (and (integral? given-type) (numeric? desired-type))))
+
 ;; TODO: append "-type"
 
 (defun numeric? (typ) (or (integral? typ) (floating-point? typ)))
@@ -48,7 +56,7 @@
   (or (eq? typ 'cons) (and (cons? typ) (eq? (first typ) 'cons))))
 
 (defun func-type? (typ)
-  (and (cons? typ) (eq? (first typ) 'func)))
+  (and (cons? typ) (or (eq? (first typ) 'any-func) (eq? (first typ) 'func))))
 
 (defun type-eq? (t1 t2)
   (or (eq? t1 t2)
@@ -57,9 +65,10 @@
                (and (type-eq? (second t1) (second t2))
                     (type-eq? (third t1) (third t2)))))
       (and (func-type? t1) (func-type? t2)
-           (eq? (length (second t1)) (length (second t2)))
-           (all? (lambda (c) (type-eq? (car c) (cdr c))) (zip (second t1) (second t2)))
-           (type-eq? (fourth t1) (fourth t2)))
+           (eq? (func-type-arity t1) (func-type-arity t2))
+           (all? (lambda (c) (type-eq? (car c) (cdr c)))
+                 (zip (func-type-arg-types t1) (func-type-arg-types t2)))
+           (type-eq? (func-type-return-type t1) (func-type-return-type t2)))
       (and (eq? t1 'int) (eq? t2 'i32))
       (and (eq? t2 'int) (eq? t1 'i32))))
 
@@ -67,6 +76,22 @@
   (expand-type (if (or (eq? typ 'cons) (eq? typ '?)) '? (second typ))))
 (defun cdr-type (typ)
   (expand-type (if (or (eq? typ 'cons) (eq? typ '?)) '? (third typ))))
+
+(defun func-type-arity (type-spec)
+  (if (eq? (first type-spec) 'any-func)
+    (second type-spec)
+    (length (second type-spec))))
+
+;; TODO: Check we're using these everywhere we should
+(defun func-type-arg-types (type-spec)
+  (if (eq? (first type-spec) 'any-func)
+    (repeat (second type-spec) '?)
+    (second type-spec)))
+
+(defun func-type-return-type (type-spec)
+  (if (eq? (first type-spec) 'any-func)
+    '?
+    (fourth type-spec)))
 
 (defun i64<-term (context term)
   (case (LLVMGetTypeKind (llvm-type<-type-spec context (tt term)))
@@ -335,15 +360,15 @@
        cons-ptr)))
     ((func-type? type-spec)
      (check-type val LLVM-LAMBDA-T)
-     (assert! (and (all? (lambda (t) (eq? t '?)) (second type-spec))
-                   (eq? (fourth type-spec) '?))
+     (assert! (or (and (all? (lambda (t) (eq? t '?)) (func-type-arg-types type-spec))
+                       (eq? (func-type-return-type type-spec) '?)))
               "Can't coerce non-dynamic functions yet.")
-     (let ((closure-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val)
-                                           CLOSURE-PTR "")))
+     (let* ((closure-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val)
+                                            CLOSURE-PTR "")))
        (llvm-build-call
          $builder
          (runtime-func "rt_check_arity" VOID (list CLOSURE-PTR INT))
-         (list closure-ptr (llvm-i32<-int (length (second type-spec))))
+         (list closure-ptr (llvm-i32<-int (func-type-arity type-spec)))
          "")
        closure-ptr))
     ((type-eq? type-spec 'type)
@@ -407,8 +432,8 @@
        (llvm-i32<-int (+ EXTTAG-LOWTAG (<< DISCRETE-EXTTAG LOWTAG-BITS)))
        ""))
     ((func-type? type-spec)
-     (assert! (and (all? (lambda (t) (eq? t '?)) (second type-spec))
-                   (eq? (fourth type-spec) '?))
+     (assert! (and (all? (lambda (t) (eq? t '?)) (func-type-arg-types type-spec))
+                   (eq? (func-type-return-type type-spec) '?))
               "Can't coerce non-dynamic functions yet.")
      (add-lowtag val LAMBDA-LOWTAG))
     (true (fail! context
@@ -459,6 +484,25 @@
                                                    blame-source-loc)
                          CONS-LOWTAG))
        "array<-list"))
+    ((and (func-type? (tt term)) (func-type? typ))
+     (cond
+       ((not (and (eq? (func-type-arity (tt term)) (func-type-arity typ))))
+        (fail! context
+               (format nil "Static type error: function of incorrect arity ~ used where ~ was expected"
+                       (func-type-arity (tt term)) (func-type-arity typ))
+               blame-source-loc
+               (llvm-type<-type-spec context typ) false))
+       ((not (and
+               (all? (lambda (c) (compatible? (car c) (cdr c)))
+                     (zip (tt term) (func-type-arg-types typ)))
+               (compatible? (func-type-return-type (tt term))
+                            (func-type-return-type typ))))
+        (fail! context
+               (format nil "Static type error: function of type '~' used where '~' was expected"
+                       (tt term) typ)
+               blame-source-loc
+               (llvm-type<-type-spec context typ) false))
+       (true (compile-proxy-function context term typ))))
     (true (fail! context
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was expected"
