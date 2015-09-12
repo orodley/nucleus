@@ -66,9 +66,10 @@
                     (type-eq? (third t1) (third t2)))))
       (and (func-type? t1) (func-type? t2)
            (eq? (func-type-arity t1) (func-type-arity t2))
-           (all? (lambda (c) (type-eq? (car c) (cdr c)))
-                 (zip (func-type-arg-types t1) (func-type-arg-types t2)))
-           (type-eq? (func-type-return-type t1) (func-type-return-type t2)))
+           (or (eq? (car t1) 'any-func) (eq? (car t2) 'any-func)
+               (and (all? (lambda (c) (type-eq? (car c) (cdr c)))
+                          (zip (func-type-arg-types t1) (func-type-arg-types t2)))
+                    (type-eq? (func-type-return-type t1) (func-type-return-type t2)))))
       (and (eq? t1 'int) (eq? t2 'i32))
       (and (eq? t2 'int) (eq? t1 'i32))))
 
@@ -494,7 +495,7 @@
                (llvm-type<-type-spec context typ) false))
        ((not (and
                (all? (lambda (c) (compatible? (car c) (cdr c)))
-                     (zip (tt term) (func-type-arg-types typ)))
+                     (zip (func-type-arg-types (tt term)) (func-type-arg-types typ)))
                (compatible? (func-type-return-type (tt term))
                             (func-type-return-type typ))))
         (fail! context
