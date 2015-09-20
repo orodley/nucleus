@@ -539,7 +539,7 @@
             (LLVMBuildBr $builder after-block)
             (LLVMPositionBuilderAtEnd $builder after-block)
             (llvm-phi $builder llvm-field-type
-                      (list (cons coerced-field-value gr-block)
+                      (list (cons coerced-field-value gr-resultant-block)
                             (cons static-field-value non-gr-block))
                       field-name)))))
     false))

@@ -319,7 +319,7 @@
 (defun get-cdr-gr-value (cons-ptr)
   (LLVMBuildICmp $builder LLVMIntNE
                  (LLVMBuildAnd $builder (get-gr-value cons-ptr) (llvm-i8<-int 1) "")
-                 (llvm-i32<-int 0)
+                 (llvm-i8<-int 0)
                  ""))
 
 (defun set-car-value (cons-ptr val) (LLVMBuildStore $builder val (get-car-ptr cons-ptr)))

@@ -195,8 +195,8 @@
       (LLVMPositionBuilderAtEnd $builder loop-body)
       (let ((cdr-value (get-cdr-value current-cons-ptr)))
         (convert current-cons-ptr)
-        (LLVMAddIncoming current-cons (list cdr-value) (list loop-body) 1)
-        (LLVMBuildBr $builder loop-entry)))
+        (LLVMAddIncoming current-cons (list cdr-value) (list (LLVMGetInsertBlock $builder)) 1))
+      (LLVMBuildBr $builder loop-entry))
     (LLVMPositionBuilderAtEnd $builder after-block))
   cons-val)
 
