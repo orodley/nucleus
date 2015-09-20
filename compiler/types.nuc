@@ -53,7 +53,12 @@
   (type-eq? typ 'float))
 
 (defun cons-type? (typ)
-  (or (eq? typ 'cons) (and (cons? typ) (eq? (first typ) 'cons))))
+  (or (eq? typ 'cons)
+      (and (cons? typ)
+           (or (eq? (first typ) 'cons)
+               (eq? (first typ) 'list)))))
+
+(defun list-type? (typ) (and (cons? typ) (eq? (first typ) 'list)))
 
 (defun func-type? (typ)
   (and (cons? typ) (or (eq? (first typ) 'any-func) (eq? (first typ) 'func))))
@@ -62,6 +67,8 @@
   (or (eq? t1 t2)
       (and (cons-type? t1) (cons-type? t2)
            (or (eq? t1 'cons) (eq? t2 'cons)
+               (and (eq? (first t1) 'list) (eq? (first t2) 'list)
+                    (type-eq? (second t1) (second t2)))
                (and (type-eq? (second t1) (second t2))
                     (type-eq? (third t1) (third t2)))))
       (and (func-type? t1) (func-type? t2)
@@ -76,7 +83,10 @@
 (defun car-type (typ)
   (expand-type (if (or (eq? typ 'cons) (eq? typ '?)) '? (second typ))))
 (defun cdr-type (typ)
-  (expand-type (if (or (eq? typ 'cons) (eq? typ '?)) '? (third typ))))
+  (expand-type (cond
+                 ((or (eq? typ 'cons) (eq? typ '?)) '?)
+                 ((eq? (first typ) 'list) typ)
+                 (true (third typ)))))
 
 (defun func-type-arity (type-spec)
   (if (eq? (first type-spec) 'any-func)
@@ -167,6 +177,29 @@
           (LLVMPositionBuilderAtEnd $builder after-block)
           cons-ptr)))))
 
+(defun convert-list (cons-val convert get-next)
+  (let* ((current-func (get-current-func $builder))
+         (before-block (LLVMGetInsertBlock $builder))
+         (loop-entry (LLVMAppendBasicBlock current-func "convert-list-entry"))
+         (loop-body (LLVMAppendBasicBlock current-func "convert-list-body"))
+         (after-block (LLVMAppendBasicBlock $builder "after-convert-list")))
+    (LLVMPositionBuilderAtEnd $builder loop-entry)
+    (let* ((current-cons (LLVMBuildPhi $builder (LLVMTypeOf cons-val) "current-cons"))
+           (current-cons-ptr (get-next current-cons)))
+      (LLVMAddIncoming current-cons (list cons-val) (list before-block) 1)
+      (LLVMBuildCondBr
+        $builder
+        (LLVMBuildICmp $builder LLVMIntEQ LLVM-NULL-CONS current-cons-ptr "nil?")
+        after-block
+        loop-body)
+      (LLVMPositionBuilderAtEnd $builder loop-body)
+      (let ((cdr-value (get-cdr-value current-cons-ptr)))
+        (convert current-cons-ptr)
+        (LLVMAddIncoming current-cons (list cdr-value) (list loop-body) 1)
+        (LLVMBuildBr $builder loop-entry)))
+    (LLVMPositionBuilderAtEnd $builder after-block))
+  cons-val)
+
 (defun type-size (context typ)
   (LLVMGetIntTypeWidth (llvm-type<-type-spec context typ)))
 
@@ -209,6 +242,7 @@
   (if (cons? type-spec)
     (case (first type-spec)
       ('cons CONS-CELL-PTR)
+      ('list CONS-CELL-PTR)
       ('func CLOSURE-PTR)
       (default
         (fail! context (format nil "Unsupported compound type '~'"
@@ -245,7 +279,7 @@
 
       (default
         (fail! context
-               (format nil "Unsupported type-spec '~'" type-spec)
+               (format nil "Unsupported type-spec for llvm-type<-type-spec '~'" type-spec)
                $dummy-source-loc ; TODO: better source loc
                nil false)
         NUC-VAL))))
@@ -271,7 +305,7 @@
 
     (default
       (fail! context
-             (format nil "Unsupported type-spec '~'" type-spec)
+             (format nil "Unsupported type-spec for type-id<-type-spec '~'" type-spec)
              $dummy-source-loc ; TODO: better source loc
              nil false)
       LLVM-CONS-T)))
@@ -334,6 +368,18 @@
        (LLVMBuildLShr $builder val (llvm-i64<-int LOWTAG-BITS) "remove-symbol-lowtag")
        (llvm-type<-type-spec context type-spec)
        ""))
+    ((list-type? type-spec)
+     (let* ((list-elem-type (car-type type-spec))
+            (elem-type-id (type-id<-type-spec context list-elem-type)))
+       (convert-list
+         val
+         (lambda (cons-ptr)
+           (check-type (get-car-value cons-ptr) elem-type-id)
+           (set-gr-value cons-ptr 3))
+         (lambda (cons-val)
+           (check-type cons-val LLVM-CONS-T)
+           (remove-lowtag cons-val))))
+     (remove-lowtag val))
     ((cons-type? type-spec)
      ;; To convert a cons containing dynamically typed values into a statically
      ;; typed cons, we just set the guarded reference flag, and leave the
@@ -431,7 +477,28 @@
                      "")
        (llvm-i64<-int SYMBOL-LOWTAG)
        ""))
-    ((type-eq? type-spec 'cons)
+    ((list-type? type-spec)
+     (convert-list
+       val
+       (lambda (cons-ptr)
+         (set-car-value
+           cons-ptr
+           (coerce context
+                   (make-term (car-type type-spec) (get-car-value cons-ptr) false)
+                   '?
+                   ;; TODO: source loc
+                   $dummy-source-loc))
+         (set-cdr-value
+           cons-ptr
+           (coerce context
+                   (make-term (cdr-type type-spec) (get-cdr-value cons-ptr) false)
+                   '?
+                   ;; TODO: source loc
+                   $dummy-source-loc))
+         (set-gr-value cons-ptr 3))
+       (lambda (cons-ptr) cons-ptr))
+     (add-lowtag val CONS-LOWTAG))
+    ((cons-type? type-spec)
      (add-lowtag (guarded-ref<-static-cons context val type-spec '(cons ? ?)
                                            blame-source-loc)
                  CONS-LOWTAG))
