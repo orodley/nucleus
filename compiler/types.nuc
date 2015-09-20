@@ -56,9 +56,9 @@
   (or (eq? typ 'cons)
       (and (cons? typ)
            (or (eq? (first typ) 'cons)
-               (eq? (first typ) 'list)))))
+               (eq? (first typ) 'list-of)))))
 
-(defun list-type? (typ) (and (cons? typ) (eq? (first typ) 'list)))
+(defun list-type? (typ) (and (cons? typ) (eq? (first typ) 'list-of)))
 
 (defun func-type? (typ)
   (and (cons? typ) (or (eq? (first typ) 'any-func) (eq? (first typ) 'func))))
@@ -67,7 +67,7 @@
   (or (eq? t1 t2)
       (and (cons-type? t1) (cons-type? t2)
            (or (eq? t1 'cons) (eq? t2 'cons)
-               (and (eq? (first t1) 'list) (eq? (first t2) 'list)
+               (and (eq? (first t1) 'list-of) (eq? (first t2) 'list-of)
                     (type-eq? (second t1) (second t2)))
                (and (type-eq? (second t1) (second t2))
                     (type-eq? (third t1) (third t2)))))
@@ -85,7 +85,7 @@
 (defun cdr-type (typ)
   (expand-type (cond
                  ((or (eq? typ 'cons) (eq? typ '?)) '?)
-                 ((eq? (first typ) 'list) typ)
+                 ((eq? (first typ) 'list-of) typ)
                  (true (third typ)))))
 
 (defun func-type-arity (type-spec)
@@ -242,7 +242,7 @@
   (if (cons? type-spec)
     (case (first type-spec)
       ('cons CONS-CELL-PTR)
-      ('list CONS-CELL-PTR)
+      ('list-of CONS-CELL-PTR)
       ('func CLOSURE-PTR)
       (default
         (fail! context (format nil "Unsupported compound type '~'"

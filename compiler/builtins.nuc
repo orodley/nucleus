@@ -488,7 +488,7 @@
 (defun builtin-scons (context args)
   (let* ((type-spec (if (and (list-type? (tt (second args)))
                              (type-eq? (tt (first args)) (car-type (tt (second args)))))
-                      (list 'list (tt (first args)))
+                      (list 'list-of (tt (first args)))
                       (list 'cons (tt (first args)) (tt (second args)))))
          (cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
                                      CONS-CELL-PTR ""))
