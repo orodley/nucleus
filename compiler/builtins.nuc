@@ -39,7 +39,8 @@
     (cons 'unless builtin-macro-unless)
     ;; TODO: these should just be regular functions once we have varargs
     (cons 'format builtin-macro-format)
-    (cons 'list builtin-macro-list)))
+    (cons 'list builtin-macro-list)
+    (cons 'slist builtin-macro-slist)))
 ;; TODO: Write these as more readable constant expressions
 ;; TODO: Maybe these should have different names to indicate that this
 ;; representation is only used when they are dynamic values?
@@ -369,13 +370,19 @@
   (list (dummy-token '%format) (first args) (second args)
         (dummy-token (cons (dummy-token 'list) (cddr args)))))
 
-(defun builtin-macro-list (context args)
+(defun builtin-macro-list/slist (context args s?list s?cons)
   (if (nil? args)
     'nil
     ;; TODO: Life without quasiquote is painful
-    (list (dummy-token 'cons)
+    (list (dummy-token s?cons)
           (first args)
-          (dummy-token (cons (dummy-token 'list) (rest args))))))
+          (dummy-token (cons (dummy-token s?list) (rest args))))))
+
+(defun builtin-macro-list (context args)
+  (builtin-macro-list/slist context args 'list 'cons))
+
+(defun builtin-macro-slist (context args)
+  (builtin-macro-list/slist context args 'slist 'scons))
 
 (defun builtin-macro-unless (context args)
   (let ((condition (first args))
