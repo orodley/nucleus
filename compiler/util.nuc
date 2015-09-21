@@ -325,6 +325,11 @@
 (defun set-car-value (cons-ptr val) (LLVMBuildStore $builder val (get-car-ptr cons-ptr)))
 (defun set-cdr-value (cons-ptr val) (LLVMBuildStore $builder val (get-cdr-ptr cons-ptr)))
 (defun set-gr-value (cons-ptr val) (LLVMBuildStore $builder val (get-gr-ptr cons-ptr)))
+(defun set-car-gr-value (cons-ptr val)
+  (set-gr-value cons-ptr (LLVMBuildOr $builder (get-gr-value cons-ptr)
+                                      (LLVMBuildShl $builder val (llvm-i8<-int 1) "") "")))
+(defun set-cdr-gr-value (cons-ptr val)
+  (set-gr-value cons-ptr (LLVMBuildOr $builder (get-gr-value cons-ptr) val "")))
 
 (defun cons-size (context)
   (LLVMABISizeOfType (context-target-data context) CONS-CELL))

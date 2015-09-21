@@ -128,54 +128,40 @@
     (list 'cons '? '?)
     typ))
 
-(defun guarded-ref<-static-cons (context cons-ptr src-type dest-type blame-source-loc)
+(defun convert-cons (context cons-ptr src-type dest-type blame-source-loc)
   (assert! (and (cons-type? src-type) (cons-type? dest-type))
            "src-type and dest-type must be cons types")
-  (let ((convert-car? (not (type-eq? (car-type src-type) (car-type dest-type))))
-        (convert-cdr? (not (type-eq? (cdr-type src-type) (cdr-type dest-type)))))
-    (when $output-debug-info
-      (format true "(g-r<-s-c ... ~ ~)" cons-ptr src-type dest-type))
-    (cond
-      ((not (or convert-car? convert-cdr?)) cons-ptr)
-      ((LLVMIsConstant cons-ptr)
-       ;; Don't bother checking at runtime if we know it's null at compile-time
-       (LLVMConstNull CONS-CELL-PTR))
-      (true
-        (let* ((current-func (get-current-func $builder))
-               (before-block (LLVMGetInsertBlock $builder))
-               (non-nil-block (LLVMAppendBasicBlock current-func "non-nil-static-cons"))
-               (after-block (LLVMAppendBasicBlock current-func "after-static-cons")))
-          (assert! (or convert-car? convert-cdr?) "Shouldn't have gotten called if the types are already correct")
-          (LLVMBuildCondBr
-            $builder
-            (LLVMBuildICmp $builder LLVMIntEQ cons-ptr (LLVMConstNull CONS-CELL-PTR) "")
-            after-block non-nil-block)
-          (LLVMPositionBuilderAtEnd $builder non-nil-block)
-          (when convert-car?
-            (let* ((car-value
-                     (term<-i64 context (get-car-value cons-ptr) (car-type src-type)))
-                   (coerced-car
-                     (coerce context (make-term (car-type src-type) car-value false) '?
-                             blame-source-loc)))
-              (set-car-value cons-ptr (i64<-term context coerced-car))))
-          (when convert-cdr?
-            (let* ((cdr-value
-                     (term<-i64 context (get-cdr-value cons-ptr) (cdr-type src-type)))
-                   (coerced-cdr
-                     (coerce context (make-term (cdr-type src-type) cdr-value false) '?
-                             blame-source-loc)))
-              (set-cdr-value cons-ptr (i64<-term context coerced-cdr))))
-          (set-gr-value cons-ptr
-                        (LLVMBuildOr $builder (get-gr-value cons-ptr)
-                                     (llvm-i8<-int
-                                       (cond
-                                         ((and convert-car? convert-cdr?) 3)
-                                         (convert-car? 2)
-                                         (convert-cdr? 1)))
-                                     ""))
-          (LLVMBuildBr $builder after-block)
-          (LLVMPositionBuilderAtEnd $builder after-block)
-          cons-ptr)))))
+  (if (LLVMIsConstant cons-ptr)
+    (LLVMConstNull CONS-CELL-PTR)
+    (let* ((current-func (get-current-func $builder))
+           (non-nil-block (LLVMAppendBasicBlock current-func "non-nil-cons"))
+           (after-block (LLVMAppendBasicBlock current-func "after-convert-cons")))
+      (LLVMBuildCondBr
+        $builder
+        (LLVMBuildICmp $builder LLVMIntEQ cons-ptr (LLVMConstNull CONS-CELL-PTR) "")
+        after-block non-nil-block)
+      (LLVMPositionBuilderAtEnd $builder non-nil-block)
+      (convert-cons-field context cons-ptr get-car-value set-car-value set-car-gr-value
+                          (car-type src-type) (car-type dest-type) blame-source-loc)
+      (convert-cons-field context cons-ptr get-cdr-value set-cdr-value set-cdr-gr-value
+                          (cdr-type src-type) (cdr-type dest-type) blame-source-loc)
+      (LLVMBuildBr $builder after-block)
+      (LLVMPositionBuilderAtEnd $builder after-block)
+      cons-ptr)))
+
+(defun convert-cons-field (context cons-ptr field-getter field-setter gr-setter
+                                   src-field-type dest-field-type blame-source-loc)
+  (unless (type-eq? src-field-type dest-field-type)
+    (gr-setter cons-ptr (llvm-i8<-int 1))
+    (if (type-eq? dest-field-type '?)
+      (let* ((field-value
+               (term<-i64 context (field-getter cons-ptr) src-field-type))
+             (coerced-field
+               (coerce context
+                       (make-term src-field-type field-value false)
+                       dest-field-type
+                       blame-source-loc)))
+        (field-setter cons-ptr (i64<-term context coerced-field))))))
 
 (defun convert-list (cons-val convert get-next)
   (let* ((current-func (get-current-func $builder))
@@ -381,30 +367,13 @@
            (remove-lowtag cons-val))))
      (remove-lowtag val))
     ((cons-type? type-spec)
-     ;; To convert a cons containing dynamically typed values into a statically
-     ;; typed cons, we just set the guarded reference flag, and leave the
-     ;; values contained unconverted. This is necessary because there could be
-     ;; references to this cons which expect it to contain dynamically typed
-     ;; values. It is complicated by the fact that the cons could be nil - in
-     ;; that case we can't set the flag, we just pass on the nil value.
      (check-type val LLVM-CONS-T)
-     (if (LLVMIsConstant val)
-       (LLVMConstNull CONS-CELL-PTR)
-       (let* ((current-func (get-current-func $builder))
-              (cons-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val)
-                                           CONS-CELL-PTR ""))
-              (non-nil-block (LLVMAppendBasicBlock current-func "add-gr-flag-non-nil-cons"))
-              (after-block (LLVMAppendBasicBlock current-func "add-gr-flag-after")))
-       (LLVMBuildCondBr
-         $builder
-         (LLVMBuildICmp $builder LLVMIntEQ cons-ptr
-                        (LLVMConstNull CONS-CELL-PTR) "")
-         after-block non-nil-block)
-       (LLVMPositionBuilderAtEnd $builder non-nil-block)
-       (set-gr-value cons-ptr (llvm-i8<-int 3))
-       (LLVMBuildBr $builder after-block)
-       (LLVMPositionBuilderAtEnd $builder after-block)
-       cons-ptr)))
+     (convert-cons
+       context
+       (LLVMBuildIntToPtr $builder (remove-lowtag val) CONS-CELL-PTR "")
+       '(cons ? ?)
+       type-spec
+       blame-source-loc))
     ((func-type? type-spec)
      (check-type val LLVM-LAMBDA-T)
      (let ((closure-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val) CLOSURE-PTR ""))
@@ -499,9 +468,9 @@
        (lambda (cons-ptr) cons-ptr))
      (add-lowtag val CONS-LOWTAG))
     ((cons-type? type-spec)
-     (add-lowtag (guarded-ref<-static-cons context val type-spec '(cons ? ?)
-                                           blame-source-loc)
-                 CONS-LOWTAG))
+     (add-lowtag
+       (convert-cons context val type-spec '(cons ? ?) blame-source-loc)
+       CONS-LOWTAG))
     ((type-eq? type-spec 'type)
      (LLVMBuildOr
        $builder
@@ -560,10 +529,9 @@
      (llvm-build-call
        $builder
        (runtime-func "rt_list_to_array" (llvm-type<-type-spec context typ) (list NUC-VAL))
-       (list (add-lowtag (guarded-ref<-static-cons context (tv term) (tt term)
-                                                   '(cons ? ?)
-                                                   blame-source-loc)
-                         CONS-LOWTAG))
+       (list (add-lowtag
+               (convert-cons context (tv term) (tt term) '(cons ? ?) blame-source-loc)
+               CONS-LOWTAG))
        "array<-list"))
     ((and (func-type? (tt term)) (func-type? typ))
      (cond
@@ -596,6 +564,8 @@
              term
              (unroll-list-type context (tt term) (car-type typ))
              blame-source-loc))
+    ((and (cons-type? (tt term)) (cons-type? typ))
+     (convert-cons context (tv term) (tt term) typ blame-source-loc))
     (true (fail! context
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was expected"
