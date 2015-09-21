@@ -584,12 +584,40 @@
                blame-source-loc
                (llvm-type<-type-spec context typ) false))
        (true (compile-proxy-function context term typ))))
+    ((and (list-type? (tt term)) (cons-type? typ))
+     (coerce context
+             (make-term (unroll-list-type context typ (car-type (tt term)))
+                        (tv term)
+                        (tl? term))
+             typ
+             blame-source-loc))
+    ((and (cons-type? (tt term)) (list-type? typ))
+     (coerce context
+             term
+             (unroll-list-type context (tt term) (car-type typ))
+             blame-source-loc))
     (true (fail! context
                  (format nil
                          "Static type error: tried to use a term of type '~' where '~' was expected"
                          (tt term) typ)
                  blame-source-loc
                  (llvm-type<-type-spec context typ) false))))
+
+(defun unroll-list-type (context cons-type list-element-type)
+  ;; Converting from a cons type to a list type (or vice versa) is  equivalent
+  ;; to a conversion involving a partially
+  ;; "unrolled" list type.
+  ;; e.g.:
+  ;;  (cons ? (cons int ?)) -> (list-of int)
+  ;;   is equivalent to
+  ;;  (cons ? (cons int ?)) -> (cons int (cons int (list-of int)))
+  ;;
+  ;; This function performs that "unrolling".
+  (list 'cons
+        list-element-type
+        (if (not (cons-type? (cdr-type cons-type)))
+          (list 'list-of list-element-type)
+          (unroll-list-type context (cdr-type cons-type) list-element-type))))
 
 ;;; Given a list of terms (which are arguments to some arithmetic builtin) this
 ;;; converts them all to the "maximum" type, where f64 > f32 > i64 > i32 > i16 > i8
