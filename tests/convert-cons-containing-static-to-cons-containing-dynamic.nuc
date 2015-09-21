@@ -1,0 +1,7 @@
+; status-code: 5
+
+(defun foo ((c (cons ? ?)))
+  (+ (car c) (cdr c)))
+
+(defun main ()
+  (set $status-code (foo (scons 2 3))))
