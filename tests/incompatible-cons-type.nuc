@@ -1,0 +1,7 @@
+; compile-stderr: Static type error
+
+(defun foo ((c (cons int int)))
+  (+ (car c) (cdr c)))
+
+(defun main ()
+  (foo (scons "foo" "bar")))

@@ -1,0 +1,9 @@
+; status-code: 5
+
+(defun foo ((l (list-of i8)))
+  (+ (car l) (car (cdr l))))
+
+(defun id (x) x)
+
+(defun main ()
+  (set $status-code (foo (scons 2 (scons (id 3) nil)))))

@@ -1,0 +1,7 @@
+; status-code: 5
+
+(defun foo ((l (cons i8 (cons ? ?))))
+  (+ (car l) (car (cdr l))))
+
+(defun main ()
+  (set $status-code (foo (slist 2 3))))

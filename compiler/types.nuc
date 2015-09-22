@@ -67,10 +67,10 @@
   (or (eq? t1 t2)
       (and (cons-type? t1) (cons-type? t2)
            (or (eq? t1 'cons) (eq? t2 'cons)
-               (and (eq? (first t1) 'list-of) (eq? (first t2) 'list-of)
+               (and (list-type? t1) (list-type? t2)
                     (type-eq? (second t1) (second t2)))
-               (and (type-eq? (second t1) (second t2))
-                    (type-eq? (third t1) (third t2)))))
+               (and (type-eq? (car-type t1) (car-type t2))
+                    (type-eq? (cdr-type t1) (cdr-type t2)))))
       (and (func-type? t1) (func-type? t2)
            (eq? (func-type-arity t1) (func-type-arity t2))
            (or (eq? (car t1) 'any-func) (eq? (car t2) 'any-func)
@@ -135,6 +135,8 @@
     typ))
 
 (defun convert-cons (context cons-ptr src-type dest-type blame-source-loc)
+  (when $output-debug-info
+    (format true "(convert-cons ... ~ ~ ~ ~)" cons-ptr src-type dest-type blame-source-loc))
   (assert! (and (cons-type? src-type) (cons-type? dest-type))
            "src-type and dest-type must be cons types")
   (if (LLVMIsConstant cons-ptr)
@@ -157,17 +159,32 @@
 
 (defun convert-cons-field (context cons-ptr field-getter field-setter gr-setter
                                    src-field-type dest-field-type blame-source-loc)
+  (when $output-debug-info
+    (format true "(convert-cons-field ... ~ ... ... ... ~ ~ ~)"
+            cons-ptr src-field-type dest-field-type blame-source-loc))
   (unless (type-eq? src-field-type dest-field-type)
-    (gr-setter cons-ptr (llvm-i8<-int 1))
-    (if (type-eq? dest-field-type '?)
-      (let* ((field-value
-               (term<-i64 context (field-getter cons-ptr) src-field-type))
-             (coerced-field
-               (coerce context
-                       (make-term src-field-type field-value false)
-                       dest-field-type
-                       blame-source-loc)))
-        (field-setter cons-ptr (i64<-term context coerced-field))))))
+    (if (member? '? (list src-field-type dest-field-type))
+      (gr-setter cons-ptr (llvm-i8<-int 1)))
+    (cond
+      ((or (type-eq? dest-field-type '?)
+           (and (cons-type? src-field-type) (cons-type? dest-field-type)))
+       (let* ((field-value
+                (term<-i64 context (field-getter cons-ptr) src-field-type))
+              (coerced-field
+                (coerce context
+                        (make-term src-field-type field-value false)
+                        dest-field-type
+                        blame-source-loc)))
+         (field-setter cons-ptr (i64<-term context coerced-field))))
+      ((type-eq? src-field-type '?)
+       ; nothing else to do
+       )
+      (true
+        (fail! context
+               (format nil "Static type error: tried to use a term of type '~' where '~' was expected"
+                       src-field-type dest-field-type)
+               blame-source-loc
+               nil false)))))
 
 (defun convert-list (cons-val convert get-next)
   (let* ((current-func (get-current-func $builder))
@@ -177,18 +194,20 @@
          (after-block (LLVMAppendBasicBlock current-func "after-convert-list")))
     (LLVMBuildBr $builder loop-entry)
     (LLVMPositionBuilderAtEnd $builder loop-entry)
-    (let* ((current-cons (LLVMBuildPhi $builder (LLVMTypeOf cons-val) "current-cons"))
-           (current-cons-ptr (get-next current-cons)))
+    (let ((current-cons (LLVMBuildPhi $builder (LLVMTypeOf cons-val) "current-cons")))
       (LLVMAddIncoming current-cons (list cons-val) (list before-block) 1)
       (LLVMBuildCondBr
         $builder
-        (LLVMBuildICmp $builder LLVMIntEQ LLVM-NULL-CONS current-cons-ptr "nil?")
+        (LLVMBuildICmp $builder LLVMIntEQ LLVM-NULL-CONS current-cons "nil?")
         after-block
         loop-body)
       (LLVMPositionBuilderAtEnd $builder loop-body)
-      (let ((cdr-value (get-cdr-value current-cons-ptr)))
-        (convert current-cons-ptr)
-        (LLVMAddIncoming current-cons (list cdr-value) (list (LLVMGetInsertBlock $builder)) 1))
+      (let ((cdr-value (get-cdr-value current-cons)))
+        (convert current-cons)
+        (LLVMAddIncoming
+          current-cons
+          (list (LLVMBuildIntToPtr $builder (get-next cdr-value) CONS-CELL-PTR ""))
+          (list (LLVMGetInsertBlock $builder)) 1))
       (LLVMBuildBr $builder loop-entry))
     (LLVMPositionBuilderAtEnd $builder after-block))
   cons-val)
@@ -364,14 +383,15 @@
     ((list-type? type-spec)
      (let* ((list-elem-type (car-type type-spec))
             (elem-type-id (type-id<-type-spec context list-elem-type)))
+       (check-type val LLVM-CONS-T)
        (convert-list
-         val
+         (untag-cons val)
          (lambda (cons-ptr)
            (check-type (get-car-value cons-ptr) elem-type-id)
            (set-gr-value cons-ptr (llvm-i8<-int 3)))
          (lambda (cons-val)
            (check-type cons-val LLVM-CONS-T)
-           (untag-cons cons-val))))
+           (remove-lowtag cons-val))))
      (untag-cons val))
     ((cons-type? type-spec)
      (check-type val LLVM-CONS-T)
@@ -454,19 +474,15 @@
        (lambda (cons-ptr)
          (set-car-value
            cons-ptr
-           (coerce context
-                   (make-term (car-type type-spec) (get-car-value cons-ptr) false)
-                   '?
-                   ;; TODO: source loc
-                   $dummy-source-loc))
+           (tv (coerce context
+                       (make-term (car-type type-spec) (get-car-value cons-ptr) false)
+                       '?
+                       ;; TODO: source loc
+                       $dummy-source-loc)))
          (set-cdr-value
            cons-ptr
-           (coerce context
-                   (make-term (cdr-type type-spec) (get-cdr-value cons-ptr) false)
-                   '?
-                   ;; TODO: source loc
-                   $dummy-source-loc))
-         (set-gr-value cons-ptr 3))
+           (add-lowtag (get-cdr-value cons-ptr) CONS-LOWTAG))
+         (set-gr-value cons-ptr (llvm-i8<-int 3)))
        (lambda (cons-ptr) cons-ptr))
      (add-lowtag val CONS-LOWTAG))
     ((cons-type? type-spec)
@@ -554,6 +570,15 @@
                blame-source-loc
                (llvm-type<-type-spec context typ) false))
        (true (compile-proxy-function context term typ))))
+    ((and (list-type? (tt term)) (list-type? typ))
+     (convert-list
+       (tv term)
+       (lambda (cons-ptr)
+         ;; Call the second part 'X', just so that it compares equal. We only
+         ;; want convert-cons to deal with the car field.
+         (convert-cons context cons-ptr (list 'cons (car-type (tt term)) 'X)
+                       (list 'cons (car-type typ) 'X) blame-source-loc))
+       (lambda (cons-ptr) cons-ptr)))
     ((and (list-type? (tt term)) (cons-type? typ))
      (tv (coerce context
                  (make-term (unroll-list-type context typ (car-type (tt term)))
@@ -584,10 +609,13 @@
   ;;   is equivalent to
   ;;  (cons ? (cons int ?)) -> (cons int (cons int (list-of int)))
   ;;
-  ;; This function performs that "unrolling".
+  ;; This transformation turns list-of<->cons coercions into cons<->dynamic
+  ;; coercions, cons<->cons coercions, and list-of<->dynamic coercions, all of
+  ;; which we already know how to do.
   (list 'cons
         list-element-type
-        (if (not (cons-type? (cdr-type cons-type)))
+        (if (or (list-type? (cdr-type cons-type))
+                (not (cons-type? (cdr-type cons-type))))
           (list 'list-of list-element-type)
           (unroll-list-type context (cdr-type cons-type) list-element-type))))
 

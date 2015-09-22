@@ -486,8 +486,11 @@
     cons-term))
 
 (defun builtin-scons (context args)
-  (let* ((type-spec (if (and (list-type? (tt (second args)))
-                             (type-eq? (tt (first args)) (car-type (tt (second args)))))
+  (let* ((type-spec (if (or
+                          (and (list-type? (tt (second args)))
+                               (type-eq? (tt (first args)) (car-type (tt (second args)))))
+                          (and (not (type-eq? (tt (second args)) '?))
+                               (LLVMIsConstant (tv (second args)))))
                       (list 'list-of (tt (first args)))
                       (list 'cons (tt (first args)) (tt (second args)))))
          (cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
