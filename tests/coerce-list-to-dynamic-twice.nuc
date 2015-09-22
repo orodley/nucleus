@@ -1,0 +1,9 @@
+; status-code: 5
+
+(defun foo (l)
+  (+ (car l) (car (cdr l))))
+
+(defun main ()
+  (let ((l (slist 2 3)))
+    (foo l)
+    (set $status-code (foo l))))

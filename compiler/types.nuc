@@ -472,18 +472,44 @@
      (convert-list
        val
        (lambda (cons-ptr)
-         (set-car-value
-           cons-ptr
-           (tv (coerce context
-                       (make-term (car-type type-spec) (get-car-value cons-ptr) false)
-                       '?
-                       ;; TODO: source loc
-                       $dummy-source-loc)))
-         (set-cdr-value
-           cons-ptr
-           (add-lowtag (get-cdr-value cons-ptr) CONS-LOWTAG))
-         (set-gr-value cons-ptr (llvm-i8<-int 3)))
-       (lambda (cons-ptr) cons-ptr))
+         (let* ((before-block (LLVMGetInsertBlock $builder))
+                (current-func (get-current-func $builder))
+                (not-already-gr-block (LLVMAppendBasicBlock current-func "not-already-gr"))
+                (after-block (LLVMAppendBasicBlock current-func "after-not-already-gr"))
+                (car-val (get-car-value cons-ptr)))
+           (LLVMBuildCondBr
+             $builder
+             (LLVMBuildICmp $builder LLVMIntEQ (get-gr-value cons-ptr) (llvm-i8<-int 0) "")
+             not-already-gr-block
+             after-block)
+           (LLVMPositionBuilderAtEnd $builder not-already-gr-block)
+           (let ((converted
+                   (tv (coerce
+                         context
+                         (make-term
+                           (car-type type-spec)
+                           (term<-i64 context car-val (car-type type-spec))
+                           false)
+                         '?
+                         ;; TODO: source loc
+                         $dummy-source-loc)))
+                 (non-gr-resultant-block (LLVMGetInsertBlock $builder)))
+             (LLVMBuildBr $builder after-block)
+             (LLVMPositionBuilderAtEnd $builder after-block)
+             (set-car-value
+               cons-ptr
+               (llvm-phi $builder NUC-VAL
+                         (list (cons car-val before-block)
+                               (cons converted non-gr-resultant-block))
+                         "converted-car"))
+             (set-gr-value cons-ptr (llvm-i8<-int 3))
+             (set-cdr-value
+               cons-ptr
+               (add-lowtag (get-cdr-value cons-ptr) CONS-LOWTAG)))))
+       (lambda (cons-ptr)
+         ;; If its already a guarded reference, we need to remove the lowtag.
+         ;; If not, the low bits are already 0 and this does nothing.
+         (remove-lowtag cons-ptr)))
      (add-lowtag val CONS-LOWTAG))
     ((cons-type? type-spec)
      (add-lowtag
