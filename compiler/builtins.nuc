@@ -507,6 +507,9 @@
 ;;; otherwise the 'lvalueness' gets swallowed upon returning from the function.
 
 (defun builtin-c[ad]r (context cons-term field-getter gr-getter field-type field-name)
+  (when $output-debug-info
+    (format true "(builtin-c[ad]r ... ~ ... ... ~ ~)"
+            cons-term field-type field-name))
   (make-term
     field-type
     (if (type-eq? (tt cons-term) '(cons ? ?))

@@ -1,0 +1,6 @@
+; status-code: 2
+
+(defun foo (l) (car (cdr l)))
+
+(defun main ()
+  (set $status-code (foo (slist 1 2))))

@@ -123,6 +123,12 @@
                       $dummy-source-loc ; TODO: better source loc
                       llvm-type false)))))
 
+(defun untag-cons (cons-val)
+  (LLVMBuildIntToPtr $builder (remove-lowtag cons-val) CONS-CELL-PTR ""))
+
+(defun untag-closure (closure-val)
+  (LLVMBuildIntToPtr $builder (remove-lowtag closure-val) CLOSURE-PTR ""))
+
 (defun expand-type (typ)
   (if (eq? typ 'cons)
     (list 'cons '? '?)
@@ -168,7 +174,8 @@
          (before-block (LLVMGetInsertBlock $builder))
          (loop-entry (LLVMAppendBasicBlock current-func "convert-list-entry"))
          (loop-body (LLVMAppendBasicBlock current-func "convert-list-body"))
-         (after-block (LLVMAppendBasicBlock $builder "after-convert-list")))
+         (after-block (LLVMAppendBasicBlock current-func "after-convert-list")))
+    (LLVMBuildBr $builder loop-entry)
     (LLVMPositionBuilderAtEnd $builder loop-entry)
     (let* ((current-cons (LLVMBuildPhi $builder (LLVMTypeOf cons-val) "current-cons"))
            (current-cons-ptr (get-next current-cons)))
@@ -361,22 +368,17 @@
          val
          (lambda (cons-ptr)
            (check-type (get-car-value cons-ptr) elem-type-id)
-           (set-gr-value cons-ptr 3))
+           (set-gr-value cons-ptr (llvm-i8<-int 3)))
          (lambda (cons-val)
            (check-type cons-val LLVM-CONS-T)
-           (remove-lowtag cons-val))))
-     (remove-lowtag val))
+           (untag-cons cons-val))))
+     (untag-cons val))
     ((cons-type? type-spec)
      (check-type val LLVM-CONS-T)
-     (convert-cons
-       context
-       (LLVMBuildIntToPtr $builder (remove-lowtag val) CONS-CELL-PTR "")
-       '(cons ? ?)
-       type-spec
-       blame-source-loc))
+     (convert-cons context (untag-cons val) '(cons ? ?) type-spec blame-source-loc))
     ((func-type? type-spec)
      (check-type val LLVM-LAMBDA-T)
-     (let ((closure-ptr (LLVMBuildIntToPtr $builder (remove-lowtag val) CLOSURE-PTR ""))
+     (let ((closure-ptr (untag-closure val))
            (arity (func-type-arity type-spec)))
        (llvm-build-call
          $builder
@@ -553,17 +555,17 @@
                (llvm-type<-type-spec context typ) false))
        (true (compile-proxy-function context term typ))))
     ((and (list-type? (tt term)) (cons-type? typ))
-     (coerce context
-             (make-term (unroll-list-type context typ (car-type (tt term)))
-                        (tv term)
-                        (tl? term))
-             typ
-             blame-source-loc))
+     (tv (coerce context
+                 (make-term (unroll-list-type context typ (car-type (tt term)))
+                            (tv term)
+                            (tl? term))
+                 typ
+                 blame-source-loc)))
     ((and (cons-type? (tt term)) (list-type? typ))
-     (coerce context
-             term
-             (unroll-list-type context (tt term) (car-type typ))
-             blame-source-loc))
+     (tv (coerce context
+                 term
+                 (unroll-list-type context (tt term) (car-type typ))
+                 blame-source-loc)))
     ((and (cons-type? (tt term)) (cons-type? typ))
      (convert-cons context (tv term) (tt term) typ blame-source-loc))
     (true (fail! context
