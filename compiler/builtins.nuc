@@ -481,8 +481,10 @@
     ;; TODO: source loc
     (set-car-value cons-ptr (tv (coerce context (first args) '? $dummy-source-loc)))
     (set-cdr-value cons-ptr (tv (coerce context (second args) '? $dummy-source-loc)))
-    ;; gr is undefined here - it needs to be explicitly set before this value
-    ;; can be used anything that can deal with guarded references anyway.
+    ;; We have to set the gr flag here, because its possible we'll insert this
+    ;; cons into the cdr slot of a static cons, and it will be expected to be
+    ;; a static cons.
+    (set-gr-value cons-ptr (llvm-i8<-int 3))
     cons-term))
 
 (defun builtin-scons (context args)
