@@ -139,7 +139,7 @@
     (format true "(convert-cons ... ~ ~ ~ ~)" cons-ptr src-type dest-type blame-source-loc))
   (assert! (and (cons-type? src-type) (cons-type? dest-type))
            "src-type and dest-type must be cons types")
-  (if (LLVMIsConstant cons-ptr)
+  (if (LLVMIsNull cons-ptr)
     (LLVMConstNull CONS-CELL-PTR)
     (let* ((current-func (get-current-func $builder))
            (non-nil-block (LLVMAppendBasicBlock current-func "non-nil-cons"))
