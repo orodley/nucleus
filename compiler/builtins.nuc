@@ -526,6 +526,18 @@
       ;; Static cons - check if it's a guarded reference, and convert the value
       ;; if it is.
       ;;
+      ;; TODO: In some cases this is almost certainly not worth it. For
+      ;; example, if we're fetching the next element of a list, it's probably
+      ;; faster to just do cdr & ~3 unconditionally than it is to branch on
+      ;; whether its a guarded reference (if there is no lowtag then this is a
+      ;; NOP). We avoid the conversion in one case, but the conversion is one
+      ;; bitwise operation and we're paying for it with a memory fetch, a
+      ;; comparison to 0, and a branch.
+      ;; Maybe LLVM can figure this out if we give it alignment information
+      ;; about the result of the cast? If not then maybe we should have a
+      ;; special case or something. If so we should probably do it for all
+      ;; coercions that just involve a lowtag removal.
+      ;;
       ;; TODO: Once we track known compile-time information about guarded
       ;; references, we can check that here and only branch if we don't know
       ;; what it is statically.
