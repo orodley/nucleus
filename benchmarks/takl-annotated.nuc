@@ -1,16 +1,16 @@
-(defun listn (n)
+(defun listn ((n i8)) -> (list-of i8)
   (if (eq? n 0)
     nil
     (cons n (listn (- n 1)))))
  
-(defun mas ((x cons) (y cons) (z cons)) -> cons
+(defun mas ((x (list-of i8)) (y (list-of i8)) (z (list-of i8))) -> (list-of i8)
   (if (not (shorterp y x))
       z
       (mas (mas (cdr x) y z)
            (mas (cdr y) z x)
            (mas (cdr z) x y))))
  
-(defun shorterp ((x cons) (y cons)) -> bool
+(defun shorterp ((x (list-of i8)) (y (list-of i8))) -> bool
   (and (not (nil? y))
        (or (nil? x)
            (shorterp (cdr x)

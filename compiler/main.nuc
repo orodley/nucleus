@@ -222,7 +222,7 @@
                                       (set body (cddr body))
                                       t))
                                    (true (dummy-token '?))))
-              (return-type (ts return-type-token))
+              (return-type (remove-tokens-from-type return-type-token))
               (return-type-source-loc (token-source-loc return-type-token)))
          (unless (symbol? (ts name))
            (fail! context
