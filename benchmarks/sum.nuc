@@ -1,0 +1,17 @@
+(defun sum ((l (list-of i8)) (acc i32)) -> i32
+  (if (eq? l nil)
+    acc
+    (sum (cdr l) (+ acc (car l)))))
+
+(defun zeroes-and-ones ((len i32)) -> (list-of i8)
+  (let ((list-head (scons 0 nil)))
+    (%zeroes-and-ones len list-head)
+    (cdr list-head)))
+
+(defun %zeroes-and-ones ((len i32) (list-head (list-of i8)))
+  (unless (eq? len 0)
+    (set-cdr list-head (scons (if (>= (random) (/ 2147483647 2)) 1 0) nil))
+    (%zeroes-and-ones (- len 1) (cdr list-head))))
+
+(defun main ()
+  (println (sum (zeroes-and-ones 100000000) 0)))

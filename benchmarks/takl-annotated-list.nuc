@@ -1,0 +1,19 @@
+(defun listn ((n i8)) -> (list-of i8)
+  (if (eq? n 0)
+    nil
+    (cons n (listn (- n 1)))))
+ 
+(defun mas ((x (list-of i8)) (y (list-of i8)) (z (list-of i8))) -> (list-of i8)
+  (if (not (shorterp y x))
+      z
+      (mas (mas (cdr x) y z)
+           (mas (cdr y) z x)
+           (mas (cdr z) x y))))
+ 
+(defun shorterp ((x (list-of i8)) (y (list-of i8))) -> bool
+  (and (not (eq? y nil))
+       (or (eq? x nil)
+           (shorterp (cdr x) (cdr y)))))
+ 
+(defun main ()
+  (println (mas (listn 27) (listn 18) (listn 9))))
