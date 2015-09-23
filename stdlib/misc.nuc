@@ -2,8 +2,8 @@
 (extern (rt_panic panic!) (?) -> ?)
 (extern (rt_type type) (?) -> ?)
 
-(defun not (bool)
-  (if bool false true))
+(defun not ((b bool)) -> bool
+  (if b false true))
 
 (defun atom? (sexpr)
   (not (cons? sexpr)))

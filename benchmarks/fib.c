@@ -1,4 +1,4 @@
-/* FIB -- A classic benchmark, computes fib(35) inefficiently. */
+/* FIB -- A classic benchmark, computes fib(40) inefficiently. */
 
 #include <stdio.h>
 
@@ -13,7 +13,7 @@ int n;
 
 int main (int argc, char *argv[])
 {
-  printf("%d\n", fib(35));
+  printf("%d\n", fib(40));
 
   return 0;
 }

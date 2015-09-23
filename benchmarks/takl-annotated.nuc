@@ -11,10 +11,9 @@
            (mas (cdr z) x y))))
  
 (defun shorterp ((x (list-of i8)) (y (list-of i8))) -> bool
-  (and (not (nil? y))
-       (or (nil? x)
-           (shorterp (cdr x)
-                     (cdr y)))))
+  (and (not (eq? y nil))
+       (or (eq? x nil)
+           (shorterp (cdr x) (cdr y)))))
  
 (defun main ()
   (println (mas (listn 27) (listn 18) (listn 9))))
