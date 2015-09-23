@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 199309
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -58,6 +59,15 @@ nuc_val rt_rand()
 
 	return INT_TO_NUC_VAL(rand());
 }
+
+uint64_t rt_get_nanoseconds()
+{
+	struct timespec t;
+	clock_gettime(CLOCK_MONOTONIC, &t);
+
+	return (uint64_t)t.tv_sec * 1000000000 + t.tv_nsec;
+}
+
 
 void rt_raw_print(nuc_val val)
 {

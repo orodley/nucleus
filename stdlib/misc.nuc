@@ -26,3 +26,5 @@
 ;; Prints the actual value that is used to represent a dynamic value in memory
 ;; Used for debugging the compiler, shouldn't be used for anything else
 (extern (rt_raw_print %raw-print) (?) -> void)
+
+(extern (rt_get_nanoseconds nanoseconds) () -> i64)
