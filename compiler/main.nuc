@@ -180,7 +180,7 @@
                    ;; TODO: Set up a customised optimisation pipeline. We run
                    ;; -Oz first here as that seems to be necessary to get LLVM
                    ;; to optimise tail calls, but this is a stopgap solution.
-                   (if do-optimisation
+                   (when do-optimisation
                      (unless (zero? (exec "opt" (list tmp-bc-file "-Oz" "-o" tmp-bc-file)))
                        (exec "rm" (list tmp-bc-file))
                        (panic! "opt failed"))
