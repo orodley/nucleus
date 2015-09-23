@@ -637,21 +637,26 @@
       (let* ((current-func (get-current-func $builder))
              (original-block (LLVMGetInsertBlock $builder))
              (gr-block (LLVMAppendBasicBlock current-func "gr-cons"))
+             (non-gr-block (LLVMAppendBasicBlock current-func "non-gr-cons"))
              (after-block (LLVMAppendBasicBlock current-func "after-set-field")))
-        (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) gr-block after-block)
+        (LLVMBuildCondBr $builder (gr-getter (tv cons-term)) gr-block non-gr-block)
         (LLVMPositionBuilderAtEnd $builder gr-block)
-        (let* ((coerced-value (tv (coerce context val-term field-type
-                                          ;; TODO: source loc
-                                          $dummy-source-loc)))
+        (let* ((coerced-value (i64<-term context
+                                         (coerce context val-term field-type
+                                                 ;; TODO: source loc
+                                                 $dummy-source-loc)))
                (gr-resultant-block (LLVMGetInsertBlock $builder)))
           (LLVMBuildBr $builder after-block)
-          (LLVMPositionBuilderAtEnd $builder after-block)
-          (field-setter (tv cons-term)
-                        (llvm-phi
-                          $builder NUC-VAL
-                          (list (cons coerced-value gr-resultant-block)
-                                (cons (tv val-term) original-block))
-                          "final-value"))))))
+          (LLVMPositionBuilderAtEnd $builder non-gr-block)
+          (let ((i64-val (i64<-term context val-term)))
+            (LLVMBuildBr $builder after-block)
+            (LLVMPositionBuilderAtEnd $builder after-block)
+            (field-setter (tv cons-term)
+                          (llvm-phi
+                            $builder NUC-VAL
+                            (list (cons coerced-value gr-resultant-block)
+                                  (cons i64-val non-gr-block))
+                            "final-value")))))))
   val-term)
 
 (defun builtin-set-car (context args)
