@@ -489,21 +489,23 @@
     cons-term))
 
 (defun builtin-scons (context args)
-  (let* ((type-spec (if (or
-                          (and (list-type? (tt (second args)))
-                               (type-eq? (tt (first args)) (car-type (tt (second args)))))
-                          (and (not (type-eq? (tt (second args)) '?))
-                               (LLVMIsNull (tv (second args)))))
-                      (list 'list-of (tt (first args)))
-                      (list 'cons (tt (first args)) (tt (second args)))))
-         (cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
-                                     CONS-CELL-PTR ""))
-         (cons-term (make-term type-spec cons-ptr false)))
-    (when $output-debug-info (format true "cons type = ~" type-spec))
-    (set-car-value cons-ptr (i64<-term context (first args)))
-    (set-cdr-value cons-ptr (i64<-term context (second args)))
-    (set-gr-value cons-ptr (llvm-i8<-int 0))
-    cons-term))
+  (if $ignore-annotations
+    (builtin-cons context args)
+    (let* ((type-spec (if (or
+                            (and (list-type? (tt (second args)))
+                                 (type-eq? (tt (first args)) (car-type (tt (second args)))))
+                            (and (not (type-eq? (tt (second args)) '?))
+                                 (LLVMIsNull (tv (second args)))))
+                        (list 'list-of (tt (first args)))
+                        (list 'cons (tt (first args)) (tt (second args)))))
+           (cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
+                                       CONS-CELL-PTR ""))
+           (cons-term (make-term type-spec cons-ptr false)))
+      (when $output-debug-info (format true "cons type = ~" type-spec))
+      (set-car-value cons-ptr (i64<-term context (first args)))
+      (set-cdr-value cons-ptr (i64<-term context (second args)))
+      (set-gr-value cons-ptr (llvm-i8<-int 0))
+      cons-term)))
 
 ;;; TODO: An interesting idea is to make car and cdr return lvalues so that we
 ;;; can do stuff like (set (car foo) bar). Have to give it a try and see if

@@ -14,6 +14,7 @@
 (defvar $builder)
 
 (defvar $output-debug-info)
+(defvar $ignore-annotations)
 
 (defun parse-args (args)
   (let ((parsed (%parse-args args (list nil))))
@@ -25,7 +26,7 @@
     (let ((arg (first args)))
       (cond
         ((any? (lambda (s) (string-eq? s arg))
-               (list "-ir" "-asm" "-d" "-O"))
+               '("-ir" "-asm" "-d" "-O" "-u"))
          (set-cdr acc (cons (cons arg true) (cdr acc))))
         ((string-eq? arg "-link")
          (when (nil? (cdr args)) (panic! "'-link' must be followed by linker args"))
@@ -54,6 +55,7 @@
             (do-optimisation (get-arg parsed-args "-O" false))
             (linker-args (string-split (get-arg parsed-args "-link" "") (list 10 32))))
        (set $output-debug-info (get-arg parsed-args "-d" false))
+       (set $ignore-annotations (get-arg parsed-args "-u" false))
        (when (and output-llvm-ir output-asm)
          (panic! "Cannot specify both of '-ir' and '-asm'"))
        (let* ((input-filename (ensure-absolute (first non-flag-args) (current-dir)))
@@ -180,7 +182,7 @@
                        (exec "rm" (list tmp-bc-file))
                        (panic! "opt failed")))
                    (unless (zero? (exec "llc" (append
-                                                (if do-optimisation (list "-O3") nil)
+                                                (if do-optimisation '("-O3") nil)
                                                 (list tmp-bc-file "-filetype=obj"
                                                       "-o" tmp-o-file))))
                      (exec "rm" (list tmp-bc-file))
@@ -211,17 +213,20 @@
               (names-and-types (parse-arg-list context arg-list))
               (arg-names (car names-and-types))
               (arg-types
-                (map (lambda (typ)
-                       ;; This is kinda messy - "cons" as a type-spec is used to
-                       ;; mean "any kind of cons type" when coercing (e.g.: for
-                       ;; the 'car' builtin function).  However, obviously when a
-                       ;; function is declared to take something of type 'cons'
-                       ;; it can't take any cons type, it wants '(cons ? ?)'.
-                       ;; So, we convert it here.
-                       ;; TODO: We should probably come up with a different type
-                       ;; spec for the 'any cons type' case.
-                       (if (eq? typ 'cons) '(cons ? ?) typ))
-                     (cdr names-and-types)))
+                (if $ignore-annotations
+                  (repeat (length arg-names) '?)
+                  (map (lambda (typ)
+                         ;; This is kinda messy - "cons" as a type-spec is used
+                         ;; to mean "any kind of cons type" when coercing
+                         ;; (e.g.: for the 'car' builtin function). However,
+                         ;; obviously when a function is declared to take
+                         ;; something of type 'cons' it can't take any cons
+                         ;; type, it wants '(cons ? ?)'.  So, we convert it
+                         ;; here.
+                         ;; TODO: We should probably come up with a different
+                         ;; type spec for the 'any cons type' case.
+                         (if (eq? typ 'cons) '(cons ? ?) typ))
+                       (cdr names-and-types))))
               (body (cdddr form))
               (return-type-token (cond
                                    ((and (not (nil? body))
@@ -230,7 +235,9 @@
                                       (set body (cddr body))
                                       t))
                                    (true (dummy-token '?))))
-              (return-type (remove-tokens-from-type return-type-token))
+              (return-type (if $ignore-annotations
+                             '?
+                             (remove-tokens-from-type return-type-token)))
               (return-type-source-loc (token-source-loc return-type-token)))
          (unless (symbol? (ts name))
            (fail! context
