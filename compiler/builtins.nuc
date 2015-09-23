@@ -283,6 +283,7 @@
   (let ((to-quote (first args)))
     (case (type (ts to-quote))
       (fixnum-t (compile-expr context to-quote))
+      (string-t (compile-expr context to-quote))
       (cons-t (if (nil? (ts to-quote))
                 ;; This case never comes up directly from source, as 'nil' is
                 ;; read in as the symbol 'nil' not the constant. It only comes
