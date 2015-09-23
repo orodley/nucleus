@@ -24,7 +24,8 @@
     acc
     (let ((arg (first args)))
       (cond
-        ((or (string-eq? arg "-ir") (string-eq? arg "-asm") (string-eq? arg "-d"))
+        ((any? (lambda (s) (string-eq? s arg))
+               (list "-ir" "-asm" "-d" "-O"))
          (set-cdr acc (cons (cons arg true) (cdr acc))))
         ((string-eq? arg "-link")
          (when (nil? (cdr args)) (panic! "'-link' must be followed by linker args"))
@@ -50,6 +51,7 @@
             (non-flag-args (car parsed-args))
             (output-llvm-ir (get-arg parsed-args "-ir" false))
             (output-asm (get-arg parsed-args "-asm" false))
+            (do-optimisation (get-arg parsed-args "-O" false))
             (linker-args (string-split (get-arg parsed-args "-link" "") (list 10 32))))
        (set $output-debug-info (get-arg parsed-args "-d" false))
        (when (and output-llvm-ir output-asm)
@@ -173,8 +175,14 @@
                                                           "-o" tmp-bc-file)))
                      (exec "rm" (list tmp-bc-file))
                      (panic! "llvm-link failed"))
-                   (unless (zero? (exec "llc" (list tmp-bc-file "-filetype=obj"
-                                                    "-o" tmp-o-file)))
+                   (if do-optimisation
+                     (unless (zero? (exec "opt" (list tmp-bc-file "-O3" "-o" tmp-bc-file)))
+                       (exec "rm" (list tmp-bc-file))
+                       (panic! "opt failed")))
+                   (unless (zero? (exec "llc" (append
+                                                (if do-optimisation (list "-O3") nil)
+                                                (list tmp-bc-file "-filetype=obj"
+                                                      "-o" tmp-o-file))))
                      (exec "rm" (list tmp-bc-file))
                      (panic! "llc failed"))
                    (unless (zero? (exec "g++" (append (list "-lm"
