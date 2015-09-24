@@ -108,6 +108,12 @@
   (case (LLVMGetTypeKind (llvm-type<-type-spec context (tt term)))
     (LLVMPointerTypeKind (LLVMBuildPtrToInt $builder (tv term) NUC-VAL ""))
     (LLVMIntegerTypeKind (LLVMBuildIntCast $builder (tv term) NUC-VAL ""))
+    (LLVMFloatTypeKind
+      (LLVMBuildIntCast
+        $builder
+        (LLVMBuildBitCast $builder (tv term) (LLVMIntType 32) "")
+        (LLVMIntType 64)
+        ""))
     (default (fail! context
                     (format nil "i64<-term not implemented for ~" (tt term))
                     $dummy-source-loc ; TODO: better source loc
@@ -118,6 +124,12 @@
     (case (LLVMGetTypeKind llvm-type)
       (LLVMPointerTypeKind (LLVMBuildIntToPtr $builder val llvm-type ""))
       (LLVMIntegerTypeKind (LLVMBuildIntCast $builder val llvm-type ""))
+      (LLVMFloatTypeKind
+        (LLVMBuildBitCast
+          $builder
+          (LLVMBuildIntCast $builder val (LLVMIntType 32) "")
+          (LLVMFloatType)
+          ""))
       (default (fail! context
                       (format nil "term<-i64 not implemented for ~" dest-type)
                       $dummy-source-loc ; TODO: better source loc
@@ -308,6 +320,8 @@
     ('int LLVM-FIXNUM-T) ('uint LLVM-FIXNUM-T) ('long-long LLVM-FIXNUM-T)
     ('uint8 LLVM-FIXNUM-T) ('u8 LLVM-FIXNUM-T) ('i8 LLVM-FIXNUM-T)
     ('i32 LLVM-FIXNUM-T) ('i64 LLVM-FIXNUM-T)
+
+    ('float LLVM-FLOAT-T)
 
     ;; Primitive nucleus types
     ('symbol LLVM-SYMBOL-T)
@@ -660,13 +674,11 @@
             terms)))
     (each (lambda (term)
             (let ((typ (tt term)))
-              (cond
-                ;; TODO: change this when we have doubles
-                ((floating-point? typ)
-                 (set max-type typ))
-                ((> (type-size context typ)
-                    (type-size context max-type))
-                 (set max-type typ)))))
+              ;; TODO: change this when we have doubles
+              (if (or (floating-point? typ)
+                      (and (not (floating-point? max-type))
+                           (> (type-size context typ) (type-size context max-type))))
+                (set max-type typ))))
           terms)
     ;; We need to make sure we have an actual integral type at this point, not
     ;; a tagged value.
