@@ -1,0 +1,4 @@
+(defun foo (x) x)
+
+(defun main ()
+  (foo (float 23)))

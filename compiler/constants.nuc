@@ -46,4 +46,4 @@
 (defvar EXTTAG-BITS 5)
 
 (defvar DISCRETE-EXTTAG 0)
-(defvar FLOAT-EXTTAG)
+(defvar FLOAT-EXTTAG 1)

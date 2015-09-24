@@ -445,9 +445,8 @@
          $builder
          (LLVMBuildIntCast
            $builder
-           (LLVMBuildBitCast $builder val
-                             (llvm-type<-type-spec context type-spec) "")
-           (LLVMIntType 64)
+           (LLVMBuildBitCast $builder val (LLVMIntType 32) "")
+           NUC-VAL
            "")
          (llvm-i64<-int (+ LOWTAG-BITS EXTTAG-BITS))
          "")
