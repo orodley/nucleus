@@ -268,7 +268,8 @@
           proxy-arg-types))
 
 ;; TODO: write this properly
-(defun << (x y) (* x (expt 2 y)))
+(defun << (x y)
+  (* x (expt 2 y)))
 
 (defun extend-env-with-terms (context name-tokens terms)
   (let ((env (context-env context)))

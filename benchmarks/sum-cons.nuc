@@ -1,0 +1,19 @@
+(include "benchmark")
+
+(defun sum ((l cons) (acc i32)) -> i32
+  (if (eq? l nil)
+    acc
+    (sum (cdr l) (+ acc (car l)))))
+
+(defun zeroes-and-ones ((len i32)) -> cons
+  (let ((list-head (scons 0 nil)))
+    (%zeroes-and-ones len list-head)
+    (cdr list-head)))
+
+(defun %zeroes-and-ones ((len i32) (list-head cons))
+  (unless (eq? len 0)
+    (set-cdr list-head (scons (if (>= (random) (/ 2147483647 2)) 1 0) nil))
+    (%zeroes-and-ones (- len 1) (cdr list-head))))
+
+(defun main ()
+  (run-benchmark 1 (lambda () (println (sum (zeroes-and-ones 50000000) 0)))))

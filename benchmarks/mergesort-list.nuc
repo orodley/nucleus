@@ -1,0 +1,49 @@
+(include "benchmark")
+
+(defun mergesort ((l (list-of i32))) -> (list-of i32)
+  (cond
+    ((eq? l       nil) l)
+    ((eq? (cdr l) nil) l)
+    (true
+      (merge (mergesort (first-half l)) (mergesort (second-half l))))))
+
+;; Yes, I know this sucks. I'm working around a compiler bug which I don't have
+;; time to investigate right now :(
+
+(defun first-half ((l (list-of i32))) -> (list-of i32)
+  (%first-half l (/ (length l) 2)))
+
+(defun %first-half ((l (list-of i32)) (split-point i32)) -> (list-of i32)
+  (if (eq? split-point 0)
+    nil
+    (scons (car l) (%first-half l (- split-point 1)))))
+
+(defun second-half ((l (list-of i32))) -> (list-of i32)
+  (%second-half l (/ (length l) 2)))
+
+(defun %second-half ((l (list-of i32)) (split-point i32)) -> (list-of i32)
+  (if (eq? split-point 0)
+    l
+    (%second-half (cdr l) (- split-point 1))))
+
+(defun merge ((l1 (list-of i32)) (l2 (list-of i32))) -> (list-of i32)
+  (cond
+    ((eq? l1 nil) l2)
+    ((eq? l2 nil) l1)
+    ((< (car l1) (car l2))
+     (scons (car l1) (merge (cdr l1) l2)))
+    (true
+      (scons (car l2) (merge (cdr l2) l1)))))
+
+(defun random-list ((len i32)) -> (list-of i32)
+  (let ((list-head (scons 10000000 nil)))
+    (%random-list len list-head)
+    (cdr list-head)))
+
+(defun %random-list ((len i32) (list-head (list-of i32)))
+  (unless (eq? len 0)
+    (set-cdr list-head (scons (/ (random) 100) nil))
+    (%random-list (- len 1) (cdr list-head))))
+
+(defun main ()
+  (run-benchmark 10 (lambda () (mergesort (random-list 100000)))))

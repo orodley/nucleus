@@ -1,0 +1,63 @@
+(include "benchmark")
+
+(defun float-elt ((l (list-of float)) (i int)) -> float
+  (if (eq? i 0)
+    (car l)
+    (float-elt (cdr l) (- i 1))))
+
+(defun pt-in-poly2 ((xp (list-of float)) (yp (list-of float)) (x float) (y float)) -> bool
+  (loop xp yp x y false (- (length xp) 1) 0))
+
+(defun loop ((xp (list-of float)) (yp (list-of float)) (x float) (y float)
+                                  (c bool) (i i32) (j i32))
+  (if (< i 0)
+    c
+    (if (or (and (or (> (float-elt yp i) y)
+                     (>= y (float-elt yp j)))
+                 (or (> (float-elt yp j) y)
+                     (>= y (float-elt yp i))))
+            (>= x
+                (+ (float-elt xp i)
+                   (/ (*
+                        (- (float-elt xp j)
+                           (float-elt xp i))
+                        (- y (float-elt yp i)))
+                      (- (float-elt yp j)
+                         (float-elt yp i))))))
+      (loop xp yp x y c       (- i 1) i)
+      (loop xp yp x y (not c) (- i 1) i))))
+
+(defun main ()
+  (run-benchmark2
+    10
+    10000
+    (lambda ()
+      (let ((x 0)
+            ;; This is absolutely disgusting and I'm ashamed of myself.
+            (xp (slist (float 0) (float 1) (float 1) (float 0) (float 0)
+                       (float 1) (- 0 (/ (float 1) (float 2))) (float (- 0 1))
+                       (float (- 0 1)) (float (- 0 2)) (- 0 (float 2))
+                       (/ (float 1) (float 2)) (float (- 0 2))
+                       (- (float 1)) (/ (float 1) (float 2))
+                       (- 0 (/ (float 1) (float 2))) (float 1) (float 1)
+                       (float 0) (- 0 (/ (float 1) (float 2))) (float (- 0 1))
+                       (- 0 (/ (float 1) (float 2)))))
+            (yp (slist (float 0) (float 0) (float 1) (float 1) (float 2)
+                       (float 3) (float 2) (float 3) (float 0)
+                       (- 0 (/ (float 1) (float 2))) (- 0 (float 1))
+                       (- 0 (float 1)) (/ (float 1) (float 2)) (float (- 0 2))
+                       (float (- 0 2)) (float (- 0 1)) (/ (float 1) (float 2))
+                       (float (- 0 1)) (- 0 (/ (float 1) (float 2)))
+                       (float (- 0 1)) (float (- 0 1)) (- 0 (/ (float 1) (float 2))))))
+        (if (pt-in-poly2 xp yp (/ (float 1) (float 2)) (/ (float 1) (float 2))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (/ (float 1) (float 2)) (/ (float 3) (float 2))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (- 0 (/ (float 1) (float 2))) (/ (float 3) (float 2))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (/ (float 3) (float 4)) (/ (float 9) (float 4))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (float 0) (/ (float 201) (float 100))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (- 0 (/ (float 1) (float 2))) (/ (float 5) (float 2))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (float (- 0 1)) (- (/ (float 1) (float 2)))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (- (/ (float 3) (float 2))) (/ (float 1) ( float 2))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (- 0 (/ (float 9) (float 4))) (- 0 (float 1))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (/ (float 1) (float 2)) (- (/ (float 1) (float 4)))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (/ (float 1) (float 2)) (- (/ (float 5) (float 4)))) (set x (+ x 1)))
+        (if (pt-in-poly2 xp yp (- 0 (/ (float 1) (float 2))) (- 0 (/ (float 5) (float 2)))) (set x (+ x 1)))))))

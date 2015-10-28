@@ -1,3 +1,5 @@
+(include "benchmark")
+
 (defun sum ((l (list-of i8)) (acc i32)) -> i32
   (if (eq? l nil)
     acc
@@ -14,4 +16,4 @@
     (%zeroes-and-ones (- len 1) (cdr list-head))))
 
 (defun main ()
-  (println (sum (zeroes-and-ones 100000000) 0)))
+  (run-benchmark 1 (lambda () (println (sum (zeroes-and-ones 50000000) 0)))))

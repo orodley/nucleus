@@ -1,0 +1,9 @@
+(include "benchmark")
+
+(defun ack ((m int) (n int)) -> int
+  (cond ((eq? m 0) (+ n 1))
+        ((eq? n 0) (ack (- m 1) 1))
+        (true (ack (- m 1) (ack m (- n 1))))))
+
+(defun main ()
+  (run-benchmark 10 (lambda () (println (ack 3 13)))))

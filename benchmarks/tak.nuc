@@ -1,4 +1,6 @@
-(defun tak (x y z)
+(include "benchmark")
+
+(defun tak ((x int) (y int) (z int)) -> int
   (if (>= y x)
       z
       (tak (tak (- x 1) y z)
@@ -6,4 +8,4 @@
            (tak (- z 1) x y))))
  
 (defun main ()
-  (println (tak 33 22 11)))
+  (run-benchmark 10 (lambda () (println (tak 35 22 11)))))

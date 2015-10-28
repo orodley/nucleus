@@ -1,0 +1,44 @@
+(include "benchmark")
+
+(defun mergesort ((l cons)) -> cons
+  (cond
+    ((eq? l       nil) l)
+    ((eq? (cdr l) nil) l)
+    (true
+      (let ((first-half l)
+            (second-half (split-list l)))
+        (merge (mergesort first-half) (mergesort second-half))))))
+
+;; Splits the list in place, returning a pointer to the later half. The
+;; original list passed in is the first half.
+(defun split-list ((l cons)) -> cons
+  (%split-list l (/ (length l) 2)))
+
+(defun %split-list ((l cons) (split-point i32)) -> cons
+  (if (eq? split-point 1)
+    (let ((second-half (cdr l)))
+      (set-cdr l nil)
+      second-half)
+    (%split-list (cdr l) (- split-point 1))))
+
+(defun merge ((l1 cons) (l2 cons)) -> cons
+  (cond
+    ((eq? l1 nil) l2)
+    ((eq? l2 nil) l1)
+    ((< (car l1) (car l2))
+     (scons (car l1) (merge (cdr l1) l2)))
+    (true
+      (scons (car l2) (merge (cdr l2) l1)))))
+
+(defun random-list ((len i32)) -> cons
+  (let ((list-head (scons 10000000 nil)))
+    (%random-list len list-head)
+    (cdr list-head)))
+
+(defun %random-list ((len i32) (list-head cons))
+  (unless (eq? len 0)
+    (set-cdr list-head (scons (/ (random) 100) nil))
+    (%random-list (- len 1) (cdr list-head))))
+
+(defun main ()
+  (run-benchmark2 10 10 (lambda () (mergesort (random-list 100000)))))

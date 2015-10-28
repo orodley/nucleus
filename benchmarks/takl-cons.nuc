@@ -1,7 +1,9 @@
+(include "benchmark")
+
 (defun listn ((n i8)) -> cons
   (if (eq? n 0)
     nil
-    (cons n (listn (- n 1)))))
+    (scons n (listn (- n 1)))))
  
 (defun mas ((x cons) (y cons) (z cons)) -> cons
   (if (not (shorterp y x))
@@ -16,4 +18,4 @@
            (shorterp (cdr x) (cdr y)))))
  
 (defun main ()
-  (println (mas (listn 27) (listn 18) (listn 9))))
+  (run-benchmark 10 (lambda () (println (mas (listn 30) (listn 18) (listn 9))))))

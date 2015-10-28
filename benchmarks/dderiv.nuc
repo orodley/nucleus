@@ -1,0 +1,70 @@
+;;; DDERIV -- Table-driven symbolic derivation.
+
+;;; Returns the wrong answer for quotients.
+;;; Fortunately these aren't used in the benchmark.
+
+(defvar $properties nil)
+
+(defun get ((key1 symbol) key2)
+  (let ((x (assoc key1 $properties)))
+    (if (not (nil? x))
+      (let ((y (assoc key2 (cdr x))))
+        (if (not (nil? y))
+          (cdr y)
+          false))
+      false)))
+
+(defun put (key1 key2 val)
+  (let ((x (assoc key1 $properties)))
+    (if (not (nil? x))
+      (let ((y (assoc key2 (cdr x))))
+        (if (not (nil? y))
+          (set-cdr y val)
+          (set-cdr x (cons (cons key2 val) (cdr x)))))
+      (set $properties
+        (cons (list key1 (cons key2 val)) $properties)))))
+
+(defun my+dderiv ((a cons))
+  (cons '+ (map dderiv (cdr a))))
+
+(defun my-dderiv ((a cons))
+  (cons '- (map dderiv (cdr a))))
+
+(defun *dderiv ((a cons))
+  (list '* a (cons '+ (map (lambda (a) (list '/ (dderiv a) a)) (cdr a)))))
+
+(defun /dderiv ((a cons))
+  (list '-
+        (list '/
+              (dderiv (cadr a))
+              (caddr a))
+        (list '/
+              (cadr a)
+              (list '*
+                    (caddr a)
+                    (caddr a)
+                    (dderiv (caddr a))))))
+
+(defun dderiv (a)
+  (if (not (cons? a))
+    (if (eq? a 'x) 1 0)
+    (let ((f (get (car a) 'dderiv)))
+      (if (not (nil? f))
+        (f a)
+        (panic! "No derivation method available")))))
+
+(defun main ()
+  (put '+ 'dderiv my+dderiv)
+  (put '- 'dderiv my-dderiv)
+  (put '* 'dderiv *dderiv)
+  (put '/ 'dderiv /dderiv)
+  (let ((start-nano (nanoseconds)))
+    (println (dderiv '(+ (* 3 x x) (* a x x) (* b x) 5)))
+    (format true "~ nsec" (- (nanoseconds) start-nano))))
+
+; Should produce:
+;
+; (+ (* (* 3 x x) (+ (/ 0 3) (/ 1 x) (/ 1 x)))
+;    (* (* a x x) (+ (/ 0 a) (/ 1 x) (/ 1 x)))
+;    (* (* b x) (+ (/ 0 b) (/ 1 x)))
+;    0)

@@ -1,0 +1,75 @@
+(include "benchmark")
+
+(defun float-elt ((l (list-of float)) (i int)) -> float
+  (if (eq? i 0)
+    (car l)
+    (float-elt (cdr l) (- i 1))))
+
+(defun float-set ((l (list-of float)) (i int) (x float)) -> int
+  (if (eq? i 0)
+    (progn (set-car l x) 0)
+    (float-set (cdr l) (- i 1) x)))
+
+(defun four1 ((data (list-of float)))
+  ; bit-reversal section
+  (loop1 data 0 0)
+  ; Danielson-Lanczos section
+  (loop3 data 2))
+
+(defun loop1 ((data (list-of float)) (i int) (j int))
+  (when (< i 1024)
+    (when (< i j)
+      (float-set data i       (float-elt data j))
+      (float-set data j       (float-elt data i))
+      (float-set data (+ i 1) (float-elt data (+ j 1)))
+      (float-set data (+ j 1) (float-elt data (+ i 1))))
+    (loop2 data 512 j i)))
+
+(defun loop2 ((data (list-of float)) (m int) (j int) (i int))
+  (if (and (>= m 2) (>= j m))
+    (loop2 data (/ m 2) (- j m) i)
+    (loop1 data (+ i 2) (+ j m))))
+
+(defun loop3 ((data (list-of float)) (mmax int))
+  (if (< mmax 1024)
+    (let* ((theta (/ (float 6) mmax))
+           (wpr (let ((x (sin (* (/ (float 1) 2) theta))))
+                  (* (float (- 0 2)) (* x x))))
+           (wpi (sin theta)))
+      (loop4 data (float 1) (float 0) 0 mmax wpr wpi)
+      (loop3 data (* mmax 2)))))
+
+(defun loop4 ((data (list-of float)) (wr float) (wi float) (m int) (mmax int) (wpr float) (wpi float))
+  (if (< m mmax)
+    (loop5 data m m mmax wr wi wpr wpi)))
+
+(defun loop5 ((data (list-of float)) (i int) (m int) (mmax int) (wr float) (wi float) (wpr float) (wpi float))
+  (if (< i 1024)
+    (let* ((j (+ i mmax))
+           (tempr (- (* wr (float-elt data j))
+                     (* wi (float-elt data (+ j 1)))))
+           (tempi (+ (* wr (float-elt data (+ j 1)))
+                     (* wi (float-elt data j)))))
+      (float-set data j (- (float-elt data i) tempr))
+      (float-set data (+ j 1) (- (float-elt data (+ i 1)) tempi))
+      (float-set data i (+ (float-elt data i) tempr))
+      (float-set data (+ i 1) (+ (float-elt data (+ i 1)) tempi))
+      (loop5 data (+ j mmax) m mmax wr wi wpr wpi))
+    (loop4 data
+           (+ (- (* wr wpr) (* wi wpi)) wr)
+           (+ (+ (* wi wpr) (* wr wpi)) wi)
+           (+ m 2)
+           mmax wpr wpi)))
+
+(defun make-initial-list ((n int)) -> (list-of float)
+  (if (eq? n 0)
+    nil
+    (scons (float 0) (make-initial-list (- n 1)))))
+
+(defun run ()
+  (let ((data (make-initial-list 5)))
+    (four1 data)
+    (float-elt data 0)))
+
+(defun main ()
+  (run-benchmark 10 (lambda () (println (run)))))
