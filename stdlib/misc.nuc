@@ -15,7 +15,7 @@
   (unless condition
     (panic! message)))
 
-(extern (rt_rand random) () -> ?)
+(extern (rt_rand random) () -> i32)
 
 (defvar $gensym-counter 0)
 

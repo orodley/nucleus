@@ -47,7 +47,7 @@ nuc_val rt_get_argv()
 
 static bool seeded_rng = false;
 
-nuc_val rt_rand()
+uint32_t rt_rand()
 {
 	if (!seeded_rng) {
 		struct timeval t;
@@ -57,7 +57,7 @@ nuc_val rt_rand()
 		seeded_rng = true;
 	}
 
-	return INT_TO_NUC_VAL(rand());
+	return rand();
 }
 
 uint64_t rt_get_nanoseconds()

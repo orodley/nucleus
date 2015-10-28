@@ -2,6 +2,7 @@
 (extern (log2f log2) (float) -> float)
 (extern (floorf floor) (float) -> float)
 (extern (ceilf ceiling) (float) -> float)
+(extern (sinf sin) (float) -> float)
 
 ;;; TODO: varargs
 (defun + (a b) (+ a b))
@@ -21,6 +22,7 @@
   (eq? (% x 2) 1))
 
 (defun expt (base power)
+  (assert! (>= power 0) "Power must be non-negative")
   (%expt base power 1))
 
 (defun %expt (base power acc)
