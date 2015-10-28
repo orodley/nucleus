@@ -39,7 +39,13 @@
 
 (defun print-to-stream (stream sexp)
   (case (type sexp)
-    (fixnum-t (print-fixnum stream sexp 0))
+    (fixnum-t
+      (cond
+        ((< sexp 0)
+         (write-char-to-stream stream 45) ; '-'
+         (print-fixnum stream (- 0 sexp) 0))
+        (true
+          (print-fixnum stream sexp 0))))
     (cons-t (print-cons stream sexp))
     (symbol-t (write-string-to-stream stream (string<-symbol sexp)))
     (string-t
