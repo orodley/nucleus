@@ -1,0 +1,543 @@
+;;;; Core code for compiling. Toplevel forms, expressions, etc.
+
+;;; TODO: Think about the naming convention for "type constructors". Maybe we
+;;; could use capitals so the function that produces one can be shorter while
+;;; still allowing the lowercase version for variable names.
+
+;;; TODO: Replace with a hash table once that exists
+;;; TODO: These should go in the context, along with $module and $builder
+(defvar $functions nil)
+
+;;; TODO: Replace with a struct once they exist
+(defun make-context (env file func target-data errors)
+  (list env file func target-data errors))
+(defun context-env (context) (first context))
+(defun context-file (context) (second context))
+(defun context-func (context) (third context))
+(defun context-target-data (context) (fourth context))
+(defun context-errors (context) (fifth context))
+(defun context-set-env (context (new-env cons)) (set-car context new-env))
+(defun context-set-file (context new-file) (set-car (cdr context) new-file))
+(defun context-set-func (context new-func) (set-car (cddr context) new-func))
+(defun context-set-target-data (context new-target-data)
+  (set-car (cdddr context) new-target-data))
+(defun context-set-errors (context new-errors)
+  (set-car (cddddr context) new-errors))
+(defun push-error (context error)
+  (context-set-errors context (cons error (context-errors context))))
+
+(defun make-error (message source-context source-loc)
+  (list message source-context source-loc))
+(defun error-message (error) (first error))
+(defun error-source-context (error) (second error))
+(defun error-source-loc (error) (third error))
+
+;; The following function is handy for debugging - with 'br nuc(break-on-me)'
+;; in .gdbinit, this acts like a breakpoint.
+(defun break-on-me () nil)
+
+;;; TODO: When an error occurs in a lambda, we should report the context better
+;;; Maybe what we should do is store a chain of context switches terminating at
+;;; toplevel form followed by filename, and we push/pop when we enter/leave a
+;;; new context?
+;;; e.g.: "Error: undefined variable 'foo' in lambda in lambda in function bar in file x.nuc
+;;; (could merge adjacent identical contexts, like "lambda (2 levels deep)")
+;;; TODO: Rather than panicing, this should return a term containing an LLVM
+;;; 'undef' value, and stick the error into a list in the context. That way we
+;;; can report multiple errors at once.
+(defun fail! (context (message string) source-loc result-type lvalue?)
+  (let* ((func (context-func context))
+         (typ (cond
+                ((eq? (type result-type) foreign-t)
+                 result-type)
+                ((not (nil? result-type))
+                 (llvm-type<-type-spec context result-type))
+                (true nil)))
+         (final-type (if (and lvalue? (not (nil? result-type)))
+                       (LLVMPointerType typ 0)
+                       typ))
+         (val (if (not (nil? result-type))
+                (LLVMGetUndef final-type)
+                nil))
+         (source-context (if (nil? func)
+                           "toplevel form"
+                           (format nil "function ~" (func-name func)))))
+    ;; When debugging it can be helpful to see errors even if we fail before
+    ;; compilation is finished for some reason.
+    (when $output-debug-info
+      (format true "Got an error: ~" message))
+    (break-on-me)
+    (push-error context (make-error message source-context source-loc))
+    (cond
+      ((eq? (type result-type) foreign-t) val)
+      ((not (nil? result-type)) (make-term result-type val lvalue?))
+      (true nil))))
+
+(defun dummy-token (sexpr)
+  (make-token sexpr "<unknown>" 0 0))
+
+(defvar $dummy-source-loc (token-source-loc (dummy-token nil)))
+
+(defun copy-source-loc (token sexpr)
+  (make-token sexpr (token-source-name token) (token-line token) (token-col token)))
+
+;; TODO: rename this - tX looks like it is related to terms.
+(defun ts (token) (token-sexpr token))
+
+;;; TODO: Replace with a struct once they exist
+;;; TODO: Do we really need this? Couldn't we just have an alist with
+;;; car = name and cdr = term?
+(defun make-binding (name-token term) (list name-token term))
+(defun binding-name-token (binding) (first binding))
+(defun binding-term (binding) (second binding))
+(defun binding-lvalue? (binding) (tl? (binding-term binding)))
+;;; TODO: polymorphic constants?
+(defun make-constant (name val typ) (make-binding (dummy-token name)
+                                                  (make-term typ val false)))
+(defun make-var (name val typ) (make-binding name (make-term typ val true)))
+
+(defun process-toplevel-form (context token)
+  (when $output-debug-info (format true "(p-t-f .. ~)" token))
+  ;; NOTE: Once we have 'defmacro' we'll need to another pass over the toplevel
+  ;; forms to find 'defmacro's and compile their dependency tree
+  (let* ((token (macroexpand context token))
+         (form (ts token)))
+    (case (ts (first form))
+      ('defun
+       (when $output-debug-info (write-string-ln "processing defun"))
+       (unless (length>= form 3)
+         (fail! context "Not enough args to 'defun'" (token-source-loc token) nil false))
+       (let* ((name (second form))
+              (arg-list (third form))
+              (names-and-types (parse-arg-list context arg-list))
+              (arg-names (car names-and-types))
+              (arg-types
+                (if $ignore-annotations
+                  (repeat (length arg-names) '?)
+                  (map (lambda (typ)
+                         ;; This is kinda messy - "cons" as a type-spec is used
+                         ;; to mean "any kind of cons type" when coercing
+                         ;; (e.g.: for the 'car' builtin function). However,
+                         ;; obviously when a function is declared to take
+                         ;; something of type 'cons' it can't take any cons
+                         ;; type, it wants '(cons ? ?)'.  So, we convert it
+                         ;; here.
+                         ;; TODO: We should probably come up with a different
+                         ;; type spec for the 'any cons type' case.
+                         (if (eq? typ 'cons) '(cons ? ?) typ))
+                       (cdr names-and-types))))
+              (body (cdddr form))
+              (return-type-token (cond
+                                   ((and (not (nil? body))
+                                         (eq? (ts (first body)) '->))
+                                    (let ((t (second body)))
+                                      (set body (cddr body))
+                                      t))
+                                   (true (dummy-token '?))))
+              (return-type (if $ignore-annotations
+                             '?
+                             (remove-tokens-from-type return-type-token)))
+              (return-type-source-loc (token-source-loc return-type-token)))
+         (unless (symbol? (ts name))
+           (fail! context
+                  (format nil "Function name must be a string: ~" (ts name))
+                  (token-source-loc name)
+                  nil false))
+         (unless (list? arg-list)
+           (fail! context
+                  (format nil "Argument list must be a list: ~" (ts arg-list))
+                  (token-source-loc arg-list)
+                  nil false))
+         (if (any? generic-type? (cons return-type arg-types))
+           (add-generic-func context (ts name) arg-names arg-types return-type
+                             return-type-source-loc body)
+           (add-func context (ts name) arg-names arg-types return-type 'nucleus body))))
+      ('defvar
+       (when (length>= form 4)
+         (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
+                                (length form))
+                (token-source-loc token)
+                nil false))
+       (let ((name (second form)))
+         (if (nil? (get-binding context (ts name)))
+           (let* ((value (if (length-is? form 3) (third form) (dummy-token 'nil)))
+                  (init (llvm-i64<-int (if (int? (ts value))
+                                         (<< (ts value) LOWTAG-BITS)
+                                         0)))
+                  (global (add-global context name '?)))
+             (LLVMSetInitializer global init)
+             (unless (int? (ts value))
+               (add-initialiser global value)))
+           (fail! context
+                  (format nil "Redefinition of variable '~'" (ts name))
+                  (token-source-loc name)
+                  nil false))))
+      ('extern
+       (unless (length-is? (cdr form) 4)
+         (fail!
+           context
+           (format nil "Invalid number of arguments to 'extern' (got ~, expected 4)"
+                   (length (cdr form)))
+           (token-source-loc (first form))
+           nil false))
+       ;; TODO: Shouldn't this use add-func?
+       (let* ((names (ts (second form)))
+              (extern-name (if (cons? names) (ts (first names)) names))
+              (nuc-name (if (cons? names) (ts (second names)) names))
+              (arg-types (map remove-tokens-from-type (ts (third form))))
+              (arity (length arg-types))
+              (ret-type (ts (fifth form)))
+              (llvm-func (runtime-func
+                           (string<-symbol extern-name)
+                           (llvm-type<-type-spec context ret-type)
+                           (map (lambda (t) (llvm-type<-type-spec context t))
+                                arg-types)))
+              (func (make-func nuc-name arity nil arg-types
+                               ret-type 'extern nil llvm-func)))
+         (set $functions (cons (cons nuc-name func) $functions))))
+      ('include
+       (unless (length-is? (cdr form) 1)
+         (fail!
+           context
+           (format nil "Invalid number of arguments to 'include' (got ~, expected 1)"
+                   (length (cdr form)))
+           (token-source-loc token)
+           nil false))
+       (let* ((including-file (context-file context))
+              (filename (if (string-ends-with? (ts (second form)) ".nuc")
+                          (ts (second form))
+                          (string-concat (ts (second form)) ".nuc")))
+              (included-file (ensure-absolute filename
+                                              (dirname including-file))))
+         (process-file context (token-source-loc (first form)) (list included-file))))
+      ;; TODO: should this be called 'c'enum? It's just a regular enum really.
+      ('cenum
+       (when (nil? (cdr form))
+         (fail! context "An enum must have one or more values"
+                (token-source-loc token) nil false))
+       ;; TODO: support negative integer literals
+       (let ((enum-variant-value (- 0 1)))
+         (each
+           (lambda (enum-variant)
+             (let ((name (if (cons? (ts enum-variant))
+                           (car (ts enum-variant))
+                           enum-variant))
+                   (value (set enum-variant-value
+                               (if (cons? (ts enum-variant))
+                                 (ts (second (ts enum-variant)))
+                                 (+ 1 enum-variant-value)))))
+               (LLVMSetInitializer
+                 (add-global context name '?)
+                 (fixnum<-llvm-int (llvm-i64<-int value)))))
+           (cdr form))))
+      (default
+        (fail! context (format nil "Invalid top-level form '~'" (ts (first form)))
+               (token-source-loc (first form))
+               nil false)))))
+
+(defun macroexpand (context token)
+  (let ((sexpr (ts token)))
+    (if (and (cons? sexpr) (not (nil? sexpr)))
+      (let* ((macro-name (ts (first sexpr)))
+             (args (rest sexpr))
+             (builtin-macro (get-builtin-macro macro-name)))
+        (cond
+          ((eq? macro-name 'quote) token) ; don't touch quoted stuff
+          ((nil? builtin-macro)
+           (copy-source-loc token
+                            (map (lambda (e) (macroexpand context e)) sexpr)))
+          ;; Call macroexpand again, as it could expand directly to another macro
+          (true (macroexpand context (copy-source-loc token (builtin-macro context args))))))
+      token)))
+
+(defun add-global (context name type-spec)
+  (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name (ts name)))))
+    (context-set-env context (cons (make-var name global type-spec)
+                                   (context-env context)))
+    global))
+
+(defvar $initialisers nil)
+
+(defun add-initialiser (var init)
+  (set $initialisers (cons (cons var init) $initialisers)))
+
+(defun mangle-name (name) (format nil "nuc(~)" name))
+
+;; TODO: write this properly
+(defun << (x y)
+  (* x (expt 2 y)))
+
+(defun extend-env-with-terms (context name-tokens terms)
+  (let ((env (context-env context)))
+    (each (lambda (name-and-term)
+            (let* ((name (car name-and-term))
+                   (term (cdr name-and-term))
+                   (var-on-stack (LLVMBuildAlloca $builder
+                                                  (llvm-type<-type-spec context (tt term))
+                                                  (string<-symbol (ts name)))))
+              (LLVMBuildStore $builder (tv term) var-on-stack)
+              (set env (cons (make-var name var-on-stack (tt term)) env))))
+          (zip name-tokens terms))
+    (context-set-env context env)))
+
+(defun extend-env-with-bindings (context bindings)
+  (context-set-env context (append bindings (context-env context))))
+
+;; TODO: functions as values are still kinda separate, maybe they should also
+;; be integrated into the environment somehow?
+
+(defun get-binding (context name)
+  (find (lambda (binding) (eq? (ts (binding-name-token binding)) name))
+        (context-env context)))
+
+(defun gc-alloc (size)
+  (llvm-build-call
+    $builder (runtime-func "gc_alloc" (LLVMPointerType NUC-VAL 0) (list SIZE-T))
+    (list (llvm-i64<-int size)) "gc_alloc"))
+
+(defun get-car-ptr (cons-ptr) (LLVMBuildStructGEP $builder cons-ptr 0 "car"))
+(defun get-cdr-ptr (cons-ptr) (LLVMBuildStructGEP $builder cons-ptr 1 "cdr"))
+(defun get-gr-ptr (cons-ptr) (LLVMBuildStructGEP $builder cons-ptr 2 "gr"))
+
+(defun get-car-value (cons-ptr) (LLVMBuildLoad $builder (get-car-ptr cons-ptr) ""))
+(defun get-cdr-value (cons-ptr) (LLVMBuildLoad $builder (get-cdr-ptr cons-ptr) ""))
+(defun get-gr-value (cons-ptr) (LLVMBuildLoad $builder (get-gr-ptr cons-ptr) ""))
+(defun get-car-gr-value (cons-ptr)
+  (LLVMBuildICmp $builder LLVMIntNE
+                 (LLVMBuildAnd $builder (get-gr-value cons-ptr) (llvm-i8<-int 2) "")
+                 (llvm-i8<-int 0)
+                 ""))
+(defun get-cdr-gr-value (cons-ptr)
+  (LLVMBuildICmp $builder LLVMIntNE
+                 (LLVMBuildAnd $builder (get-gr-value cons-ptr) (llvm-i8<-int 1) "")
+                 (llvm-i8<-int 0)
+                 ""))
+
+(defun set-car-value (cons-ptr val) (LLVMBuildStore $builder val (get-car-ptr cons-ptr)))
+(defun set-cdr-value (cons-ptr val) (LLVMBuildStore $builder val (get-cdr-ptr cons-ptr)))
+(defun set-gr-value (cons-ptr val) (LLVMBuildStore $builder val (get-gr-ptr cons-ptr)))
+(defun set-car-gr-value (cons-ptr val)
+  (set-gr-value cons-ptr (LLVMBuildOr $builder (get-gr-value cons-ptr)
+                                      (LLVMBuildShl $builder val (llvm-i8<-int 1) "") "")))
+(defun set-cdr-gr-value (cons-ptr val)
+  (set-gr-value cons-ptr (LLVMBuildOr $builder (get-gr-value cons-ptr) val "")))
+
+(defun cons-size (context)
+  (LLVMABISizeOfType (context-target-data context) CONS-CELL))
+
+(defun compile-expr (context expr)
+  (when $output-debug-info
+    (format true "(c-e ... ~)" expr))
+  (let ((term (%compile-expr context expr)))
+    (when $output-debug-info
+      (format true "(c-e ... ~) -> ~" expr term))
+    term))
+
+(defun %compile-expr (context token)
+  (let ((expr (ts token)))
+    (case (type expr)
+      (fixnum-t
+        (let* ((required-bits (+ 1 (int (floor (+ 1 (log2 (float expr)))))))
+               (constant-type
+                 (cond
+                   ((<= required-bits 8) 'i8)
+                   ((<= required-bits 16) 'i16)
+                   ((<= required-bits 32) 'i32)
+                   ((<= required-bits 64) 'i64)
+                   (true
+                     (fail!
+                       context
+                       "Integer too big to fit into an i64! (How did we even read it?)"
+                       (token-source-loc token)
+                       '?  false)))))
+          (make-term constant-type
+                     (LLVMConstInt (llvm-type<-type-spec context constant-type)
+                                   expr
+                                   false)
+                     false)))
+      (symbol-t
+        (let* ((binding (get-binding context expr))
+               (term
+                 (if (not (nil? binding))
+                   (binding-term binding)
+                   (let ((func (get-func expr)))
+                     (if (nil? func)
+                       (fail! context
+                              (format nil "Undefined variable '~'" expr)
+                              (token-source-loc token)
+                              '? true)
+                       (make-lambda context
+                                    (func-llvm-func func)
+                                    (func-arg-types func)
+                                    (func-return-type func)
+                                    nil))))))
+          (if (tl? term)
+            (make-term
+              (tt term)
+              (LLVMBuildLoad $builder (tv term) (string<-symbol expr))
+              false)
+            term)))
+      (cons-t (compile-form context token))
+      (string-t (make-term
+                  'string
+                  (llvm-build-call
+                    $builder
+                    (runtime-func "rt_make_string" STRING-PTR (list SIZE-T CHAR*))
+                    (list (llvm-i64<-int (length expr)) (global-string expr))
+                    "make-string-literal")
+                  false))
+      (default (fail! context
+                      (format nil "Don't know how to compile this type of expression: ~" expr)
+                      (token-source-loc token)
+                      '?  false)))))
+
+(defun compile-form (context token)
+  (let* ((form (ts token))
+         (name (car form))
+         (args (cdr form))
+         (arity (length args))
+         (special-form (get-special-form (ts name))))
+    (if (not (nil? special-form))
+      (special-form context args)
+      (let ((builtin-function (get-builtin-function (ts name))))
+        (if (not (nil? builtin-function))
+          (builtin-function
+            context
+            (map (lambda (arg) (compile-expr context arg)) args))
+          (let ((func (get-func (ts name))))
+            (if (nil? func)
+              (let ((generic-func (get-generic-func (ts name))))
+                (if (nil? generic-func)
+                  ;; Calling a closure pointer
+                  (let ((closure-term
+                          (coerce context
+                                  (compile-expr context name)
+                                  (list 'any-func arity)
+                                  (token-source-loc token))))
+                    (make-term
+                      (func-type-return-type (tt closure-term))
+                      (call-closure context closure-term
+                                    (map (lambda (arg)
+                                           (compile-expr context arg))
+                                         args)
+                                    false)
+                      false))
+                  ;; Calling a generic function
+                  (if (not (eq? arity (generic-func-arity generic-func)))
+                    (fail! context
+                           (format nil "Invalid number of arguments to generic function '~' (got ~, expected ~)"
+                                   (ts name)
+                                   arity
+                                   (generic-func-arity generic-func))
+                           (token-source-loc token)
+                           (generic-func-return-type generic-func) false)
+                    (let* ((arg-terms (map (lambda (arg-token)
+                                             (compile-expr context arg-token))
+                                           args))
+                           (concrete-types (get-concrete-types
+                                                 context generic-func arg-terms))
+                           (ret-type (car concrete-types))
+                           (required-arg-types (cdr concrete-types))
+                           (coerced-args
+                             (map (lambda (c)
+                                    (let ((arg-term (car c))
+                                          (required-type (cadr c))
+                                          (source-loc (cddr c)))
+                                      (coerce context arg-term required-type
+                                              source-loc)))
+                                  (zip arg-terms
+                                       (zip required-arg-types
+                                            (map token-source-loc args)))))
+                           (llvm-func (get-generic-func-specialization
+                                        context generic-func required-arg-types
+                                        ret-type (token-source-loc token))))
+                      (make-term
+                        ret-type
+                        (llvm-build-call $builder llvm-func (map tv coerced-args) "")
+                        false)))))
+              ;; Calling a static function
+              (let* ((llvm-func (func-llvm-func func))
+                     (arg-terms (map2 (lambda (e typ)
+                                        (coerce context
+                                                (compile-expr context e)
+                                                typ
+                                                (token-source-loc e)))
+                                      args
+                                      (func-arg-types func))))
+                (if (eq? (LLVMCountParams llvm-func) arity)
+                  (make-term
+                    (func-return-type func)
+                    (llvm-build-call $builder llvm-func (map tv arg-terms) "")
+                    false)
+                  (fail! context
+                         (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
+                                 (ts name) arity (LLVMCountParams llvm-func))
+                         (token-source-loc token)
+                         (func-return-type func) false))))))))))
+
+(defun compile-progn (context forms)
+  (%compile-progn context (if (nil? forms) (list (dummy-token 'nil)) forms)))
+
+(defun %compile-progn (context forms)
+  (let ((e (compile-expr context (car forms))))
+    (if (nil? (cdr forms))
+      e
+      (%compile-progn context (cdr forms)))))
+
+(defun remove-tokens-from-type (typ)
+  (if (cons? (ts typ))
+     (map remove-tokens-from-type (ts typ))
+     (ts typ)))
+
+;;; TODO: this feels kinda janky
+(defun parse-arg-list (context arg-list-token)
+  (let* ((arg-list (ts arg-list-token))
+         (arg-names
+           (map
+             (lambda (arg)
+               (case (type (ts arg))
+                 (cons-t (first (ts arg)))
+                 (symbol-t arg)
+                 (default
+                   (fail! context (format nil "Invalid argument expression: ~" (ts arg))
+                          (token-source-loc arg)
+                          nil false)
+                   (dummy-token (gensym)))))
+             arg-list))
+         (arg-types
+           (map
+             (lambda (arg)
+               (case (type (ts arg))
+                 (cons-t (remove-tokens-from-type (second (ts arg))))
+                 (symbol-t '?)
+                 (default
+                   (fail! context (format nil "Invalid argument expression: ~" arg)
+                          (token-source-loc arg)
+                          nil false)
+                   '?)))
+             arg-list)))
+    (cons arg-names arg-types)))
+
+(defun runtime-func (name return-type arg-types)
+  (let ((func (LLVMGetNamedFunction $module name)))
+    (if (null? func)
+      (declare-function name return-type arg-types)
+      func)))
+
+(defun global-string (str)
+  (LLVMBuildGEP
+    $builder
+    (LLVMBuildGlobalString $builder str "")
+    (list (llvm-i64<-int 0) (llvm-i64<-int 0))
+    2
+    "str-to-ptr"))
+
+(defun simple-int-cmp (val1 val2)
+  (make-term
+    'bool
+    (LLVMBuildZExt
+      $builder
+      (LLVMBuildICmp $builder LLVMIntEQ val1 val2 "")
+      (LLVMIntType 32)
+      "")
+    false))
