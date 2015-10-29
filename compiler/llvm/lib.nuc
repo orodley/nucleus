@@ -59,6 +59,8 @@
 (extern LLVMFloatType () -> *)
 (extern LLVMPointerType (* uint) -> *)
 (extern LLVMStructType (array uint bool) -> *)
+(extern LLVMStructCreateNamed (* char*) -> *)
+(extern LLVMStructSetBody (* array uint bool) -> void)
 (extern LLVMArrayType (* uint) -> *)
 (extern LLVMFunctionType (* array uint bool) -> *)
 (extern LLVMVoidType () -> *)

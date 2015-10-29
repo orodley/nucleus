@@ -1,0 +1,10 @@
+(struct Foo
+  bar
+  baz)
+
+(defun main ()
+  (let ((foo (Foo 1 2)))
+    (Foo.bar= foo 3)
+    (Foo.baz= foo 4)
+    (assert! (eq? (Foo.bar foo) 3) "bar field")
+    (assert! (eq? (Foo.baz foo) 4) "baz field")))

@@ -29,7 +29,8 @@
            (llvm-func (declare-function
                         (mangle-name name) llvm-return-type llvm-arg-types))
            (func (make-func name arity arg-names arg-types return-type impl-type body llvm-func)))
-      (set $functions (cons (cons name func) $functions)))))
+      (set $functions (cons (cons name func) $functions))
+      func)))
 
 (defun get-func (name) (assoc-cdr name $functions))
 

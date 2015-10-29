@@ -1,0 +1,8 @@
+; compile-stderr: Static type error
+
+(struct Foo
+  (bar int)
+  baz)
+
+(defun main ()
+  (Foo "bar" 2))

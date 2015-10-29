@@ -172,6 +172,20 @@
                   (format nil "Redefinition of variable '~'" (ts name))
                   (token-source-loc name)
                   nil false))))
+      ('struct
+       (unless (length>= form 2)
+         (fail! context
+                (format nil "Invalid number of arguments to 'struct' (got ~, expected 2+)"
+                        (length form))
+                (token-source-loc (first form))
+                nil false))
+       (let* ((name (ts (second form)))
+              (fields (parse-arg-list
+                        context
+                        (copy-source-loc (third form) (cddr form))))
+              (field-names (car fields))
+              (field-types (cdr fields)))
+         (add-struct-type context name field-names field-types)))
       ('extern
        (unless (length-is? (cdr form) 4)
          (fail!

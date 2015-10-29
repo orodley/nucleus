@@ -63,6 +63,97 @@
 (defun func-type? (typ)
   (and (cons? typ) (or (eq? (first typ) 'any-func) (eq? (first typ) 'func))))
 
+;;; TODO: This should be a struct.
+(defun make-struct-type (name llvm-type id) (list name llvm-type id))
+(defun struct-type-name (st) (first st))
+(defun struct-type-llvm-type (st) (second st))
+(defun struct-type-id (st) (third st))
+
+;;; TODO: This should be a hash table
+(defvar $struct-types nil)
+(defvar $struct-count 0)
+
+(defun add-struct-type (context struct-name field-names field-types)
+  (let* ((id $struct-count)
+         (num-fields (length field-names))
+         (struct-type (LLVMStructCreateNamed (LLVMGetGlobalContext)
+                                             (string<-symbol struct-name)))
+         (struct-pointer-type (LLVMPointerType struct-type 0)))
+    (LLVMStructSetBody
+      struct-type
+      (map (lambda (type-spec)
+             (llvm-type<-type-spec context type-spec))
+           field-types)
+      num-fields
+      false)
+    (set $struct-types
+         (cons (cons struct-name
+                     (make-struct-type struct-name struct-pointer-type id))
+               $struct-types))
+    (enumerate
+      (lambda (field-index name-and-type)
+        (let* ((field-name (ts (car name-and-type)))
+               (field-type (cdr name-and-type))
+               (getter-name (symbol<-string (format nil "~.~" struct-name field-name)))
+               (setter-name (symbol<-string (format nil "~.~=" struct-name field-name)))
+               (getter (add-func context getter-name '(arg)
+                                 (list struct-name) field-type 'builtin nil))
+               (setter (add-func context setter-name '(arg1 arg2)
+                                 (list struct-name field-type)
+                                 field-type 'builtin nil)))
+          (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock
+                                               (func-llvm-func getter)
+                                               "entry"))
+          (LLVMBuildRet
+            $builder
+            (LLVMBuildLoad
+              $builder
+              (LLVMBuildStructGEP
+                $builder
+                (first (llvm-params (func-llvm-func getter)))
+                field-index
+                "")
+              (string<-symbol field-name)))
+          (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock
+                                               (func-llvm-func setter)
+                                               "entry"))
+          (LLVMBuildStore
+            $builder
+            (second (llvm-params (func-llvm-func setter)))
+            (LLVMBuildStructGEP
+              $builder
+              (first (llvm-params (func-llvm-func setter)))
+              field-index
+              ""))
+          (LLVMBuildRet
+            $builder
+            (second (llvm-params (func-llvm-func setter))))))
+      (zip field-names field-types))
+    (let ((constructor (add-func context struct-name
+                                 (repeat num-fields 'arg)
+                                 field-types struct-name 'builtin nil)))
+      (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock
+                                           (func-llvm-func constructor)
+                                           "entry"))
+      (let ((struct-value
+              (LLVMBuildBitCast
+                $builder
+                (gc-alloc (LLVMABISizeOfType
+                            (context-target-data context) struct-type))
+                struct-pointer-type
+                "")))
+        (enumerate
+          (lambda (field-index param)
+            (LLVMBuildStore
+              $builder
+              param
+              (LLVMBuildStructGEP $builder struct-value field-index "")))
+          (llvm-params (func-llvm-func constructor)))
+        (LLVMBuildRet $builder struct-value)))
+    (set $struct-count (+ $struct-count 1))))
+
+(defun get-struct-type (name) (assoc-cdr name $struct-types))
+
 (defun type-eq? (t1 t2)
   (or (eq? t1 t2)
       (and (cons-type? t1) (cons-type? t2)
@@ -302,11 +393,16 @@
       ('float (LLVMFloatType))
 
       (default
-        (fail! context
-               (format nil "Unsupported type-spec for llvm-type<-type-spec '~'" type-spec)
-               $dummy-source-loc ; TODO: better source loc
-               nil false)
-        NUC-VAL))))
+        (let ((struct-type (get-struct-type type-spec)))
+          (cond
+            ((not (nil? struct-type))
+             (struct-type-llvm-type struct-type))
+            (true
+              (fail! context
+                     (format nil "Unsupported type-spec for llvm-type<-type-spec '~'" type-spec)
+                     $dummy-source-loc ; TODO: better source loc
+                     nil false)
+              NUC-VAL)))))))
 
 (defun type-id<-type-spec (context type-spec)
   (case type-spec

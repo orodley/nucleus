@@ -1,0 +1,9 @@
+; compile-stderr: Static type error
+
+(struct Foo
+  (bar int)
+  baz)
+
+(defun main ()
+  (let ((foo (Foo 1 2)))
+    (Foo.bar= foo "bar")))
