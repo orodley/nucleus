@@ -82,8 +82,11 @@
 (defun get-builtin-function (name) (assoc-cdr name $builtin-functions))
 (defun get-builtin-macro (name) (assoc-cdr name $builtin-macros))
 
+;; TODO: Annotate these. To be done separately to make sure the proxies don't
+;; break anything
+
 (defun special-form-set (context args)
-  (let* ((env (context-env context))
+  (let* ((env (Context.env context))
          (name (first args))
          (binding (get-binding context (ts name)))
          (new-value (compile-expr context (second args))))
@@ -115,10 +118,10 @@
          (terms (map (lambda (clause)
                        (compile-expr context (second (ts clause))))
                       clauses))
-         (original-env (context-env context)))
+         (original-env (Context.env context)))
     (extend-env-with-terms context names terms)
     (let ((let-term (compile-progn context body)))
-      (context-set-env context original-env)
+      (Context.env= context original-env)
       let-term)))
 
 (defun builtin-macro-let* (context args)

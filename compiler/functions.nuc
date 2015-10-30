@@ -12,7 +12,7 @@
 (defun func-body (func) (seventh func))
 (defun func-llvm-func (func) (eighth func))
 
-(defun add-func (context name arg-names arg-types return-type impl-type body)
+(defun add-func ((context Context) name arg-names arg-types return-type impl-type body)
   (when $output-debug-info (format true "Adding func ~" name))
   (if (not (nil? (get-func name)))
     (fail! context
@@ -40,21 +40,21 @@
     name
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
-(defun compile-function (context func)
+(defun compile-function ((context Context) func)
   (when $output-debug-info (format true "(c-func ... ~)" func))
   ;; if it's extern we don't need to compile it, the implmentation already
   ;; exists and will be found at link time
   (when (eq? (func-impl-type func) 'nucleus)
-    (context-set-func context func)
+    (Context.func= context func)
     (%compile-function
       context (func-arg-names func) (func-arg-types func)
       (func-return-type func) (func-body func) (func-llvm-func func))))
 
 ;; TODO: This is basically a subset of what compile-lambda does, we should
 ;; combine the two.
-(defun %compile-function (context arg-names arg-types return-type body llvm-func)
+(defun %compile-function ((context Context) arg-names arg-types return-type body llvm-func)
   (let* ((original-block (LLVMGetInsertBlock $builder))
-         (original-env (context-env context))
+         (original-env (Context.env context))
          (params (llvm-params llvm-func)))
       (assert! (not (null? llvm-func)) "Function should have been declared")
       (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
@@ -77,7 +77,7 @@
                   (car (last body)))))))
       (unless (null? original-block) ; if we weren't in a block before it's null
         (LLVMPositionBuilderAtEnd $builder original-block))
-      (context-set-env context original-env)
+      (Context.env= context original-env)
       (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
         (LLVMDumpValue llvm-func)
         (fail!
@@ -86,7 +86,7 @@
           $dummy-source-loc ; TODO: track source loc in 'func's
           nil false))))
 
-(defun make-lambda (context llvm-func arg-types return-type captures)
+(defun make-lambda ((context Context) llvm-func arg-types return-type captures)
   (let* ((arity (length arg-types))
          (ary-type (LLVMArrayType (LLVMPointerType NUC-VAL 0) (length captures)))
          (captures-array
@@ -127,8 +127,8 @@
       false)))
 
 ;; TODO: allow type annotations for lambdas
-(defun compile-lambda (context source-loc name arg-list body captured-bindings)
-  (let* ((old-func (context-func context))
+(defun compile-lambda ((context Context) source-loc name arg-list body captured-bindings)
+  (let* ((old-func (Context.func context))
          (params (repeat (length arg-list) NUC-VAL))
          (names-and-types (parse-arg-list context arg-list))
          (arg-names (car names-and-types))
@@ -144,13 +144,13 @@
                                    params
                                    (cons (LLVMPointerType CLOSURE 0) params)))))
     ;; TODO: parse return type declarations
-    (context-set-func
+    (Context.func=
       context
       (make-func name (length arg-names) arg-names arg-types '? body 'nucleus func))
     ;; TODO: set LLVM param names
     (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock func "entry"))
     (let* ((params (llvm-params func))
-           (original-env (context-env context)))
+           (original-env (Context.env context)))
       (extend-env-with-bindings
         context
         (map2 (lambda (i binding)
@@ -197,14 +197,14 @@
                (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name)
                source-loc
                nil false))
-      (context-set-func context old-func)
-      (context-set-env context original-env))
+      (Context.func= context old-func)
+      (Context.env= context original-env))
     func))
 
-(defun find-captured-vars (context body args)
+(defun find-captured-vars ((context Context) body args)
   (unique (%find-captured-vars context body args)))
 
-(defun %find-captured-vars (context sexpr to-ignore)
+(defun %find-captured-vars ((context Context) sexpr to-ignore)
   (cond
     ((atom? sexpr)
      (if (member? sexpr to-ignore)
@@ -228,7 +228,7 @@
          (%find-captured-vars context (cddr sexpr) to-ignore))))
     (true (mappend (lambda (e) (%find-captured-vars context (ts e) to-ignore)) sexpr))))
 
-(defun call-closure (context closure-term arg-terms proxy?)
+(defun call-closure ((context Context) closure-term arg-terms proxy?)
   (let* ((num-args (length arg-terms))
          (arity (func-type-arity (tt closure-term))))
     (when $output-debug-info
@@ -339,7 +339,7 @@
           original-arg-types
           proxy-arg-types))
 
-(defun compile-proxy-function (context closure-term proxy-func-type)
+(defun compile-proxy-function ((context Context) closure-term proxy-func-type)
   (when $output-debug-info
     (format true "(c-p-f ... ~ ~)" closure-term proxy-func-type))
   (let* ((original-arg-types (func-type-arg-types (tt closure-term)))

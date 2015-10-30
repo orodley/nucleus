@@ -17,7 +17,7 @@
 ;;; TODO: This should go in the context, along with $module and $builder
 (defvar $generic-functions nil)
 
-(defun add-generic-func (context name arg-names arg-types return-type
+(defun add-generic-func ((context Context) name arg-names arg-types return-type
                                  return-type-source-loc body)
   (when $output-debug-info (format true "Adding generic func ~" name))
   (let* ((arity (length arg-names))
@@ -59,8 +59,9 @@
   (and (not (cons? type-spec))
        (eq? (char-at (string<-symbol type-spec) 0) 36))) ; 36 = '$'
 
-(defun get-generic-func-specialization (context generic-func concrete-arg-types
-                                                concrete-ret-type blame-source-loc)
+(defun get-generic-func-specialization
+  ((context Context) generic-func concrete-arg-types
+                     concrete-ret-type blame-source-loc)
   (let ((existing (find (lambda (pair)
                           (let ((arg-types (car pair))
                                 (impl (cdr pair)))
@@ -95,7 +96,7 @@
                 (type-eq? desired-type actual-type))))
         (zip (generic-func-arg-types generic-func) concrete-arg-types)))
 
-(defun get-concrete-types (context generic-func arg-terms)
+(defun get-concrete-types ((context Context) generic-func arg-terms)
   (let* ((type-var-map nil)
          (concrete-arg-types
            (map2 (lambda (func-arg-type arg-term)
@@ -124,8 +125,8 @@
 (defun mangle-generic-func-name (name concrete-arg-types concrete-ret-type)
   (format nil "nuc-generic(~$~->~)" name concrete-arg-types concrete-ret-type))
 
-(defun compile-generic-function-impl (context generic-func concrete-arg-types
-                                              concrete-ret-type)
+(defun compile-generic-function-impl ((context Context) generic-func concrete-arg-types
+                                                        concrete-ret-type)
   (when $output-debug-info
     (format true "(c-g-f-i ... ~ ~ ~)"
             generic-func concrete-arg-types concrete-ret-type))

@@ -16,7 +16,7 @@
 (defun tv (term) (second term))
 (defun tl? (term) (third term))
 
-(defun coerce (context term typ blame-source-loc)
+(defun coerce ((context Context) term typ blame-source-loc)
   (when $output-debug-info (format true "(coerce ... ~ ~)" term typ))
   (cond
     ((type-eq? (tt term) typ) term)
@@ -73,7 +73,7 @@
 (defvar $struct-types nil)
 (defvar $struct-count 0)
 
-(defun add-struct-type (context struct-name field-names field-types)
+(defun add-struct-type ((context Context) struct-name field-names field-types)
   (let* ((id $struct-count)
          (num-fields (length field-names))
          (struct-type (LLVMStructCreateNamed (LLVMGetGlobalContext)
@@ -139,7 +139,7 @@
               (LLVMBuildBitCast
                 $builder
                 (gc-alloc (LLVMABISizeOfType
-                            (context-target-data context) struct-type))
+                            (Context.target-data context) struct-type))
                 struct-pointer-type
                 "")))
         (enumerate
@@ -195,7 +195,7 @@
     '?
     (fourth type-spec)))
 
-(defun i64<-term (context term)
+(defun i64<-term ((context Context) term)
   (case (LLVMGetTypeKind (llvm-type<-type-spec context (tt term)))
     (LLVMPointerTypeKind (LLVMBuildPtrToInt $builder (tv term) NUC-VAL ""))
     (LLVMIntegerTypeKind (LLVMBuildIntCast $builder (tv term) NUC-VAL ""))
@@ -210,7 +210,7 @@
                     $dummy-source-loc ; TODO: better source loc
                     NUC-VAL false))))
 
-(defun term<-i64 (context val dest-type)
+(defun term<-i64 ((context Context) val dest-type)
   (let ((llvm-type (llvm-type<-type-spec context dest-type)))
     (case (LLVMGetTypeKind llvm-type)
       (LLVMPointerTypeKind (LLVMBuildIntToPtr $builder val llvm-type ""))
@@ -237,7 +237,7 @@
     (list 'cons '? '?)
     typ))
 
-(defun convert-cons (context cons-ptr src-type dest-type blame-source-loc)
+(defun convert-cons ((context Context) cons-ptr src-type dest-type blame-source-loc)
   (when $output-debug-info
     (format true "(convert-cons ... ~ ~ ~ ~)" cons-ptr src-type dest-type blame-source-loc))
   (assert! (and (cons-type? src-type) (cons-type? dest-type))
@@ -260,7 +260,7 @@
       (LLVMPositionBuilderAtEnd $builder after-block)
       cons-ptr)))
 
-(defun convert-cons-field (context cons-ptr field-getter field-setter gr-setter
+(defun convert-cons-field ((context Context) cons-ptr field-getter field-setter gr-setter
                                    src-field-type dest-field-type blame-source-loc)
   (when $output-debug-info
     (format true "(convert-cons-field ... ~ ... ... ... ~ ~ ~)"
@@ -315,7 +315,7 @@
     (LLVMPositionBuilderAtEnd $builder after-block))
   cons-val)
 
-(defun type-size (context typ)
+(defun type-size ((context Context) typ)
   (LLVMGetIntTypeWidth (llvm-type<-type-spec context typ)))
 
 (defun remove-lowtag (val)
@@ -360,7 +360,7 @@
 
 ;; TODO: This should have a way of taking a token for the type spec, so we can
 ;; blame the user when they enter an incorrect type
-(defun llvm-type<-type-spec (context type-spec)
+(defun llvm-type<-type-spec ((context Context) type-spec)
   (if (cons? type-spec)
     (case (first type-spec)
       ('cons CONS-CELL-PTR)
@@ -411,7 +411,7 @@
                      nil false)
               NUC-VAL)))))))
 
-(defun type-id<-type-spec (context type-spec)
+(defun type-id<-type-spec ((context Context) type-spec)
   (case type-spec
     ;; FFI stuff
     ('* LLVM-FOREIGN-T)
@@ -439,7 +439,7 @@
              nil false)
       LLVM-CONS-T)))
 
-(defun static-val<-dynamic-val (context type-spec val blame-source-loc)
+(defun static-val<-dynamic-val ((context Context) type-spec val blame-source-loc)
   (cond
     ((type-eq? type-spec '*)
      (check-type val LLVM-FOREIGN-T)
@@ -565,7 +565,7 @@
                    blame-source-loc
                    CONS-CELL-PTR false)))))))
 
-(defun dynamic-val<-static-val (context type-spec val blame-source-loc)
+(defun dynamic-val<-static-val ((context Context) type-spec val blame-source-loc)
   (cond
     ((type-eq? type-spec '*)
       (add-lowtag
@@ -691,7 +691,7 @@
                  blame-source-loc
                  NUC-VAL false))))))
 
-(defun implicit-conversion (context term typ blame-source-loc)
+(defun implicit-conversion ((context Context) term typ blame-source-loc)
   (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))
   (cond
     ((and (integral? (tt term)) (integral? typ))
@@ -782,7 +782,7 @@
                  blame-source-loc
                  (llvm-type<-type-spec context typ) false))))
 
-(defun unroll-list-type (context cons-type list-element-type)
+(defun unroll-list-type ((context Context) cons-type list-element-type)
   ;; Converting from a cons type to a list type (or vice versa) is  equivalent
   ;; to a conversion involving a partially
   ;; "unrolled" list type.
@@ -803,7 +803,7 @@
 
 ;;; Given a list of terms (which are arguments to some arithmetic builtin) this
 ;;; converts them all to the "maximum" type, where f64 > f32 > i64 > i32 > i16 > i8
-(defun arithmetic-conversion (context terms blame-source-loc)
+(defun arithmetic-conversion ((context Context) terms blame-source-loc)
   (let ((max-type 'u8)
         (terms
           (map

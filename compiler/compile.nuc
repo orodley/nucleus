@@ -1,36 +1,23 @@
 ;;;; Core code for compiling. Toplevel forms, expressions, etc.
 
-;;; TODO: Think about the naming convention for "type constructors". Maybe we
-;;; could use capitals so the function that produces one can be shorter while
-;;; still allowing the lowercase version for variable names.
-
 ;;; TODO: Replace with a hash table once that exists
 ;;; TODO: These should go in the context, along with $module and $builder
 (defvar $functions nil)
 
-;;; TODO: Replace with a struct once they exist
-(defun make-context (env file func target-data errors)
-  (list env file func target-data errors))
-(defun context-env (context) (first context))
-(defun context-file (context) (second context))
-(defun context-func (context) (third context))
-(defun context-target-data (context) (fourth context))
-(defun context-errors (context) (fifth context))
-(defun context-set-env (context (new-env cons)) (set-car context new-env))
-(defun context-set-file (context new-file) (set-car (cdr context) new-file))
-(defun context-set-func (context new-func) (set-car (cddr context) new-func))
-(defun context-set-target-data (context new-target-data)
-  (set-car (cdddr context) new-target-data))
-(defun context-set-errors (context new-errors)
-  (set-car (cddddr context) new-errors))
-(defun push-error (context error)
-  (context-set-errors context (cons error (context-errors context))))
+(struct Context
+  env
+  file
+  func
+  target-data
+  errors)
 
-(defun make-error (message source-context source-loc)
-  (list message source-context source-loc))
-(defun error-message (error) (first error))
-(defun error-source-context (error) (second error))
-(defun error-source-loc (error) (third error))
+(defun push-error ((context Context) (error Error))
+  (Context.errors= context (cons error (Context.errors context))))
+
+(struct Error
+  message
+  source-context
+  source-loc)
 
 ;; The following function is handy for debugging - with 'br nuc(break-on-me)'
 ;; in .gdbinit, this acts like a breakpoint.
@@ -45,8 +32,8 @@
 ;;; TODO: Rather than panicing, this should return a term containing an LLVM
 ;;; 'undef' value, and stick the error into a list in the context. That way we
 ;;; can report multiple errors at once.
-(defun fail! (context (message string) source-loc result-type lvalue?)
-  (let* ((func (context-func context))
+(defun fail! ((context Context) (message string) source-loc result-type lvalue?)
+  (let* ((func (Context.func context))
          (typ (cond
                 ((eq? (type result-type) foreign-t)
                  result-type)
@@ -67,7 +54,7 @@
     (when $output-debug-info
       (format true "Got an error: ~" message))
     (break-on-me)
-    (push-error context (make-error message source-context source-loc))
+    (push-error context (Error message source-context source-loc))
     (cond
       ((eq? (type result-type) foreign-t) val)
       ((not (nil? result-type)) (make-term result-type val lvalue?))
@@ -96,12 +83,92 @@
                                                   (make-term typ val false)))
 (defun make-var (name val typ) (make-binding name (make-term typ val true)))
 
-(defun process-toplevel-form (context token)
+(defun process-toplevel-form-phase1 ((context Context) token remaining-forms)
   (when $output-debug-info (format true "(p-t-f .. ~)" token))
   ;; NOTE: Once we have 'defmacro' we'll need to another pass over the toplevel
   ;; forms to find 'defmacro's and compile their dependency tree
   (let* ((token (macroexpand context token))
          (form (ts token)))
+    (case (ts (first form))
+      
+      ('defvar
+       (when (length>= form 4)
+         (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
+                                (length form))
+                (token-source-loc token)
+                nil false))
+       (let ((name (second form)))
+         (if (nil? (get-binding context (ts name)))
+           (let* ((value (if (length-is? form 3) (third form) (dummy-token 'nil)))
+                  (init (llvm-i64<-int (if (int? (ts value))
+                                         (<< (ts value) LOWTAG-BITS)
+                                         0)))
+                  (global (add-global context name '?)))
+             (LLVMSetInitializer global init)
+             (unless (int? (ts value))
+               (add-initialiser global value)))
+           (fail! context
+                  (format nil "Redefinition of variable '~'" (ts name))
+                  (token-source-loc name)
+                  nil false))))
+      ('struct
+       (unless (length>= form 2)
+         (fail! context
+                (format nil "Invalid number of arguments to 'struct' (got ~, expected 2+)"
+                        (length form))
+                (token-source-loc (first form))
+                nil false))
+       (let* ((name (ts (second form)))
+              (fields (parse-arg-list
+                        context
+                        (copy-source-loc (first form) (cddr form))))
+              (field-names (car fields))
+              (field-types (cdr fields)))
+         (add-struct-type context name field-names field-types)))
+      ('include
+       (unless (length-is? (cdr form) 1)
+         (fail!
+           context
+           (format nil "Invalid number of arguments to 'include' (got ~, expected 1)"
+                   (length (cdr form)))
+           (token-source-loc token)
+           nil false))
+       (let* ((including-file (Context.file context))
+              (filename (if (string-ends-with? (ts (second form)) ".nuc")
+                          (ts (second form))
+                          (string-concat (ts (second form)) ".nuc")))
+              (included-file (ensure-absolute filename
+                                              (dirname including-file))))
+         (set remaining-forms
+              (process-file-phase1
+                context remaining-forms
+                (token-source-loc (first form)) (list included-file)))))
+      ;; TODO: should this be called 'c'enum? It's just a regular enum really.
+      ('cenum
+       (when (nil? (cdr form))
+         (fail! context "An enum must have one or more values"
+                (token-source-loc token) nil false))
+       ;; TODO: support negative integer literals
+       (let ((enum-variant-value (- 0 1)))
+         (each
+           (lambda (enum-variant)
+             (let ((name (if (cons? (ts enum-variant))
+                           (car (ts enum-variant))
+                           enum-variant))
+                   (value (set enum-variant-value
+                               (if (cons? (ts enum-variant))
+                                 (ts (second (ts enum-variant)))
+                                 (+ 1 enum-variant-value)))))
+               (LLVMSetInitializer
+                 (add-global context name '?)
+                 (fixnum<-llvm-int (llvm-i64<-int value)))))
+           (cdr form))))
+      (default
+        (set remaining-forms (cons token remaining-forms)))))
+  remaining-forms)
+
+(defun process-toplevel-form-phase2 (context token)
+  (let ((form (ts token)))
     (case (ts (first form))
       ('defun
        (when $output-debug-info (write-string-ln "processing defun"))
@@ -152,40 +219,6 @@
            (add-generic-func context (ts name) arg-names arg-types return-type
                              return-type-source-loc body)
            (add-func context (ts name) arg-names arg-types return-type 'nucleus body))))
-      ('defvar
-       (when (length>= form 4)
-         (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
-                                (length form))
-                (token-source-loc token)
-                nil false))
-       (let ((name (second form)))
-         (if (nil? (get-binding context (ts name)))
-           (let* ((value (if (length-is? form 3) (third form) (dummy-token 'nil)))
-                  (init (llvm-i64<-int (if (int? (ts value))
-                                         (<< (ts value) LOWTAG-BITS)
-                                         0)))
-                  (global (add-global context name '?)))
-             (LLVMSetInitializer global init)
-             (unless (int? (ts value))
-               (add-initialiser global value)))
-           (fail! context
-                  (format nil "Redefinition of variable '~'" (ts name))
-                  (token-source-loc name)
-                  nil false))))
-      ('struct
-       (unless (length>= form 2)
-         (fail! context
-                (format nil "Invalid number of arguments to 'struct' (got ~, expected 2+)"
-                        (length form))
-                (token-source-loc (first form))
-                nil false))
-       (let* ((name (ts (second form)))
-              (fields (parse-arg-list
-                        context
-                        (copy-source-loc (first form) (cddr form))))
-              (field-names (car fields))
-              (field-types (cdr fields)))
-         (add-struct-type context name field-names field-types)))
       ('extern
        (unless (length-is? (cdr form) 4)
          (fail!
@@ -209,47 +242,12 @@
               (func (make-func nuc-name arity nil arg-types
                                ret-type 'extern nil llvm-func)))
          (set $functions (cons (cons nuc-name func) $functions))))
-      ('include
-       (unless (length-is? (cdr form) 1)
-         (fail!
-           context
-           (format nil "Invalid number of arguments to 'include' (got ~, expected 1)"
-                   (length (cdr form)))
-           (token-source-loc token)
-           nil false))
-       (let* ((including-file (context-file context))
-              (filename (if (string-ends-with? (ts (second form)) ".nuc")
-                          (ts (second form))
-                          (string-concat (ts (second form)) ".nuc")))
-              (included-file (ensure-absolute filename
-                                              (dirname including-file))))
-         (process-file context (token-source-loc (first form)) (list included-file))))
-      ;; TODO: should this be called 'c'enum? It's just a regular enum really.
-      ('cenum
-       (when (nil? (cdr form))
-         (fail! context "An enum must have one or more values"
-                (token-source-loc token) nil false))
-       ;; TODO: support negative integer literals
-       (let ((enum-variant-value (- 0 1)))
-         (each
-           (lambda (enum-variant)
-             (let ((name (if (cons? (ts enum-variant))
-                           (car (ts enum-variant))
-                           enum-variant))
-                   (value (set enum-variant-value
-                               (if (cons? (ts enum-variant))
-                                 (ts (second (ts enum-variant)))
-                                 (+ 1 enum-variant-value)))))
-               (LLVMSetInitializer
-                 (add-global context name '?)
-                 (fixnum<-llvm-int (llvm-i64<-int value)))))
-           (cdr form))))
       (default
         (fail! context (format nil "Invalid top-level form '~'" (ts (first form)))
                (token-source-loc (first form))
                nil false)))))
 
-(defun macroexpand (context token)
+(defun macroexpand ((context Context) token)
   (let ((sexpr (ts token)))
     (if (and (cons? sexpr) (not (nil? sexpr)))
       (let* ((macro-name (ts (first sexpr)))
@@ -264,10 +262,10 @@
           (true (macroexpand context (copy-source-loc token (builtin-macro context args))))))
       token)))
 
-(defun add-global (context name type-spec)
+(defun add-global ((context Context) name type-spec)
   (let* ((global (LLVMAddGlobal $module NUC-VAL (mangle-name (ts name)))))
-    (context-set-env context (cons (make-var name global type-spec)
-                                   (context-env context)))
+    (Context.env= context (cons (make-var name global type-spec)
+                                (Context.env context)))
     global))
 
 (defvar $initialisers nil)
@@ -281,8 +279,8 @@
 (defun << (x y)
   (* x (expt 2 y)))
 
-(defun extend-env-with-terms (context name-tokens terms)
-  (let ((env (context-env context)))
+(defun extend-env-with-terms ((context Context) name-tokens terms)
+  (let ((env (Context.env context)))
     (each (lambda (name-and-term)
             (let* ((name (car name-and-term))
                    (term (cdr name-and-term))
@@ -292,17 +290,17 @@
               (LLVMBuildStore $builder (tv term) var-on-stack)
               (set env (cons (make-var name var-on-stack (tt term)) env))))
           (zip name-tokens terms))
-    (context-set-env context env)))
+    (Context.env= context env)))
 
-(defun extend-env-with-bindings (context bindings)
-  (context-set-env context (append bindings (context-env context))))
+(defun extend-env-with-bindings ((context Context) bindings)
+  (Context.env= context (append bindings (Context.env context))))
 
 ;; TODO: functions as values are still kinda separate, maybe they should also
 ;; be integrated into the environment somehow?
 
-(defun get-binding (context name)
+(defun get-binding ((context Context) name)
   (find (lambda (binding) (eq? (ts (binding-name-token binding)) name))
-        (context-env context)))
+        (Context.env context)))
 
 (defun gc-alloc (size)
   (llvm-build-call
@@ -336,10 +334,10 @@
 (defun set-cdr-gr-value (cons-ptr val)
   (set-gr-value cons-ptr (LLVMBuildOr $builder (get-gr-value cons-ptr) val "")))
 
-(defun cons-size (context)
-  (LLVMABISizeOfType (context-target-data context) CONS-CELL))
+(defun cons-size ((context Context))
+  (LLVMABISizeOfType (Context.target-data context) CONS-CELL))
 
-(defun compile-expr (context expr)
+(defun compile-expr ((context Context) expr)
   (when $output-debug-info
     (format true "(c-e ... ~)" expr))
   (let ((term (%compile-expr context expr)))
@@ -347,7 +345,7 @@
       (format true "(c-e ... ~) -> ~" expr term))
     term))
 
-(defun %compile-expr (context token)
+(defun %compile-expr ((context Context) token)
   (let ((expr (ts token)))
     (case (type expr)
       (fixnum-t
@@ -405,7 +403,7 @@
                       (token-source-loc token)
                       '?  false)))))
 
-(defun compile-form (context token)
+(defun compile-form ((context Context) token)
   (let* ((form (ts token))
          (name (car form))
          (args (cdr form))
@@ -489,10 +487,10 @@
                          (token-source-loc token)
                          (func-return-type func) false))))))))))
 
-(defun compile-progn (context forms)
+(defun compile-progn ((context Context) forms)
   (%compile-progn context (if (nil? forms) (list (dummy-token 'nil)) forms)))
 
-(defun %compile-progn (context forms)
+(defun %compile-progn ((context Context) forms)
   (let ((e (compile-expr context (car forms))))
     (if (nil? (cdr forms))
       e

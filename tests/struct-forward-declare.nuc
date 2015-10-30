@@ -1,0 +1,11 @@
+; status-code: 2
+
+(defun main ()
+  (set $status-code (Foo.baz (id (Foo 1 2)))))
+
+(defun id ((f Foo)) -> Foo
+  f)
+
+(struct Foo
+  bar
+  baz)

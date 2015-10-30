@@ -72,17 +72,28 @@
               (target-data (LLVMCreateTargetData
                              "e-m:e-i64:64-f80:128-n8:16:32:64-S128"))
               (context
-                (make-context (copy-list $constants) nil nil target-data nil)))
+                (Context (copy-list $constants) nil nil target-data nil))
+              (remaining-forms nil))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
-         (process-toplevel-form context (dummy-token (map dummy-token
-                                                          '(defvar $status-code 0))))
+         (set remaining-forms
+              (process-toplevel-form-phase1
+                context 
+                (dummy-token (map dummy-token '(defvar $status-code 0)))
+                remaining-forms))
          ;; TODO: we should have a flag to not include the standard library, and
          ;; then enable it on all tests that don't need standard library functions.
          ;; That way, if the standard library is broken, only the tests that
          ;; actually use it break.
-         (process-file context $dummy-source-loc (list stdlib-same-dir stdlib-parent-dir))
-         (process-file context $dummy-source-loc (list input-filename))
+         (set remaining-forms
+              (process-file-phase1 context remaining-forms $dummy-source-loc
+                                   (list stdlib-same-dir stdlib-parent-dir)))
+         (set remaining-forms
+              (process-file-phase1 context remaining-forms $dummy-source-loc
+                                   (list input-filename)))
+         (each (lambda (form)
+                 (process-toplevel-form-phase2 context form))
+               remaining-forms)
          (each (lambda (f) (compile-function context (cdr f))) $functions)
          (let ((entry-point (LLVMGetNamedFunction
                               $module (mangle-name 'main)))
@@ -127,12 +138,12 @@
                   $dummy-source-loc
                   nil false))
          (cond
-           ((not (nil? (context-errors context)))
+           ((not (nil? (Context.errors context)))
             (set $status-code 1)
-            (format $stderr "~ error(s) generated:" (length (context-errors context)))
+            (format $stderr "~ error(s) generated:" (length (Context.errors context)))
             (write-string-ln-to-stream $stderr "")
             (each (lambda (err)
-                    (let* ((source-loc (error-source-loc err))
+                    (let* ((source-loc (Error.source-loc err))
                            (filename (source-loc-source-name source-loc))
                            (filename-to-report
                              (if (absolute-path? filename)
@@ -145,12 +156,12 @@
                               (source-loc-line source-loc)
                               (source-loc-col source-loc))
                       (write-string-to-stream $stderr "in ")
-                      (write-string-to-stream $stderr (error-source-context err))
+                      (write-string-to-stream $stderr (Error.source-context err))
                       (write-string-ln-to-stream $stderr ":")
                       (write-string-to-stream $stderr "    ")
-                      (write-string-ln-to-stream $stderr (error-message err))
+                      (write-string-ln-to-stream $stderr (Error.message err))
                       (write-string-ln-to-stream $stderr "")))
-                  (reverse (context-errors context))))
+                  (reverse (Context.errors context))))
            (true
              ;; TODO: not portable
              (let ((tmp-bc-file (format nil "/tmp/~.bc" (random)))
@@ -205,21 +216,28 @@
     (true
       (write-string-ln "Usage: nucc <input filename>"))))
 
-(defun process-file (context source-loc filename-and-backups)
+(defun process-file-phase1 ((context Context) remaining-forms source-loc
+                                              filename-and-backups)
   (let ((filename (first filename-and-backups)))
     (when $output-debug-info (format true "Processing file '~'" filename))
     (cond
       ((file-exists? filename)
-       (let ((old-file (context-file context)))
-         (context-set-file context filename)
+       (let ((old-file (Context.file context)))
+         (Context.file= context filename)
          (let* ((file (open filename))
                 (forms (read-all-with-source-loc file)))
            (close file)
-           (each (lambda (form) (process-toplevel-form context form)) forms))
-         (context-set-file context old-file)))
+           (each (lambda (form)
+                   (set remaining-forms
+                        (process-toplevel-form-phase1 context form remaining-forms)))
+                 forms))
+         (Context.file= context old-file))
+       remaining-forms)
       ((nil? (cdr filename-and-backups))
        (fail! context
               (format nil "Could not find file ~" filename)
               source-loc
-              nil false))
-      (true (process-file context source-loc (rest filename-and-backups))))))
+              nil false)
+       remaining-forms)
+      (true (process-file-phase1 context remaining-forms
+                                 source-loc (rest filename-and-backups))))))
