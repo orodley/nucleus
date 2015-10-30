@@ -1,0 +1,14 @@
+; run-stderr: Wrong type given! Expected FIXNUM, got STRUCT.\n
+; status-code: 1
+
+(struct Foo
+  bar
+  baz)
+
+(defun foo ((f int))
+  nil)
+
+(defun id (x) x)
+
+(defun main ()
+  (foo (id (Foo 1 2))))

@@ -35,6 +35,7 @@
 (defvar LOWTAG-BITS 3)
 
 (defvar FIXNUM-LOWTAG 0)
+(defvar STRUCT-LOWTAG 1)
 (defvar CONS-LOWTAG 2)
 (defvar SYMBOL-LOWTAG 3)
 (defvar STRING-LOWTAG 4)

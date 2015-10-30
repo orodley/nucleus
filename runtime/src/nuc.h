@@ -19,6 +19,7 @@ typedef uint32_t Symbol;
 #define REMOVE_LOWTAG(x) (((nuc_val)(x)) & ~LOWTAG_MASK)
 
 #define FIXNUM_LOWTAG 0
+#define STRUCT_LOWTAG 1
 #define CONS_LOWTAG 2
 // TODO: does this really need a lowtag or could we move it to an exttag?
 // it's just an integer index into the symbol table, so we probably don't need
@@ -55,6 +56,7 @@ typedef uint32_t Symbol;
 #define FOREIGN_TYPE MAKE_DISCRETE(9)
 #define STRING_TYPE MAKE_DISCRETE(10)
 #define LAMBDA_TYPE MAKE_DISCRETE(11)
+#define STRUCT_TYPE MAKE_DISCRETE(12)
 
 typedef union Float_converter
 {

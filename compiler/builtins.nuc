@@ -61,6 +61,7 @@
 (defvar LLVM-FOREIGN-T (llvm-i64<-int 2311))
 (defvar LLVM-STRING-T (llvm-i64<-int 2567))
 (defvar LLVM-LAMBDA-T (llvm-i64<-int 2823))
+(defvar LLVM-STRUCT-T (llvm-i64<-int 3079))
 ;; TODO: these should all have static types
 (defvar $constants
   (list
@@ -74,7 +75,8 @@
     (make-constant 'symbol-t LLVM-SYMBOL-T '?)
     (make-constant 'foreign-t LLVM-FOREIGN-T '?)
     (make-constant 'string-t LLVM-STRING-T '?)
-    (make-constant 'lambda-t LLVM-LAMBDA-T '?)))
+    (make-constant 'lambda-t LLVM-LAMBDA-T '?)
+    (make-constant 'struct-t LLVM-STRUCT-T '?)))
 
 (defun get-special-form (name) (assoc-cdr name $special-forms))
 (defun get-builtin-function (name) (assoc-cdr name $builtin-functions))

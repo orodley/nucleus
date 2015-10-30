@@ -182,7 +182,7 @@
        (let* ((name (ts (second form)))
               (fields (parse-arg-list
                         context
-                        (copy-source-loc (third form) (cddr form))))
+                        (copy-source-loc (first form) (cddr form))))
               (field-names (car fields))
               (field-types (cdr fields)))
          (add-struct-type context name field-names field-types)))

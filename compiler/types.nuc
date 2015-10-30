@@ -344,6 +344,13 @@
     (list val type-as-llvm-val)
     ""))
 
+(defun check-struct-type (val type-id)
+  (llvm-build-call
+    $builder
+    (runtime-func "rt_check_struct_type" VOID (list NUC-VAL (LLVMIntType 32)))
+    (list val (llvm-i32<-int type-id))
+    ""))
+
 (defun llvm-i64<-int (x) (LLVMConstInt (LLVMIntType 64) x false))
 (defun llvm-i32<-int (x) (LLVMConstInt (LLVMIntType 32) x false))
 (defun llvm-i8<-int (x) (LLVMConstInt (LLVMIntType 8) x false))
@@ -532,10 +539,31 @@
      ;; TODO: We should have a separate exttag for types so that we can do a
      ;; check-type here.
      (LLVMBuildLShr $builder val (llvm-i64<-int (+ LOWTAG-BITS EXTTAG-BITS)) ""))
-    (true (fail! context
-                 (format nil "Unsupported type-spec '~'" type-spec)
-                 blame-source-loc
-                 CONS-CELL-PTR false))))
+    (true
+      (let ((struct-type (get-struct-type type-spec)))
+        (cond
+          ((not (nil? struct-type))
+           (check-struct-type val (struct-type-id struct-type))
+           ;; We have to do two things:
+           ;;  1) Remove the lowtag, which we do as usual
+           ;;  2) Remove the struct tag
+           ;; Removing the struct tag means replacing the top 16 bits with a
+           ;; copy of the top 17th bit. We do this by shifting left by 16, and
+           ;; then doing a sign-extending right shift by 16.
+           (LLVMBuildIntToPtr
+             $builder
+             (LLVMBuildAShr
+               $builder
+               (LLVMBuildShl $builder (remove-lowtag val) (llvm-i64<-int 16) "")
+               (llvm-i64<-int 16)
+               "")
+             (struct-type-llvm-type struct-type)
+             ""))
+          (true
+            (fail! context
+                   (format nil "Unsupported type-spec '~'" type-spec)
+                   blame-source-loc
+                   CONS-CELL-PTR false)))))))
 
 (defun dynamic-val<-static-val (context type-spec val blame-source-loc)
   (cond
@@ -639,10 +667,29 @@
                  context (make-term type-spec val false)
                  (list 'func (repeat (func-type-arity type-spec) '?) '-> '?)))))
        (add-lowtag closure-ptr LAMBDA-LOWTAG)))
-    (true (fail! context
+    (true
+      (let ((struct-type (get-struct-type type-spec)))
+        (if (not (nil? struct-type))
+          ;; Add the lowtag, zero out the top 16 bits, add our struct tag.
+          (LLVMBuildOr
+            $builder
+            (LLVMBuildAnd
+              $builder
+              (add-lowtag val STRUCT-LOWTAG)
+              (llvm-i64<-int (- (<< 1 48) 1))
+              "")
+            ;; We do the left shift in LLVM-space so we don't have to deal
+            ;; with a value which might need the top bit.
+            (LLVMBuildShl
+              $builder
+              (llvm-i64<-int (struct-type-id struct-type))
+              (llvm-i64<-int 48)
+              "")
+            "")
+          (fail! context
                  (format nil "Unsupported type-spec '~'" type-spec)
                  blame-source-loc
-                 NUC-VAL false))))
+                 NUC-VAL false))))))
 
 (defun implicit-conversion (context term typ blame-source-loc)
   (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))

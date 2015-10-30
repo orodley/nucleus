@@ -1,0 +1,12 @@
+; run-stderr: Wrong type given! Expected struct 0, got struct 1.\n
+; status-code: 1
+
+(struct Foo)
+(struct Bar)
+
+(defun foo ((f Foo)) nil)
+
+(defun id (x) x)
+
+(defun main ()
+  (foo (id (Bar))))

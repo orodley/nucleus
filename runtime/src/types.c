@@ -7,6 +7,7 @@ nuc_val rt_type(nuc_val val)
 {
 	switch (LOWTAG(val)) {
 	case FIXNUM_LOWTAG: return FIXNUM_TYPE;
+	case STRUCT_LOWTAG: return STRUCT_TYPE;
 	case CONS_LOWTAG: return CONS_TYPE;
 	case SYMBOL_LOWTAG:  return SYMBOL_TYPE;
 	case STRING_LOWTAG: return STRING_TYPE;
@@ -36,8 +37,8 @@ static const char *type_name(nuc_val type)
 #define CASE(x) case x##_TYPE: return #x;
 
 	switch (type) {
-		CASE(FIXNUM) CASE(CONS) CASE(SYMBOL) CASE(STRING) CASE(LAMBDA)
-		CASE(FOREIGN) CASE(BOOL) CASE(FLOAT)
+		CASE(FIXNUM) CASE(STRUCT) CASE(CONS) CASE(SYMBOL) CASE(STRING)
+		CASE(LAMBDA) CASE(FOREIGN) CASE(BOOL) CASE(FLOAT)
 		default: printf("Got type %d (ft = %d)\n", (int)type, (int)FIXNUM_TYPE); UNREACHABLE;
 	}
 
@@ -46,8 +47,6 @@ static const char *type_name(nuc_val type)
 
 // TODO: doesn't handle exttags
 // TODO: use libbacktrace for better error messages
-// TODO: make a wrapper that only takes the first two arguments: this is called
-// implicitly all over the place and it's a large call sequence at the moment.
 void rt_check_type_from_c(nuc_val val, nuc_val expected_type,
 		const char *file, const char *func, int line)
 {
@@ -65,4 +64,20 @@ void rt_check_type_from_c(nuc_val val, nuc_val expected_type,
 void rt_check_type(nuc_val val, nuc_val expected_type)
 {
 	rt_check_type_from_c(val, expected_type, NULL, NULL, 0);
+}
+
+void rt_check_struct_type(nuc_val val, int type_id)
+{
+	if (LOWTAG(val) != STRUCT_LOWTAG) {
+		fprintf(stderr, "Wrong type given! Expected struct %d, got %s.\n",
+				type_id, type_name(rt_type(val)));
+		exit(1);
+	}
+
+	int actual_type_id = val >> 48;
+	if (actual_type_id != type_id) {
+		fprintf(stderr, "Wrong type given! Expected struct %d, got struct %d.\n",
+				type_id, actual_type_id);
+		exit(1);
+	}
 }
