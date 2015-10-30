@@ -124,12 +124,6 @@ def run_test(result):
     result['status-code'] = program_proc.returncode
     os.remove(binary_path)
 
-    if result['run-stderr'] != '':
-        result['passed'] = False;
-        result['error'] = "non-empty stderr at runtime:\n" \
-            + indent(result['run-stderr'])
-        return result
-
     result['passed'] = True
     if result['status-code'] != result['expected-status-code']:
         result['passed'] = False
@@ -139,6 +133,10 @@ def run_test(result):
         result['passed'] = False
         result['error'] = "expected runtime stdout of %r, got %r" % \
             (result['expected-run-stdout'], result['run-stdout'])
+    if result['run-stderr'] != result['expected-run-stderr']:
+        result['passed'] = False
+        result['error'] = "expected runtime stderr of %r, got %r" % \
+            (result['expected-run-stderr'], result['run-stderr'])
 
     return result
 
@@ -151,6 +149,7 @@ def process_header(result, f):
             break
     result['expected-status-code'] = 0
     result['expected-run-stdout'] = ''
+    result['expected-run-stderr'] = ''
     result['expected-compile-stderr'] = ''
     result['stdin'] = ''
     for line in lines:
@@ -161,6 +160,8 @@ def process_header(result, f):
             result['expected-status-code'] = int(expectation)
         elif expectation_type == 'run-stdout':
             result['expected-run-stdout'] = escape_str(expectation)
+        elif expectation_type == 'run-stderr':
+            result['expected-run-stderr'] = escape_str(expectation)
         elif expectation_type == 'compile-stderr':
             result['expected-compile-stderr'] = escape_str(expectation)
         elif expectation_type == 'stdin':
