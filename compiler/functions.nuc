@@ -68,12 +68,11 @@
               context
               (compile-progn context body)
               return-type
-              (Token.source-loc
-                (if (nil? body)
-                  ;; TODO: track source loc
-                  ;; of the defun form itself
-                  $dummy-source-loc
-                  (car (last body)))))))
+              (if (nil? body)
+                ;; TODO: track source loc
+                ;; of the defun form itself
+                $dummy-source-loc
+                (Token.source-loc (car (last body)))))))
       (unless (null? original-block) ; if we weren't in a block before it's null
         (LLVMPositionBuilderAtEnd $builder original-block))
       (Context.env= context original-env)
