@@ -62,12 +62,15 @@
 (defun func-type? (typ)
   (and (cons? typ) (or (eq? (first typ) 'any-func) (eq? (first typ) 'func))))
 
+;; TODO: Rethink the naming convention here - maybe it should be CamelCase for
+;; type names.
 (struct Struct-type
   (name symbol)
   llvm-type ; TODO: annotation
   (id int))
 
-;;; TODO: This should be a hash table
+;;; TODO: This should be a hash table.
+;;; TODO: This should be in Context
 (defvar $struct-types nil)
 (defvar $struct-count 0)
 
@@ -831,3 +834,27 @@
     (cons max-type
           (map (lambda (term) (tv (coerce context term max-type blame-source-loc)))
                terms))))
+
+;;; Dump all the information we have about struct types into a table accessible
+;;; at runtime. For now we just dump names.
+(defun generate-type-table ()
+  (when $output-debug-info
+    (format true "Generating type info table with ~ entries" $struct-count))
+  ;; NOTE: This corresponds to the structure defined in runtime/src/types.c
+  (let ((type-info-struct
+          (LLVMStructCreateNamed (LLVMGetGlobalContext) "TypeInfo")))
+    (LLVMStructSetBody type-info-struct (list CHAR*) 1 false)
+    (LLVMSetInitializer
+      (LLVMAddGlobal $module (LLVMArrayType type-info-struct $struct-count)
+                     "nuc_type_info_table")
+      (LLVMConstArray
+        type-info-struct
+        (reverse
+          (map (lambda (struct-type)
+                 (LLVMConstNamedStruct
+                   type-info-struct
+                   (list (global-string
+                           (string<-symbol (Struct-type.name (cdr struct-type)))))
+                   1))
+               $struct-types))
+        $struct-count))))

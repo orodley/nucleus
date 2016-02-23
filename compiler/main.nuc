@@ -91,6 +91,10 @@
          (set remaining-forms
               (process-file-phase1 context remaining-forms $dummy-source-loc
                                    (list input-filename)))
+         ;; TODO: Disable this with a flag. We'll still need to generate
+         ;; something under the symbol so we don't get link errors, and give
+         ;; the runtime some way to fall back when type info isn't available.
+         (generate-type-table)
          (each (lambda (form)
                  (process-toplevel-form-phase2 context form))
                remaining-forms)

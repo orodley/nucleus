@@ -18,6 +18,8 @@
 (extern LLVMConstInt (* long-long bool) -> *)
 (extern LLVMConstIntOfString (* char* u8) -> *)
 (extern LLVMConstNull (*) -> *)
+(extern LLVMConstArray (* array uint) -> *)
+(extern LLVMConstNamedStruct (* array uint) -> *)
 (extern LLVMIsConstant (*) -> bool)
 (extern LLVMIsNull (*) -> bool)
 (extern LLVMIsUndef (*) -> bool)

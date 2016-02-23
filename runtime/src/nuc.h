@@ -58,6 +58,11 @@ typedef uint32_t Symbol;
 #define LAMBDA_TYPE MAKE_DISCRETE(11)
 #define STRUCT_TYPE MAKE_DISCRETE(12)
 
+// We hijack the top 16 bits of the pointer for tagging. This is possible
+// because the x64 virtual memory model guarantees that bits 48-63 are a copy
+// of bit 47
+#define STRUCT_ID(struct_value) ((struct_value) >> 48)
+
 typedef union Float_converter
 {
 	uint32_t as_int;
