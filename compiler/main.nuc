@@ -72,7 +72,7 @@
               (target-data (LLVMCreateTargetData
                              "e-m:e-i64:64-f80:128-n8:16:32:64-S128"))
               (context
-                (Context (copy-list $constants) nil nil target-data nil))
+                (Context (copy-list $constants) "" nil target-data nil))
               (remaining-forms nil))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
@@ -115,7 +115,7 @@
                      (LLVMBuildStore
                        $builder
                        (tv (coerce context (compile-expr context expr) '?
-                                   (token-source-loc expr)))
+                                   (Token.source-loc expr)))
                        var)))
                  (reverse $initialisers))
            (llvm-build-call $builder entry-point nil "")
@@ -126,7 +126,7 @@
                (LLVMBuildLShr
                  $builder
                  (LLVMBuildLoad
-                   $builder (tv (binding-term (get-binding context '$status-code))) "")
+                   $builder (tv (Binding.term (get-binding context '$status-code))) "")
                  (llvm-i64<-int LOWTAG-BITS)
                  "")
                INT
@@ -144,7 +144,7 @@
             (write-string-ln-to-stream $stderr "")
             (each (lambda (err)
                     (let* ((source-loc (Error.source-loc err))
-                           (filename (source-loc-source-name source-loc))
+                           (filename (Source-loc.source-name source-loc))
                            (filename-to-report
                              (if (absolute-path? filename)
                                (let ((str (string-strip-prefix
@@ -153,8 +153,8 @@
                                filename)))
                       (write-string-to-stream $stderr filename-to-report)
                       (format $stderr ":~:~ "
-                              (source-loc-line source-loc)
-                              (source-loc-col source-loc))
+                              (Source-loc.line source-loc)
+                              (Source-loc.col source-loc))
                       (write-string-to-stream $stderr "in ")
                       (write-string-to-stream $stderr (Error.source-context err))
                       (write-string-ln-to-stream $stderr ":")

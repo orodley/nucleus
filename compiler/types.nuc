@@ -2,36 +2,35 @@
 ;;; LLVMValueRef, type, and boolean indicating whether it is an lvalue (i.e.
 ;;; can be assigned to). If the type is unknown, it defaults to ?, the dynamic
 ;;; type.
-;;; TODO: Replace with a struct once they exist
 ;;; TODO: It could be really useful to keep track of known null vs. non-null
 ;;; information about cons terms, to avoid some runtime checks. Sometimes we
 ;;; literally just allocated the thing so those cases are easy pickings.
-(defun make-term (typ val lvalue?)
-  (assert! (eq? (type val) foreign-t)
-           (format nil "val should be an llvm ValueRef (got ~)" val))
-  (assert! (or (symbol? typ) (cons? typ)) "typ should be a type-spec")
-  (assert! (or (eq? lvalue? true) (eq? lvalue? false)) "lvalue? should be a bool")
-  (list typ val lvalue?))
-(defun tt (term) (first term))
-(defun tv (term) (second term))
-(defun tl? (term) (third term))
 
-(defun coerce ((context Context) term typ blame-source-loc)
+(struct Term
+  typ
+  val ; TODO: add LLVMType annotation
+  (lvalue? bool))
+
+(defun tt ((term Term)) (Term.typ term))
+(defun tv ((term Term)) (Term.val term))
+(defun tl? ((term Term)) -> bool (Term.lvalue? term))
+
+(defun coerce ((context Context) (term Term) typ blame-source-loc)
   (when $output-debug-info (format true "(coerce ... ~ ~)" term typ))
   (cond
     ((type-eq? (tt term) typ) term)
     ((type-eq? (tt term) '?)
-     (make-term typ
-                (static-val<-dynamic-val context typ (tv term) blame-source-loc)
-                (tl? term)))
+     (Term typ
+           (static-val<-dynamic-val context typ (tv term) blame-source-loc)
+           (tl? term)))
     ((type-eq? typ '?)
-     (make-term typ
-                (dynamic-val<-static-val context (tt term) (tv term) blame-source-loc)
-                (tl? term)))
+     (Term typ
+           (dynamic-val<-static-val context (tt term) (tv term) blame-source-loc)
+           (tl? term)))
     (true
-      (make-term typ
-                 (implicit-conversion context term typ blame-source-loc)
-                 (tl? term)))))
+      (Term typ
+            (implicit-conversion context term typ blame-source-loc)
+            (tl? term)))))
 
 ;; TODO: I think there are a few cases where an ad-hoc version of this was
 ;; used inline which should now be using this instead.
@@ -63,11 +62,10 @@
 (defun func-type? (typ)
   (and (cons? typ) (or (eq? (first typ) 'any-func) (eq? (first typ) 'func))))
 
-;;; TODO: This should be a struct.
-(defun make-struct-type (name llvm-type id) (list name llvm-type id))
-(defun struct-type-name (st) (first st))
-(defun struct-type-llvm-type (st) (second st))
-(defun struct-type-id (st) (third st))
+(struct Struct-type
+  (name symbol)
+  llvm-type ; TODO: annotation
+  (id int))
 
 ;;; TODO: This should be a hash table
 (defvar $struct-types nil)
@@ -88,7 +86,7 @@
       false)
     (set $struct-types
          (cons (cons struct-name
-                     (make-struct-type struct-name struct-pointer-type id))
+                     (Struct-type struct-name struct-pointer-type id))
                $struct-types))
     (enumerate
       (lambda (field-index name-and-type)
@@ -102,7 +100,7 @@
                                  (list struct-name field-type)
                                  field-type 'builtin nil)))
           (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock
-                                               (func-llvm-func getter)
+                                               (Func.llvm-func getter)
                                                "entry"))
           (LLVMBuildRet
             $builder
@@ -110,30 +108,30 @@
               $builder
               (LLVMBuildStructGEP
                 $builder
-                (first (llvm-params (func-llvm-func getter)))
+                (first (llvm-params (Func.llvm-func getter)))
                 field-index
                 "")
               (string<-symbol field-name)))
           (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock
-                                               (func-llvm-func setter)
+                                               (Func.llvm-func setter)
                                                "entry"))
           (LLVMBuildStore
             $builder
-            (second (llvm-params (func-llvm-func setter)))
+            (second (llvm-params (Func.llvm-func setter)))
             (LLVMBuildStructGEP
               $builder
-              (first (llvm-params (func-llvm-func setter)))
+              (first (llvm-params (Func.llvm-func setter)))
               field-index
               ""))
           (LLVMBuildRet
             $builder
-            (second (llvm-params (func-llvm-func setter))))))
+            (second (llvm-params (Func.llvm-func setter))))))
       (zip field-names field-types))
     (let ((constructor (add-func context struct-name
                                  (repeat num-fields 'arg)
                                  field-types struct-name 'builtin nil)))
       (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock
-                                           (func-llvm-func constructor)
+                                           (Func.llvm-func constructor)
                                            "entry"))
       (let ((struct-value
               (LLVMBuildBitCast
@@ -148,11 +146,12 @@
               $builder
               param
               (LLVMBuildStructGEP $builder struct-value field-index "")))
-          (llvm-params (func-llvm-func constructor)))
+          (llvm-params (Func.llvm-func constructor)))
         (LLVMBuildRet $builder struct-value)))
     (set $struct-count (+ $struct-count 1))))
 
-(defun get-struct-type (name) (assoc-cdr name $struct-types))
+(defun get-struct-type ((name symbol))
+  (assoc-cdr name $struct-types))
 
 (defun type-eq? (t1 t2)
   (or (eq? t1 t2)
@@ -195,7 +194,7 @@
     '?
     (fourth type-spec)))
 
-(defun i64<-term ((context Context) term)
+(defun i64<-term ((context Context) (term Term))
   (case (LLVMGetTypeKind (llvm-type<-type-spec context (tt term)))
     (LLVMPointerTypeKind (LLVMBuildPtrToInt $builder (tv term) NUC-VAL ""))
     (LLVMIntegerTypeKind (LLVMBuildIntCast $builder (tv term) NUC-VAL ""))
@@ -275,7 +274,7 @@
                 (term<-i64 context (field-getter cons-ptr) src-field-type))
               (coerced-field
                 (coerce context
-                        (make-term src-field-type field-value false)
+                        (Term src-field-type field-value false)
                         dest-field-type
                         blame-source-loc)))
          (field-setter cons-ptr (i64<-term context coerced-field))))
@@ -403,7 +402,7 @@
         (let ((struct-type (get-struct-type type-spec)))
           (cond
             ((not (nil? struct-type))
-             (struct-type-llvm-type struct-type))
+             (Struct-type.llvm-type struct-type))
             (true
               (fail! context
                      (format nil "Unsupported type-spec for llvm-type<-type-spec '~'" type-spec)
@@ -530,7 +529,7 @@
          ;; doesn't, we must generate a proxy that does the coercions at runtime.
          (compile-proxy-function
            context
-           (make-term (list 'func (repeat arity '?) '-> '?) closure-ptr false)
+           (Term (list 'func (repeat arity '?) '-> '?) closure-ptr false)
            type-spec)
          ;; Otherwise we're all good, as the function type we want already
          ;; takes dynamic values and returns a dynamic value.
@@ -543,7 +542,7 @@
       (let ((struct-type (get-struct-type type-spec)))
         (cond
           ((not (nil? struct-type))
-           (check-struct-type val (struct-type-id struct-type))
+           (check-struct-type val (Struct-type.id struct-type))
            ;; We have to do two things:
            ;;  1) Remove the lowtag, which we do as usual
            ;;  2) Remove the struct tag
@@ -557,7 +556,7 @@
                (LLVMBuildShl $builder (remove-lowtag val) (llvm-i64<-int 16) "")
                (llvm-i64<-int 16)
                "")
-             (struct-type-llvm-type struct-type)
+             (Struct-type.llvm-type struct-type)
              ""))
           (true
             (fail! context
@@ -623,7 +622,7 @@
            (let ((converted
                    (tv (coerce
                          context
-                         (make-term
+                         (Term
                            (car-type type-spec)
                            (term<-i64 context car-val (car-type type-spec))
                            false)
@@ -664,7 +663,7 @@
                       (eq? (func-type-return-type type-spec) '?))
                val
                (compile-proxy-function
-                 context (make-term type-spec val false)
+                 context (Term type-spec val false)
                  (list 'func (repeat (func-type-arity type-spec) '?) '-> '?)))))
        (add-lowtag closure-ptr LAMBDA-LOWTAG)))
     (true
@@ -682,7 +681,7 @@
             ;; with a value which might need the top bit.
             (LLVMBuildShl
               $builder
-              (llvm-i64<-int (struct-type-id struct-type))
+              (llvm-i64<-int (Struct-type.id struct-type))
               (llvm-i64<-int 48)
               "")
             "")
@@ -691,7 +690,7 @@
                  blame-source-loc
                  NUC-VAL false))))))
 
-(defun implicit-conversion ((context Context) term typ blame-source-loc)
+(defun implicit-conversion ((context Context) (term Term) typ blame-source-loc)
   (when $output-debug-info (format true "(implicit-conversion ... ~ ~)" term typ))
   (cond
     ((and (integral? (tt term)) (integral? typ))
@@ -763,9 +762,9 @@
        (lambda (cons-ptr) cons-ptr)))
     ((and (list-type? (tt term)) (cons-type? typ))
      (tv (coerce context
-                 (make-term (unroll-list-type context typ (car-type (tt term)))
-                            (tv term)
-                            (tl? term))
+                 (Term (unroll-list-type context typ (car-type (tt term)))
+                       (tv term)
+                       (tl? term))
                  typ
                  blame-source-loc)))
     ((and (cons-type? (tt term)) (list-type? typ))

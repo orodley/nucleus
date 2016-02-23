@@ -6,9 +6,10 @@
 
 (struct Context
   env
-  file
+  (file string)
+  ;(func Func) ; TODO: Figure out why this annotation doesn't work
   func
-  target-data
+  target-data ; TODO: annotate
   errors)
 
 (defun push-error ((context Context) (error Error))
@@ -17,7 +18,7 @@
 (struct Error
   message
   source-context
-  source-loc)
+  (source-loc Source-loc))
 
 ;; The following function is handy for debugging - with 'br nuc(break-on-me)'
 ;; in .gdbinit, this acts like a breakpoint.
@@ -48,7 +49,7 @@
                 nil))
          (source-context (if (nil? func)
                            "toplevel form"
-                           (format nil "function ~" (func-name func)))))
+                           (format nil "function ~" (Func.name func)))))
     ;; When debugging it can be helpful to see errors even if we fail before
     ;; compilation is finished for some reason.
     (when $output-debug-info
@@ -57,31 +58,30 @@
     (push-error context (Error message source-context source-loc))
     (cond
       ((eq? (type result-type) foreign-t) val)
-      ((not (nil? result-type)) (make-term result-type val lvalue?))
+      ((not (nil? result-type)) (Term result-type val lvalue?))
       (true nil))))
 
-(defun dummy-token (sexpr)
-  (make-token sexpr "<unknown>" 0 0))
+(defun dummy-token (sexpr) -> Token
+  (Token sexpr $dummy-source-loc))
 
-(defvar $dummy-source-loc (token-source-loc (dummy-token nil)))
+(defvar $dummy-source-loc (Source-loc "<unknown>" 0 0))
 
 (defun copy-source-loc (token sexpr)
-  (make-token sexpr (token-source-name token) (token-line token) (token-col token)))
+  (Token sexpr (Token.source-loc token)))
 
 ;; TODO: rename this - tX looks like it is related to terms.
-(defun ts (token) (token-sexpr token))
+(defun ts ((token Token))
+  (Token.sexpr token))
 
-;;; TODO: Replace with a struct once they exist
-;;; TODO: Do we really need this? Couldn't we just have an alist with
-;;; car = name and cdr = term?
-(defun make-binding (name-token term) (list name-token term))
-(defun binding-name-token (binding) (first binding))
-(defun binding-term (binding) (second binding))
-(defun binding-lvalue? (binding) (tl? (binding-term binding)))
-;;; TODO: polymorphic constants?
-(defun make-constant (name val typ) (make-binding (dummy-token name)
-                                                  (make-term typ val false)))
-(defun make-var (name val typ) (make-binding name (make-term typ val true)))
+(struct Binding
+  (name-token Token)
+  (term Term))
+
+(defun binding-lvalue? ((binding Binding)) (tl? (Binding.term binding)))
+(defun make-constant (name val typ) -> Binding
+  (Binding (dummy-token name) (Term typ val false)))
+(defun make-var (name val typ) -> Binding
+  (Binding name (Term typ val true)))
 
 (defun process-toplevel-form-phase1 ((context Context) token remaining-forms)
   (when $output-debug-info (format true "(p-t-f .. ~)" token))
@@ -95,7 +95,7 @@
        (when (length>= form 4)
          (fail! context (format nil "Invalid number of arguments to 'defvar' (got ~, expected 2-3)"
                                 (length form))
-                (token-source-loc token)
+                (Token.source-loc token)
                 nil false))
        (let ((name (second form)))
          (if (nil? (get-binding context (ts name)))
@@ -109,14 +109,14 @@
                (add-initialiser global value)))
            (fail! context
                   (format nil "Redefinition of variable '~'" (ts name))
-                  (token-source-loc name)
+                  (Token.source-loc name)
                   nil false))))
       ('struct
        (unless (length>= form 2)
          (fail! context
                 (format nil "Invalid number of arguments to 'struct' (got ~, expected 2+)"
                         (length form))
-                (token-source-loc (first form))
+                (Token.source-loc (first form))
                 nil false))
        (let* ((name (ts (second form)))
               (fields (parse-arg-list
@@ -131,7 +131,7 @@
            context
            (format nil "Invalid number of arguments to 'include' (got ~, expected 1)"
                    (length (cdr form)))
-           (token-source-loc token)
+           (Token.source-loc token)
            nil false))
        (let* ((including-file (Context.file context))
               (filename (if (string-ends-with? (ts (second form)) ".nuc")
@@ -142,12 +142,12 @@
          (set remaining-forms
               (process-file-phase1
                 context remaining-forms
-                (token-source-loc (first form)) (list included-file)))))
+                (Token.source-loc (first form)) (list included-file)))))
       ;; TODO: should this be called 'c'enum? It's just a regular enum really.
       ('cenum
        (when (nil? (cdr form))
          (fail! context "An enum must have one or more values"
-                (token-source-loc token) nil false))
+                (Token.source-loc token) nil false))
        ;; TODO: support negative integer literals
        (let ((enum-variant-value (- 0 1)))
          (each
@@ -173,7 +173,7 @@
       ('defun
        (when $output-debug-info (write-string-ln "processing defun"))
        (unless (length>= form 3)
-         (fail! context "Not enough args to 'defun'" (token-source-loc token) nil false))
+         (fail! context "Not enough args to 'defun'" (Token.source-loc token) nil false))
        (let* ((name (second form))
               (arg-list (third form))
               (names-and-types (parse-arg-list context arg-list))
@@ -204,16 +204,16 @@
               (return-type (if $ignore-annotations
                              '?
                              (remove-tokens-from-type return-type-token)))
-              (return-type-source-loc (token-source-loc return-type-token)))
+              (return-type-source-loc (Token.source-loc return-type-token)))
          (unless (symbol? (ts name))
            (fail! context
                   (format nil "Function name must be a string: ~" (ts name))
-                  (token-source-loc name)
+                  (Token.source-loc name)
                   nil false))
-         (unless (list? arg-list)
+         (unless (list? (ts arg-list))
            (fail! context
                   (format nil "Argument list must be a list: ~" (ts arg-list))
-                  (token-source-loc arg-list)
+                  (Token.source-loc arg-list)
                   nil false))
          (if (any? generic-type? (cons return-type arg-types))
            (add-generic-func context (ts name) arg-names arg-types return-type
@@ -225,7 +225,7 @@
            context
            (format nil "Invalid number of arguments to 'extern' (got ~, expected 4)"
                    (length (cdr form)))
-           (token-source-loc (first form))
+           (Token.source-loc (first form))
            nil false))
        ;; TODO: Shouldn't this use add-func?
        (let* ((names (ts (second form)))
@@ -239,12 +239,11 @@
                            (llvm-type<-type-spec context ret-type)
                            (map (lambda (t) (llvm-type<-type-spec context t))
                                 arg-types)))
-              (func (make-func nuc-name arity nil arg-types
-                               ret-type 'extern nil llvm-func)))
+              (func (Func nuc-name arity nil arg-types ret-type 'extern nil llvm-func)))
          (set $functions (cons (cons nuc-name func) $functions))))
       (default
         (fail! context (format nil "Invalid top-level form '~'" (ts (first form)))
-               (token-source-loc (first form))
+               (Token.source-loc (first form))
                nil false)))))
 
 (defun macroexpand ((context Context) token)
@@ -299,7 +298,7 @@
 ;; be integrated into the environment somehow?
 
 (defun get-binding ((context Context) name)
-  (find (lambda (binding) (eq? (ts (binding-name-token binding)) name))
+  (find (lambda (binding) (eq? (ts (Binding.name-token binding)) name))
         (Context.env context)))
 
 (defun gc-alloc (size)
@@ -360,37 +359,37 @@
                      (fail!
                        context
                        "Integer too big to fit into an i64! (How did we even read it?)"
-                       (token-source-loc token)
+                       (Token.source-loc token)
                        '?  false)))))
-          (make-term constant-type
-                     (LLVMConstInt (llvm-type<-type-spec context constant-type)
-                                   expr
-                                   false)
-                     false)))
+          (Term constant-type
+                (LLVMConstInt (llvm-type<-type-spec context constant-type)
+                              expr
+                              false)
+                false)))
       (symbol-t
         (let* ((binding (get-binding context expr))
                (term
                  (if (not (nil? binding))
-                   (binding-term binding)
+                   (Binding.term binding)
                    (let ((func (get-func expr)))
                      (if (nil? func)
                        (fail! context
                               (format nil "Undefined variable '~'" expr)
-                              (token-source-loc token)
+                              (Token.source-loc token)
                               '? true)
                        (make-lambda context
-                                    (func-llvm-func func)
-                                    (func-arg-types func)
-                                    (func-return-type func)
+                                    (Func.llvm-func func)
+                                    (Func.arg-types func)
+                                    (Func.return-type func)
                                     nil))))))
           (if (tl? term)
-            (make-term
+            (Term
               (tt term)
               (LLVMBuildLoad $builder (tv term) (string<-symbol expr))
               false)
             term)))
       (cons-t (compile-form context token))
-      (string-t (make-term
+      (string-t (Term
                   'string
                   (llvm-build-call
                     $builder
@@ -400,7 +399,7 @@
                   false))
       (default (fail! context
                       (format nil "Don't know how to compile this type of expression: ~" expr)
-                      (token-source-loc token)
+                      (Token.source-loc token)
                       '?  false)))))
 
 (defun compile-form ((context Context) token)
@@ -425,8 +424,8 @@
                           (coerce context
                                   (compile-expr context name)
                                   (list 'any-func arity)
-                                  (token-source-loc token))))
-                    (make-term
+                                  (Token.source-loc token))))
+                    (Term
                       (func-type-return-type (tt closure-term))
                       (call-closure context closure-term
                                     (map (lambda (arg)
@@ -435,14 +434,14 @@
                                     false)
                       false))
                   ;; Calling a generic function
-                  (if (not (eq? arity (generic-func-arity generic-func)))
+                  (if (not (eq? arity (Generic-func.arity generic-func)))
                     (fail! context
                            (format nil "Invalid number of arguments to generic function '~' (got ~, expected ~)"
                                    (ts name)
                                    arity
-                                   (generic-func-arity generic-func))
-                           (token-source-loc token)
-                           (generic-func-return-type generic-func) false)
+                                   (Generic-func.arity generic-func))
+                           (Token.source-loc token)
+                           (Generic-func.return-type generic-func) false)
                     (let* ((arg-terms (map (lambda (arg-token)
                                              (compile-expr context arg-token))
                                            args))
@@ -459,33 +458,33 @@
                                               source-loc)))
                                   (zip arg-terms
                                        (zip required-arg-types
-                                            (map token-source-loc args)))))
+                                            (map Token.source-loc args)))))
                            (llvm-func (get-generic-func-specialization
                                         context generic-func required-arg-types
-                                        ret-type (token-source-loc token))))
-                      (make-term
+                                        ret-type (Token.source-loc token))))
+                      (Term
                         ret-type
                         (llvm-build-call $builder llvm-func (map tv coerced-args) "")
                         false)))))
               ;; Calling a static function
-              (let* ((llvm-func (func-llvm-func func))
+              (let* ((llvm-func (Func.llvm-func func))
                      (arg-terms (map2 (lambda (e typ)
                                         (coerce context
                                                 (compile-expr context e)
                                                 typ
-                                                (token-source-loc e)))
+                                                (Token.source-loc e)))
                                       args
-                                      (func-arg-types func))))
+                                      (Func.arg-types func))))
                 (if (eq? (LLVMCountParams llvm-func) arity)
-                  (make-term
-                    (func-return-type func)
+                  (Term
+                    (Func.return-type func)
                     (llvm-build-call $builder llvm-func (map tv arg-terms) "")
                     false)
                   (fail! context
                          (format nil "Invalid number of arguments to function '~' (got ~, expected ~)"
                                  (ts name) arity (LLVMCountParams llvm-func))
-                         (token-source-loc token)
-                         (func-return-type func) false))))))))))
+                         (Token.source-loc token)
+                         (Func.return-type func) false))))))))))
 
 (defun compile-progn ((context Context) forms)
   (%compile-progn context (if (nil? forms) (list (dummy-token 'nil)) forms)))
@@ -512,7 +511,7 @@
                  (symbol-t arg)
                  (default
                    (fail! context (format nil "Invalid argument expression: ~" (ts arg))
-                          (token-source-loc arg)
+                          (Token.source-loc arg)
                           nil false)
                    (dummy-token (gensym)))))
              arg-list))
@@ -524,7 +523,7 @@
                  (symbol-t '?)
                  (default
                    (fail! context (format nil "Invalid argument expression: ~" arg)
-                          (token-source-loc arg)
+                          (Token.source-loc arg)
                           nil false)
                    '?)))
              arg-list)))
@@ -545,7 +544,7 @@
     "str-to-ptr"))
 
 (defun simple-int-cmp (val1 val2)
-  (make-term
+  (Term
     'bool
     (LLVMBuildZExt
       $builder

@@ -20,6 +20,7 @@ nuc_val rt_type(nuc_val val)
 			case TRUE: case FALSE: return BOOL_TYPE;
 			}
 
+			printf("Got an invalid discrete value %lu\n", val);
 			UNREACHABLE;
 		case FLOAT_EXTTAG: return FLOAT_TYPE;
 		}

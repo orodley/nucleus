@@ -75,7 +75,9 @@
 (defun length (seq)
   (case (type seq)
     (cons-t (list-length seq 0))
-    (string-t (string-length seq))))
+    (string-t (string-length seq))
+    (default (panic! (format nil "length passed non-sequence '~' (of type ~)"
+                             seq (type seq))))))
 
 (defun list-length (lizt acc)
   (if (nil? lizt)
@@ -227,6 +229,8 @@
   (%repeat times thing nil))
 
 (defun %repeat (times thing acc)
+  (unless (int? times)
+    (panic! (format nil "%repeat passed a non-int! ~" times)))
   (if (zero? times)
     acc
     (%repeat (- times 1) thing (cons thing acc))))

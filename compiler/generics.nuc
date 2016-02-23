@@ -1,17 +1,17 @@
-;;; TODO: Replace with a struct once they exist
-(defun make-generic-func (name arity arg-names arg-types return-type body existing-impls)
-  (list name arity arg-names arg-types return-type body existing-impls))
-(defun generic-func-name (func) (first func))
-(defun generic-func-arity (func) (second func))
-(defun generic-func-arg-names (func) (third func))
-(defun generic-func-arg-types (func) (fourth func))
-(defun generic-func-return-type (func) (fifth func))
-(defun generic-func-body (func) (sixth func))
-(defun generic-func-existing-impls (func) (seventh func))
-(defun generic-func-add-impl (func impl-arg-types impl-ret-type impl)
-  (set-car (cddr (cddddr func))
-           (cons (cons (cons impl-ret-type impl-arg-types) impl)
-                 (generic-func-existing-impls func))))
+(struct Generic-func
+  (name symbol)
+  (arity int)
+  arg-names
+  arg-types
+  return-type
+  body
+  existing-impls)
+
+(defun generic-func-add-impl ((func Generic-func) impl-arg-types impl-ret-type impl)
+  (Generic-func.existing-impls=
+    func
+    (cons (cons (cons impl-ret-type impl-arg-types) impl)
+          (Generic-func.existing-impls func))))
 
 ;;; TODO: Replace with a hash table once that exists
 ;;; TODO: This should go in the context, along with $module and $builder
@@ -21,8 +21,8 @@
                                  return-type-source-loc body)
   (when $output-debug-info (format true "Adding generic func ~" name))
   (let* ((arity (length arg-names))
-         (generic-func (make-generic-func name arity arg-names
-                                          arg-types return-type body nil))
+         (generic-func (Generic-func name arity arg-names
+                                     arg-types return-type body nil))
          (dynamic-arg-types (map (lambda (arg-type)
                                    (if (generic-type? arg-type) '? arg-type))
                                  arg-types)))
@@ -60,7 +60,7 @@
        (eq? (char-at (string<-symbol type-spec) 0) 36))) ; 36 = '$'
 
 (defun get-generic-func-specialization
-  ((context Context) generic-func concrete-arg-types
+  ((context Context) (generic-func Generic-func) concrete-arg-types
                      concrete-ret-type blame-source-loc)
   (let ((existing (find (lambda (pair)
                           (let ((arg-types (car pair))
@@ -68,14 +68,14 @@
                             (all? (lambda (c)
                                     (type-eq? (car c) (cdr c)))
                                   (zip arg-types concrete-arg-types))))
-                        (generic-func-existing-impls generic-func))))
+                        (Generic-func.existing-impls generic-func))))
     (cond
       ((not (nil? existing))
        (cdr existing))
       ((not (generic-func-compatible? generic-func concrete-arg-types))
        (fail! context
               (format nil "Incompatible types to generic function ~"
-                      (generic-func-name generic-func))
+                      (Generic-func.name generic-func))
               blame-source-loc
               nil false)
        (declare-function "(dummy)" (concrete-ret-type generic-func)
@@ -88,15 +88,15 @@
                                  concrete-ret-type new-impl)
           new-impl)))))
 
-(defun generic-func-compatible? (generic-func concrete-arg-types)
+(defun generic-func-compatible? ((generic-func Generic-func) concrete-arg-types)
   (all? (lambda (c)
           (let ((desired-type (car c))
                 (actual-type (cdr c)))
             (or (generic-type? desired-type)
                 (type-eq? desired-type actual-type))))
-        (zip (generic-func-arg-types generic-func) concrete-arg-types)))
+        (zip (Generic-func.arg-types generic-func) concrete-arg-types)))
 
-(defun get-concrete-types ((context Context) generic-func arg-terms)
+(defun get-concrete-types ((context Context) (generic-func Generic-func) arg-terms)
   (let* ((type-var-map nil)
          (concrete-arg-types
            (map2 (lambda (func-arg-type arg-term)
@@ -110,9 +110,9 @@
                      ;; Don't bother checking if they match, as the coercion will get
                      ;; that later anyway.
                      func-arg-type))
-                 (generic-func-arg-types generic-func)
+                 (Generic-func.arg-types generic-func)
                  arg-terms))
-         (ret-type (generic-func-return-type generic-func))
+         (ret-type (Generic-func.return-type generic-func))
          (concrete-ret-type
            (if (generic-type? ret-type)
              (let ((already-found (assoc-cdr ret-type type-var-map)))
@@ -125,23 +125,24 @@
 (defun mangle-generic-func-name (name concrete-arg-types concrete-ret-type)
   (format nil "nuc-generic(~$~->~)" name concrete-arg-types concrete-ret-type))
 
-(defun compile-generic-function-impl ((context Context) generic-func concrete-arg-types
-                                                        concrete-ret-type)
+(defun compile-generic-function-impl ((context Context)
+                                      (generic-func Generic-func)
+                                      concrete-arg-types concrete-ret-type)
   (when $output-debug-info
     (format true "(c-g-f-i ... ~ ~ ~)"
             generic-func concrete-arg-types concrete-ret-type))
   ;; TODO: change context-func to a string, so we can set from here
   (let ((llvm-func (declare-function
                      (mangle-generic-func-name
-                       (generic-func-name generic-func) concrete-arg-types concrete-ret-type)
+                       (Generic-func.name generic-func) concrete-arg-types concrete-ret-type)
                      (llvm-type<-type-spec context concrete-ret-type)
                      (map (lambda (t) (llvm-type<-type-spec context t))
                           concrete-arg-types))))
     (%compile-function
       context
-      (generic-func-arg-names generic-func)
+      (Generic-func.arg-names generic-func)
       concrete-arg-types
       concrete-ret-type
-      (generic-func-body generic-func)
+      (Generic-func.body generic-func)
       llvm-func)
     llvm-func))

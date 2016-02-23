@@ -1,16 +1,15 @@
 ;;;; Regular static functions, closures, and proxies.
 
-;;; TODO: Replace with a struct once they exist
-(defun make-func (name arity arg-names arg-types return-type impl-type body llvm-func)
-  (list name arity arg-names arg-types return-type impl-type body llvm-func))
-(defun func-name (func) (first func))
-(defun func-arity (func) (second func))
-(defun func-arg-names (func) (third func))
-(defun func-arg-types (func) (fourth func))
-(defun func-return-type (func) (fifth func))
-(defun func-impl-type (func) (sixth func))
-(defun func-body (func) (seventh func))
-(defun func-llvm-func (func) (eighth func))
+(struct Func
+  (name symbol)
+  (arity int)
+  arg-names
+  arg-types
+  return-type
+  (impl-type symbol)
+  body
+  llvm-func ; TODO: annotate
+  )
 
 (defun add-func ((context Context) name arg-names arg-types return-type impl-type body)
   (when $output-debug-info (format true "Adding func ~" name))
@@ -28,7 +27,7 @@
            (arity (length arg-names))
            (llvm-func (declare-function
                         (mangle-name name) llvm-return-type llvm-arg-types))
-           (func (make-func name arity arg-names arg-types return-type impl-type body llvm-func)))
+           (func (Func name arity arg-names arg-types return-type impl-type body llvm-func)))
       (set $functions (cons (cons name func) $functions))
       func)))
 
@@ -40,15 +39,15 @@
     name
     (LLVMFunctionType ret-type arg-types (length arg-types) false)))
 
-(defun compile-function ((context Context) func)
+(defun compile-function ((context Context) (func Func))
   (when $output-debug-info (format true "(c-func ... ~)" func))
   ;; if it's extern we don't need to compile it, the implmentation already
   ;; exists and will be found at link time
-  (when (eq? (func-impl-type func) 'nucleus)
+  (when (eq? (Func.impl-type func) 'nucleus)
     (Context.func= context func)
     (%compile-function
-      context (func-arg-names func) (func-arg-types func)
-      (func-return-type func) (func-body func) (func-llvm-func func))))
+      context (Func.arg-names func) (Func.arg-types func)
+      (Func.return-type func) (Func.body func) (Func.llvm-func func))))
 
 ;; TODO: This is basically a subset of what compile-lambda does, we should
 ;; combine the two.
@@ -62,14 +61,14 @@
       (extend-env-with-terms
         context
         arg-names
-        (map2 (lambda (typ val) (make-term typ val true)) arg-types params))
+        (map2 (lambda (typ val) (Term typ val true)) arg-types params))
       (LLVMBuildRet
         $builder
         (tv (coerce
               context
               (compile-progn context body)
               return-type
-              (token-source-loc
+              (Token.source-loc
                 (if (nil? body)
                   ;; TODO: track source loc
                   ;; of the defun form itself
@@ -98,7 +97,7 @@
                  ;; TODO: insert-value?
                  (LLVMBuildStore
                    $builder
-                   (tv (binding-term capture))
+                   (tv (Binding.term capture))
                    (LLVMBuildBitCast
                      $builder
                      (LLVMBuildGEP $builder captures-array
@@ -106,12 +105,12 @@
                                    2 "array-elt")
                      (LLVMPointerType
                        (LLVMPointerType
-                         (llvm-type<-type-spec context (tt (binding-term capture)))
+                         (llvm-type<-type-spec context (tt (Binding.term capture)))
                          0)
                        0)
                      "")))
                captures)
-    (make-term
+    (Term
       (list 'func arg-types '-> return-type)
       (llvm-build-call
         $builder
@@ -129,7 +128,7 @@
 ;; TODO: allow type annotations for lambdas
 (defun compile-lambda ((context Context) source-loc name arg-list body captured-bindings)
   (let* ((old-func (Context.func context))
-         (params (repeat (length arg-list) NUC-VAL))
+         (params (repeat (length (ts arg-list)) NUC-VAL))
          (names-and-types (parse-arg-list context arg-list))
          (arg-names (car names-and-types))
          (arg-types (cdr names-and-types))
@@ -139,23 +138,23 @@
          ;; TODO: We could optimize further by not allocating a new closure if
          ;; we don't capture any bindings, and instead just creating a static
          ;; closure once at compile-time and returning it every time.
-         (func (declare-function (mangle-name name) NUC-VAL
-                                 (if (nil? captured-bindings)
-                                   params
-                                   (cons (LLVMPointerType CLOSURE 0) params)))))
+         (llvm-func (declare-function (mangle-name name) NUC-VAL
+                                      (if (nil? captured-bindings)
+                                        params
+                                        (cons (LLVMPointerType CLOSURE 0) params)))))
     ;; TODO: parse return type declarations
     (Context.func=
       context
-      (make-func name (length arg-names) arg-names arg-types '? body 'nucleus func))
+      (Func name (length arg-names) arg-names arg-types '? 'nucleus body llvm-func))
     ;; TODO: set LLVM param names
-    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock func "entry"))
-    (let* ((params (llvm-params func))
+    (LLVMPositionBuilderAtEnd $builder (LLVMAppendBasicBlock llvm-func "entry"))
+    (let* ((params (llvm-params llvm-func))
            (original-env (Context.env context)))
       (extend-env-with-bindings
         context
         (map2 (lambda (i binding)
                 (make-var
-                  (binding-name-token binding)
+                  (Binding.name-token binding)
                   (LLVMBuildBitCast
                     $builder
                     (LLVMBuildLoad
@@ -172,34 +171,34 @@
                       "")
                     (LLVMPointerType
                       (llvm-type<-type-spec
-                        context (tt (binding-term binding)))
+                        context (tt (Binding.term binding)))
                       0)
                     "")
-                  (tt (binding-term binding))))
+                  (tt (Binding.term binding))))
               (range (length captured-bindings))
               captured-bindings))
       (extend-env-with-terms
         context
         arg-names
-        (map2 (lambda (typ val) (make-term typ val true))
-              (repeat (length arg-list) '?)
+        (map2 (lambda (typ val) (Term typ val true))
+              (repeat (length (ts arg-list)) '?)
               (if (nil? captured-bindings)
-                (llvm-params func)
-                (cdr (llvm-params func)))))
+                (llvm-params llvm-func)
+                (cdr (llvm-params llvm-func)))))
       ;; TODO: once we're parsing lambda return type declarations this should
       ;; use them rather than always using ?
       (LLVMBuildRet $builder (tv (coerce context (compile-progn context body) '?
-                                         (token-source-loc
+                                         (Token.source-loc
                                            (if (nil? body) source-loc (car (last body)))))))
-      (when (LLVMVerifyFunction func LLVMPrintMessageAction)
-        (LLVMDumpValue func)
+      (when (LLVMVerifyFunction llvm-func LLVMPrintMessageAction)
+        (LLVMDumpValue llvm-func)
         (fail! context
                (format nil "ICE compiling lambda ~ (failed LLVMVerifyFunction). Function has been dumped" name)
                source-loc
                nil false))
       (Context.func= context old-func)
       (Context.env= context original-env))
-    func))
+    llvm-func))
 
 (defun find-captured-vars ((context Context) body args)
   (unique (%find-captured-vars context body args)))
@@ -228,7 +227,7 @@
          (%find-captured-vars context (cddr sexpr) to-ignore))))
     (true (mappend (lambda (e) (%find-captured-vars context (ts e) to-ignore)) sexpr))))
 
-(defun call-closure ((context Context) closure-term arg-terms proxy?)
+(defun call-closure ((context Context) (closure-term Term) arg-terms proxy?)
   (let* ((num-args (length arg-terms))
          (arity (func-type-arity (tt closure-term))))
     (when $output-debug-info
@@ -339,7 +338,7 @@
           original-arg-types
           proxy-arg-types))
 
-(defun compile-proxy-function ((context Context) closure-term proxy-func-type)
+(defun compile-proxy-function ((context Context) (closure-term Term) proxy-func-type)
   (when $output-debug-info
     (format true "(c-p-f ... ~ ~)" closure-term proxy-func-type))
   (let* ((original-arg-types (func-type-arg-types (tt closure-term)))
@@ -360,12 +359,12 @@
         $builder
         (tv (coerce
               context
-              (make-term
+              (Term
                 original-return-type
                 (call-closure
                   context
-                  (make-term (tt closure-term) (first params) false)
-                  (map2 (lambda (param typ) (make-term typ param false))
+                  (Term (tt closure-term) (first params) false)
+                  (map2 (lambda (param typ) (Term typ param false))
                         (rest params)
                         proxy-arg-types)
                   true)

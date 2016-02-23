@@ -1,0 +1,11 @@
+; status-code: 23
+
+(struct Foo
+  (a int))
+
+(struct Bar
+  (foo Foo))
+
+(defun main ()
+  (let ((foo (Bar.foo (Bar (Foo 23)))))
+    (set $status-code (Foo.a foo))))

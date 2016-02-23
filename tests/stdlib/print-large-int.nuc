@@ -1,4 +1,7 @@
 ; run-stdout: 100000000000000
 
+; TODO: Need a way to mark this as an expected failure, and then run-tests.py
+; needs to do sensible things for such tests.
+
 (defun main ()
   (print 100000000000000))

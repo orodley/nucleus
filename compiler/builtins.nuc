@@ -49,7 +49,7 @@
 ;; lowtag.
 (defvar LLVM-NIL (llvm-i64<-int CONS-LOWTAG))
 (defvar LLVM-NULL-CONS (LLVMConstNull CONS-CELL-PTR))
-(defvar NIL-TERM (make-term 'cons LLVM-NULL-CONS false))
+(defvar NIL-TERM (Term 'cons LLVM-NULL-CONS false))
 
 (defvar LLVM-TRUE (llvm-i64<-int 263))
 (defvar LLVM-FALSE (llvm-i64<-int 519))
@@ -85,7 +85,7 @@
 ;; TODO: Annotate these. To be done separately to make sure the proxies don't
 ;; break anything
 
-(defun special-form-set (context args)
+(defun special-form-set ((context Context) args)
   (let* ((env (Context.env context))
          (name (first args))
          (binding (get-binding context (ts name)))
@@ -94,22 +94,22 @@
       ((nil? binding)
        (fail! context
               (format nil "Undefined variable '~'" (ts name))
-              (token-source-loc name)
+              (Token.source-loc name)
               (tt new-value) false))
       ((not (binding-lvalue? binding))
        (fail! context
               (format nil "Cannot assign to constant '~'" (ts name))
-              (token-source-loc name)
+              (Token.source-loc name)
               (tt new-value) false))
       (true (LLVMBuildStore $builder
                             (tv (coerce context new-value
-                                        (tt (binding-term binding))
+                                        (tt (Binding.term binding))
                                         ;; TODO: source loc
                                         $dummy-source-loc))
-                            (tv (binding-term binding)))))
+                            (tv (Binding.term binding)))))
     new-value))
 
-(defun special-form-let (context args)
+(defun special-form-let ((context Context) args)
   ;; TODO: better error reporting for malformed 'let' forms
   ;; TODO: optional type annotations for 'let' variables
   (let* ((clauses (ts (first args)))
@@ -124,7 +124,7 @@
       (Context.env= context original-env)
       let-term)))
 
-(defun builtin-macro-let* (context args)
+(defun builtin-macro-let* ((context Context) args)
   ;; TODO: Life without quasiquote is painful
   (if (nil? (ts (first args)))
     (cons (dummy-token 'progn) (rest args))
@@ -135,15 +135,15 @@
                          (cons (dummy-token (cdr (ts (first args))))
                                (rest args)))))))
 
-(defun special-form-progn (context args)
+(defun special-form-progn ((context Context) args)
   (compile-progn context args))
 
 ;;; TODO: It would be nice if we knew in advance whether the result is actually
 ;;; used, so that we can omit potentially costly conversions to make both
 ;;; branches the same type.
-(defun special-form-if (context args)
+(defun special-form-if ((context Context) args)
   (let* ((condition (coerce context (compile-expr context (first args)) 'bool
-                            (token-source-loc (first args))))
+                            (Token.source-loc (first args))))
          (start-block (LLVMGetInsertBlock $builder))
          (then-token (second args))
          ;; TODO: maybe during the 'macroexpansion' pass we insert missing
@@ -195,7 +195,7 @@
                                           else-resultant-block after-block))
                 (else-resultant-block (LLVMGetInsertBlock $builder)))
            (LLVMPositionBuilderAtEnd $builder after-block)
-           (make-term
+           (Term
              result-type
              ;; TODO: maybe llvm-phi should just figure out the result type itself
              ;; based on the the given terms and do the coercions itself.
@@ -217,25 +217,25 @@
          (link-blocks $builder else-resultant-block after-block)
          (LLVMPositionBuilderAtEnd $builder after-block)
          (let ((t (llvm-type<-type-spec context else-type)))
-           (make-term else-type
-                      (llvm-phi $builder t
-                                (list (cons (LLVMGetUndef t) then-resultant-block)
-                                      (cons (tv else-term) else-resultant-block))
-                                "if-constant-false")
-                      false)))
+           (Term else-type
+                 (llvm-phi $builder t
+                           (list (cons (LLVMGetUndef t) then-resultant-block)
+                                 (cons (tv else-term) else-resultant-block))
+                           "if-constant-false")
+                 false)))
         ((eq? (LLVMConstIntGetSExtValue (tv condition)) 1)
          (link-blocks $builder then-resultant-block after-block)
          (link-blocks $builder else-resultant-block after-block)
          (LLVMPositionBuilderAtEnd $builder after-block)
          (let ((t (llvm-type<-type-spec context then-type)))
-           (make-term then-type
-                      (llvm-phi $builder t
-                                (list (cons (tv then-term) then-resultant-block)
-                                      (cons (LLVMGetUndef t) else-resultant-block))
-                                "if-constant-true")
-                      false)))))))
+           (Term then-type
+                 (llvm-phi $builder t
+                           (list (cons (tv then-term) then-resultant-block)
+                                 (cons (LLVMGetUndef t) else-resultant-block))
+                           "if-constant-true")
+                 false)))))))
 
-(defun compile-in-block (context expr block)
+(defun compile-in-block ((context Context) expr block)
   (LLVMPositionBuilderAtEnd $builder block)
   (compile-expr context expr))
 
@@ -243,7 +243,7 @@
   (LLVMPositionBuilderAtEnd $builder pred)
   (LLVMBuildBr $builder succ))
 
-(defun %build-branch (context term typ branch-block after-block)
+(defun %build-branch ((context Context) (term Term) typ branch-block after-block)
   ;; We need to call 'coerce' while the builder is in the same block as the
   ;; value we are calling it on, otherwise the type coercion code is inserted
   ;; into the wrong place. However, we only know what type to coerce into after
@@ -255,7 +255,7 @@
     (LLVMBuildBr $builder after-block)
     result))
 
-(defun builtin-macro-cond (context clauses)
+(defun builtin-macro-cond ((context Context) clauses)
   (if (nil? clauses)
     'nil
     ;; TODO: Life without quasiquote is painful
@@ -264,7 +264,7 @@
           (dummy-token (cons (dummy-token 'progn) (cdr (ts (car clauses)))))
           (dummy-token (cons (dummy-token 'cond) (cdr clauses))))))
 
-(defun builtin-macro-case (context args)
+(defun builtin-macro-case ((context Context) args)
   (let ((expr (first args))
         (clauses (rest args))
         (case-sym (dummy-token (gensym))))
@@ -284,7 +284,7 @@
                                     (rest (ts clause)))))
                           clauses))))))
 
-(defun special-form-quote (context args)
+(defun special-form-quote ((context Context) args)
   (let ((to-quote (first args)))
     (case (type (ts to-quote))
       (fixnum-t (compile-expr context to-quote))
@@ -303,7 +303,7 @@
                                      (car (ts to-quote)))
                                (list (dummy-token 'quote)
                                      (dummy-token (cdr (ts to-quote))))))))))
-      (symbol-t (make-term
+      (symbol-t (Term
                   'symbol
                   (llvm-build-call
                     $builder
@@ -315,10 +315,10 @@
                   false))
       (default (fail! context
                       (format nil "Don't know how to quote '~'" (ts to-quote))
-                      (token-source-loc to-quote)
+                      (Token.source-loc to-quote)
                       '? false)))))
 
-(defun builtin-macro-and (context operands)
+(defun builtin-macro-and ((context Context) operands)
   (if (nil? operands)
     'true
     (let ((operand-sym (dummy-token (gensym))))
@@ -331,7 +331,7 @@
                        (dummy-token (cons (dummy-token 'and) (rest operands)))
                        (dummy-token 'false)))))))
 
-(defun builtin-macro-or (context operands)
+(defun builtin-macro-or ((context Context) operands)
   (if (nil? operands)
     'false
     (let ((operand-sym (dummy-token (gensym))))
@@ -351,7 +351,7 @@
 ;;; a function 'lambda_0' or something it will conflict.
 
 (defvar $lambda-counter 0)
-(defun special-form-lambda (context args-and-body)
+(defun special-form-lambda ((context Context) args-and-body)
   (let* ((args (car args-and-body))
          (body (cdr args-and-body))
          (name (symbol<-string
@@ -364,19 +364,20 @@
          ;; passing this source location through to all special forms though,
          ;; which would mean changing the convention for functions implementing
          ;; special forms.
-         (func (compile-lambda context (token-source-loc args) name args body captures))
+         (func (compile-lambda context (Token.source-loc args)
+                               name args body captures))
          (arity (length (ts args))))
     ;; compile-lambda will change the builders position.
     (LLVMPositionBuilderAtEnd $builder current-block)
     ;; TODO: allow type annotations for lambdas, don't just use ?
     (make-lambda context func (repeat arity '?) '? captures)))
 
-(defun builtin-macro-format (context args)
+(defun builtin-macro-format ((context Context) args)
   ;; TODO: Life without quasiquote is painful
   (list (dummy-token '%format) (first args) (second args)
         (dummy-token (cons (dummy-token 'list) (cddr args)))))
 
-(defun builtin-macro-list/slist (context args s?list s?cons)
+(defun builtin-macro-list/slist ((context Context) args s?list s?cons)
   (if (nil? args)
     'nil
     ;; TODO: Life without quasiquote is painful
@@ -384,13 +385,13 @@
           (first args)
           (dummy-token (cons (dummy-token s?list) (rest args))))))
 
-(defun builtin-macro-list (context args)
+(defun builtin-macro-list ((context Context) args)
   (builtin-macro-list/slist context args 'list 'cons))
 
-(defun builtin-macro-slist (context args)
+(defun builtin-macro-slist ((context Context) args)
   (builtin-macro-list/slist context args 'slist 'scons))
 
-(defun builtin-macro-unless (context args)
+(defun builtin-macro-unless ((context Context) args)
   (let ((condition (first args))
         (body (rest args)))
     ;; TODO: Life without quasiquote is painful
@@ -400,7 +401,7 @@
       (dummy-token 'nil)
       (dummy-token (cons (dummy-token 'progn) body)))))
 
-(defun builtin-macro-when (context args)
+(defun builtin-macro-when ((context Context) args)
   (let ((condition (first args))
         (body (rest args)))
     ;; TODO: Life without quasiquote is painful
@@ -415,8 +416,8 @@
 ;;; enabling this kind of optimisation. Unless LLVM just figures it out
 ;;; automatically anyway.
 
-(defun builtin-float (context args)
-  (make-term
+(defun builtin-float ((context Context) args)
+  (Term
     'float
     ;; TODO: source loc
     (implicit-conversion
@@ -425,8 +426,8 @@
       'float
       $dummy-source-loc)
     false))
-(defun builtin-int (context args)
-  (make-term
+(defun builtin-int ((context Context) args)
+  (Term
     'int
     ;; TODO: source loc
     (implicit-conversion
@@ -436,7 +437,7 @@
       $dummy-source-loc)
     false))
 
-(defun comparison (context cmp int-cmp float-cmp operands)
+(defun comparison ((context Context) cmp int-cmp float-cmp operands)
   (unless (length-is? operands 2)
     (fail! context
            (format nil "~ can only take two operands" cmp)
@@ -447,7 +448,7 @@
   (let* ((type-and-vals (arithmetic-conversion context operands $dummy-source-loc))
          (typ (car type-and-vals))
          (vals (cdr type-and-vals)))
-    (make-term
+    (Term
       'bool
       (LLVMBuildZExt
         $builder
@@ -457,33 +458,33 @@
         (LLVMIntType 32)
         "")
       false)))
-(defun builtin-< (context args) (comparison context "<" LLVMIntSLT LLVMRealOLT args))
-(defun builtin-<= (context args) (comparison context "<=" LLVMIntSLE LLVMRealOLE args))
-(defun builtin-> (context args) (comparison context ">" LLVMIntSGT LLVMRealOGT args))
-(defun builtin->= (context args) (comparison context ">=" LLVMIntSGE LLVMRealOGE args))
+(defun builtin-< ((context Context) args) (comparison context "<" LLVMIntSLT LLVMRealOLT args))
+(defun builtin-<= ((context Context) args) (comparison context "<=" LLVMIntSLE LLVMRealOLE args))
+(defun builtin-> ((context Context) args) (comparison context ">" LLVMIntSGT LLVMRealOGT args))
+(defun builtin->= ((context Context) args) (comparison context ">=" LLVMIntSGE LLVMRealOGE args))
 
-(defun arithmetic-builtin (context args int-op float-op name)
+(defun arithmetic-builtin ((context Context) args int-op float-op name)
   ;; TODO: source loc
   (let* ((type-and-vals (arithmetic-conversion context args $dummy-source-loc))
          (typ (car type-and-vals))
          (vals (cdr type-and-vals))
          (op (if (floating-point? typ) float-op int-op)))
-    (make-term typ (reduce (lambda (a b) (op $builder a b name)) vals) false)))
-(defun builtin+ (context args)
+    (Term typ (reduce (lambda (a b) (op $builder a b name)) vals) false)))
+(defun builtin+ ((context Context) args)
   (arithmetic-builtin context args LLVMBuildAdd LLVMBuildFAdd "+"))
-(defun builtin- (context args)
+(defun builtin- ((context Context) args)
   (arithmetic-builtin context args LLVMBuildSub LLVMBuildFSub "-"))
-(defun builtin* (context args)
+(defun builtin* ((context Context) args)
   (arithmetic-builtin context args LLVMBuildMul LLVMBuildFMul "*"))
-(defun builtin% (context args)
+(defun builtin% ((context Context) args)
   (arithmetic-builtin context args LLVMBuildSRem LLVMBuildFRem "%"))
-(defun builtin/ (context args)
+(defun builtin/ ((context Context) args)
   (arithmetic-builtin context args LLVMBuildSDiv LLVMBuildFDiv "/"))
 
-(defun builtin-cons (context args)
+(defun builtin-cons ((context Context) args)
   (let* ((cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
                                      CONS-CELL-PTR ""))
-         (cons-term (make-term '(cons ? ?) cons-ptr false)))
+         (cons-term (Term '(cons ? ?) cons-ptr false)))
     ;; TODO: source loc
     (set-car-value cons-ptr (tv (coerce context (first args) '? $dummy-source-loc)))
     (set-cdr-value cons-ptr (tv (coerce context (second args) '? $dummy-source-loc)))
@@ -493,7 +494,7 @@
     (set-gr-value cons-ptr (llvm-i8<-int 3))
     cons-term))
 
-(defun builtin-scons (context args)
+(defun builtin-scons ((context Context) args)
   (if $ignore-annotations
     (builtin-cons context args)
     (let* ((type-spec (if (or
@@ -505,7 +506,7 @@
                         (list 'cons (tt (first args)) (tt (second args)))))
            (cons-ptr (LLVMBuildBitCast $builder (gc-alloc (cons-size context))
                                        CONS-CELL-PTR ""))
-           (cons-term (make-term type-spec cons-ptr false)))
+           (cons-term (Term type-spec cons-ptr false)))
       (when $output-debug-info (format true "cons type = ~" type-spec))
       (set-car-value cons-ptr (i64<-term context (first args)))
       (set-cdr-value cons-ptr (i64<-term context (second args)))
@@ -519,11 +520,11 @@
 ;;; (defun first ((c cons)) -> (ref ?) (car c))
 ;;; otherwise the 'lvalueness' gets swallowed upon returning from the function.
 
-(defun builtin-c[ad]r (context cons-term field-getter gr-getter field-type field-name)
+(defun builtin-c[ad]r ((context Context) (cons-term Term) field-getter gr-getter field-type field-name)
   (when $output-debug-info
     (format true "(builtin-c[ad]r ... ~ ... ... ~ ~)"
             cons-term field-type field-name))
-  (make-term
+  (Term
     field-type
     (if (type-eq? (tt cons-term) '(cons ? ?))
       ;; Dynamic cons - just grab the value out.
@@ -556,7 +557,7 @@
         (LLVMPositionBuilderAtEnd $builder gr-block)
         (let* ((coerced-field-value
                  (tv (coerce context
-                             (make-term '? raw-field-value false)
+                             (Term '? raw-field-value false)
                              field-type
                              ;; TODO: source loc
                              $dummy-source-loc)))
@@ -572,20 +573,21 @@
                       field-name)))))
     false))
 
-(defun builtin-car (context args)
+(defun builtin-car ((context Context) args)
   ;; TODO: source loc
   (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-c[ad]r context cons-term get-car-value get-car-gr-value
                     (car-type (tt cons-term)) "car")))
 
-(defun builtin-cdr (context args)
+(defun builtin-cdr ((context Context) args)
   ;; TODO: source loc
   (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-c[ad]r context cons-term get-cdr-value get-cdr-gr-value
                     (cdr-type (tt cons-term)) "cdr")))
 
-(defun builtin-set-c[ad]r (context cons-term val-term field-setter
-                                   field-getter gr-getter field-type field-name)
+(defun builtin-set-c[ad]r ((context Context) (cons-term Term) (val-term Term)
+                                             field-setter field-getter gr-getter
+                                             field-type field-name)
   (cond
     ((type-eq? (tt val-term) '?)
      ;; The value we're assigning is dynamic.
@@ -676,21 +678,21 @@
                             "final-value")))))))
   val-term)
 
-(defun builtin-set-car (context args)
+(defun builtin-set-car ((context Context) args)
   ;; TODO: source loc
   (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-set-c[ad]r context cons-term (second args) set-car-value
                         get-car-value get-car-gr-value (car-type (tt cons-term))
                         "car")))
 
-(defun builtin-set-cdr (context args)
+(defun builtin-set-cdr ((context Context) args)
   ;; TODO: source loc
   (let ((cons-term (coerce context (first args) 'cons $dummy-source-loc)))
     (builtin-set-c[ad]r context cons-term (second args) set-cdr-value
                         get-cdr-value get-cdr-gr-value (cdr-type (tt cons-term))
                         "cdr")))
 
-(defun builtin-eq? (context args)
+(defun builtin-eq? ((context Context) args)
   (let ((term1 (first args))
         (term2 (second args)))
     (cond
@@ -737,12 +739,12 @@
                 (ct-term (builtin-eq?
                            context
                            (list
-                             (make-term typ (second converted) false)
-                             (make-term typ (third converted) false))))
+                             (Term typ (second converted) false)
+                             (Term typ (third converted) false))))
                 (ct-resultant-block (LLVMGetInsertBlock $builder)))
            (LLVMBuildBr $builder after-block)
            (LLVMPositionBuilderAtEnd $builder after-block)
-           (make-term
+           (Term
              'bool
              (llvm-phi $builder (llvm-type<-type-spec context 'bool)
                        (list (cons (tv ct-term) ct-resultant-block)
@@ -762,10 +764,10 @@
               (typ (car type-and-vals))
               (vals (cdr type-and-vals)))
          (if (floating-point? typ)
-           (make-term
+           (Term
              'bool
              (LLVMBuildFCmp $builder LLVMRealOEQ (tv term1) (tv term2) "")
              false)
            (simple-int-cmp (first vals) (second vals)))))
       (true
-        (make-term 'bool (llvm-i32<-int 0) false)))))
+        (Term 'bool (llvm-i32<-int 0) false)))))

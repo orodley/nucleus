@@ -55,6 +55,10 @@
     (lambda-t (write-string-to-stream stream "#<lambda>"))
     (bool-t (write-string-to-stream stream (if sexp "true" "false")))
     (foreign-t (%write-addr-to-stream stream sexp))
+    (struct-t
+      ;; TODO: A proper implementation of this. We need to generate a table
+      ;; containing name and field information for each struct, keyed on ID.
+      (write-string-to-stream stream "#<a struct>"))
     (default
       (panic! "Can't print this type"))))
 
@@ -103,7 +107,7 @@
 (defun %read-all-with-source-loc (list-head stream)
   (let ((token (read-from-stream-with-source-loc stream)))
     (cond
-      ((not (eq? (token-sexpr token) EOF))
+      ((not (eq? (Token.sexpr token) EOF))
        (set-cdr list-head (cons token nil))
        (%read-all-with-source-loc (cdr list-head) stream)))))
 
@@ -113,16 +117,14 @@
 (defun read-from-stream-with-source-loc (stream)
   (%read-from-stream stream true))
 
-(defun make-token (sexpr source-name line col) (list sexpr source-name line col))
-(defun token-sexpr (token) (first token))
-(defun token-source-name (token) (second token))
-(defun token-line (token) (third token))
-(defun token-col (token) (fourth token))
-(defun token-source-loc (token) (rest token))
+(struct Token
+  sexpr
+  source-loc)
 
-(defun source-loc-source-name (source-loc) (first source-loc))
-(defun source-loc-line (source-loc) (second source-loc))
-(defun source-loc-col (source-loc) (third source-loc))
+(struct Source-loc
+  source-name
+  line
+  col)
 
 (defun %read-from-stream (stream track-source-loc?)
   (skip-any-comments-or-whitespace stream)
@@ -146,7 +148,7 @@
                 (when (eq? quoted EOF)
                   (panic! "Encountered single quote at EOF"))
                 (list (if track-source-loc?
-                        (make-token 'quote source-name line col)
+                        (Token 'quote (Source-loc source-name line col))
                         'quote)
                       quoted)))
              ((eof? c) EOF)
@@ -155,7 +157,7 @@
                  (read-symbol stream list-head)
                  (symbol<-string (string<-char-list list-head)))))))
     (if track-source-loc?
-      (make-token sexpr source-name line col)
+      (Token sexpr (Source-loc source-name line col))
       sexpr)))
 
 (defun skip-any-comments-or-whitespace (stream)
