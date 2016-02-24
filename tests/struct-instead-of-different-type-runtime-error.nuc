@@ -1,4 +1,4 @@
-; run-stderr: Wrong type given! Expected FIXNUM, got STRUCT.\n
+; run-stderr: Wrong type given! Expected FIXNUM, got Foo.\n
 ; status-code: 1
 
 (struct Foo

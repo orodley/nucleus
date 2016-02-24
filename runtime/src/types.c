@@ -81,7 +81,7 @@ void rt_check_type_from_c(nuc_val val, nuc_val expected_type,
 	nuc_val given_type = rt_type(val);
 	if (given_type != expected_type) {
 		fprintf(stderr, "Wrong type given! Expected %s, got %s.\n",
-				value_type_name(expected_type), type_name(given_type));
+				type_name(expected_type), value_type_name(val));
 		if (file != NULL)
 			fprintf(stderr, "Error occured at %s:%d in %s\n", file, line, func);
 
