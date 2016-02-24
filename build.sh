@@ -40,8 +40,11 @@ echo
 
 compile()
 {
-	echo "Compiling $2 with $1"
-	"$1" -link "$link_flags" compiler/main.nuc "$2"
+	compiler="$1"
+	output="$2"
+
+	echo "Compiling $output with $compiler"
+	"$compiler" -link "$link_flags" compiler/main.nuc "$output"
 	compile_status="$?"
 	if [ "$compile_status" -ne 0 ]; then
 		exit "$compile_status"
@@ -50,8 +53,11 @@ compile()
 
 compile_ir()
 {
-	echo "Compiling $2 with $1"
-	"$1" -ir compiler/main.nuc "$2"
+	compiler="$1"
+	output="$2"
+
+	echo "Compiling $output with $compiler"
+	"$compiler" -ir compiler/main.nuc "$output"
 
 	compile_status="$?"
 	if [ "$compile_status" -ne 0 ]; then
@@ -61,7 +67,7 @@ compile_ir()
 	# The module name will be different as we've specified a different filename
 	# for the output. This is fine, and we don't want to fail the consistency
 	# check because of this.
-	sed -i "/^; ModuleID = '.*'$/d" "$2"
+	sed -i "/^; ModuleID = '.*'$/d" "$output"
 }
 
 echo "Using $stage0 as stage0"
