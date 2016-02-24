@@ -4,6 +4,7 @@ import fnmatch
 import multiprocessing
 import os
 import subprocess
+import signal
 import sys
 import time
 import uuid
@@ -195,5 +196,15 @@ def partition(l, pred):
 
     return true, false
 
+def sigint_handler(signal, frame):
+    # If we get Ctrl-C in between finishing compiling a test and running it,
+    # the binary is still there.
+    for root, dirnames, filenames in os.walk('tests'):
+        for filename in fnmatch.filter(filenames, '*.tmp'):
+            os.remove(os.path.join(root, filename))
+
+    sys.exit(0)
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, sigint_handler)
     main()
