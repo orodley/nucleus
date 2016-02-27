@@ -1,2 +1,5 @@
+; TODO: It would be cool if these could return constants when the type is
+; statically known
 (extern (rt_get_struct_name struct-name) (?) -> string)
 (extern (rt_get_struct_num_fields struct-num-fields) (?) -> uint)
+(extern (rt_get_struct_field_names struct-field-names) (?) -> ?)

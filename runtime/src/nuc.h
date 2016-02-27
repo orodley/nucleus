@@ -112,7 +112,6 @@ typedef struct String
 // appropriate place, so these are the only ones we need to declare here.
 // TODO: This would probably make more sense with the arg order swapped.
 String *rt_make_string(size_t length, const char *bytes);
-Cons *rt_cons(nuc_val car, nuc_val cdr);
 char *rt_nuc_str_to_c_str(nuc_val nuc_str);
 size_t rt_list_length(Cons *cons);
 void rt_check_type_from_c(nuc_val val, nuc_val type_tag, const char *file, const char *func, int line);

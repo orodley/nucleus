@@ -1,0 +1,6 @@
+; run-stdout: ("a" "b" "c")
+
+(struct Foo a b c)
+
+(defun main ()
+  (print (struct-field-names (Foo 1 2 3))))

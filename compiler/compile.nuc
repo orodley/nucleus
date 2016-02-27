@@ -541,7 +541,7 @@
     (LLVMBuildGlobalString $builder str "")
     (list (llvm-i64<-int 0) (llvm-i64<-int 0))
     2
-    "str-to-ptr"))
+    ""))
 
 (defun simple-int-cmp (val1 val2)
   (Term

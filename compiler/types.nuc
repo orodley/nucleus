@@ -849,11 +849,16 @@
 (defun generate-type-table ()
   (when $output-debug-info
     (format true "Generating type info table with ~ entries" $struct-count))
+  ;; NOTE: These correspond to the structures defined in runtime/src/types.c
   (let ((type-info-struct
-          (LLVMStructCreateNamed (LLVMGetGlobalContext) "TypeInfo")))
-    ;; NOTE: This corresponds to the structure defined in runtime/src/types.c
+          (LLVMStructCreateNamed (LLVMGetGlobalContext) "StructInfo"))
+        (field-info-struct
+          (LLVMStructCreateNamed (LLVMGetGlobalContext) "FieldInfo")))
     (LLVMStructSetBody
-      type-info-struct (list CHAR* (LLVMIntType 32)) 2 false)
+      type-info-struct
+      (list CHAR* (LLVMIntType 32) (LLVMPointerType field-info-struct 0))
+      3 false)
+    (LLVMStructSetBody field-info-struct (list CHAR*) 1 false)
     (LLVMSetInitializer
       (LLVMAddGlobal $module (LLVMArrayType type-info-struct $struct-count)
                      "nuc_type_info_table")
@@ -861,11 +866,36 @@
         type-info-struct
         (reverse
           (map (lambda (struct-type)
-                 (LLVMConstNamedStruct
-                   type-info-struct
-                   (list (global-string
-                           (string<-symbol (Struct-type.name (cdr struct-type))))
-                         (llvm-i32<-int (length (Struct-type.fields (cdr struct-type)))))
-                   2))
+                 (let* ((struct-type (cdr struct-type))
+                        (num-fields
+                          (length (Struct-type.fields struct-type)))
+                        (field-info-table
+                          (LLVMAddGlobal
+                            $module (LLVMArrayType field-info-struct num-fields)
+                            (format nil "nuc_field_info_table(~)"
+                                    (Struct-type.name struct-type)))))
+                   (LLVMSetInitializer
+                     field-info-table
+                     (LLVMConstArray
+                       field-info-struct
+                       (map (lambda (field)
+                              (LLVMConstNamedStruct
+                                field-info-struct
+                                (list (global-string
+                                        (string<-symbol (Struct-field.name field))))
+                                1))
+                            (Struct-type.fields struct-type))
+                       num-fields))
+                   (LLVMConstNamedStruct
+                     type-info-struct
+                     (list (global-string
+                             (string<-symbol (Struct-type.name struct-type)))
+                           (llvm-i32<-int num-fields)
+                           (LLVMBuildGEP
+                             $builder field-info-table
+                             (list (llvm-i64<-int 0) (llvm-i64<-int 0))
+                             2
+                             ""))
+                     3)))
                $struct-types))
         $struct-count))))
