@@ -4,7 +4,7 @@
 #include "gc.h"
 #include "nuc.h"
 
-String *rt_make_string(size_t length, char *bytes)
+String *rt_make_string(size_t length, const char *bytes)
 {
 	String *str = gc_alloc(sizeof *str + length + 1);
 	str->length = length;

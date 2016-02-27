@@ -8,5 +8,6 @@
 (include "math")
 (include "misc")
 (include "string")
+(include "types")
 (include "os")
 (include "path")

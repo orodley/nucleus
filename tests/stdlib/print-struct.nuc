@@ -1,0 +1,6 @@
+; run-stdout: Foo
+
+(struct Foo)
+
+(defun main ()
+  (print (Foo)))

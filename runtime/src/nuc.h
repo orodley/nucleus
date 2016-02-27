@@ -110,7 +110,8 @@ typedef struct String
 // All the functions that need to be called from the stdlib or have calls
 // inserted directly by the compiler have their own declarations in the
 // appropriate place, so these are the only ones we need to declare here.
-String *rt_make_string(size_t length, char *bytes);
+// TODO: This would probably make more sense with the arg order swapped.
+String *rt_make_string(size_t length, const char *bytes);
 Cons *rt_cons(nuc_val car, nuc_val cdr);
 char *rt_nuc_str_to_c_str(nuc_val nuc_str);
 size_t rt_list_length(Cons *cons);

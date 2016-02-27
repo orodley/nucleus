@@ -58,7 +58,7 @@
     (struct-t
       ;; TODO: A proper implementation of this. We need to generate a table
       ;; containing name and field information for each struct, keyed on ID.
-      (write-string-to-stream stream "#<a struct>"))
+      (write-string-to-stream stream (struct-name sexp)))
     (default
       (panic! "Can't print this type"))))
 

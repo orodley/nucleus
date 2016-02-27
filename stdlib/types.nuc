@@ -1,0 +1,1 @@
+(extern (rt_get_struct_name struct-name) (?) -> string)
