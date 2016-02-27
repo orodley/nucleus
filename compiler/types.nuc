@@ -67,7 +67,12 @@
 (struct Struct-type
   (name symbol)
   llvm-type ; TODO: annotation
-  (id int))
+  (id int)
+  fields)
+
+(struct Struct-field
+  (name symbol)
+  type)
 
 ;;; TODO: This should be a hash table.
 ;;; TODO: This should be in Context
@@ -89,7 +94,11 @@
       false)
     (set $struct-types
          (cons (cons struct-name
-                     (Struct-type struct-name struct-pointer-type id))
+                     (Struct-type struct-name struct-pointer-type id
+                                  (map2 (lambda (field-name field-type)
+                                          (Struct-field (ts field-name)
+                                                        field-type))
+                                        field-names field-types)))
                $struct-types))
     (enumerate
       (lambda (field-index name-and-type)
@@ -840,10 +849,11 @@
 (defun generate-type-table ()
   (when $output-debug-info
     (format true "Generating type info table with ~ entries" $struct-count))
-  ;; NOTE: This corresponds to the structure defined in runtime/src/types.c
   (let ((type-info-struct
           (LLVMStructCreateNamed (LLVMGetGlobalContext) "TypeInfo")))
-    (LLVMStructSetBody type-info-struct (list CHAR*) 1 false)
+    ;; NOTE: This corresponds to the structure defined in runtime/src/types.c
+    (LLVMStructSetBody
+      type-info-struct (list CHAR* (LLVMIntType 32)) 2 false)
     (LLVMSetInitializer
       (LLVMAddGlobal $module (LLVMArrayType type-info-struct $struct-count)
                      "nuc_type_info_table")
@@ -854,7 +864,8 @@
                  (LLVMConstNamedStruct
                    type-info-struct
                    (list (global-string
-                           (string<-symbol (Struct-type.name (cdr struct-type)))))
-                   1))
+                           (string<-symbol (Struct-type.name (cdr struct-type))))
+                         (llvm-i32<-int (length (Struct-type.fields (cdr struct-type)))))
+                   2))
                $struct-types))
         $struct-count))))

@@ -1,0 +1,6 @@
+; status-code: 3
+
+(struct Foo a b c)
+
+(defun main ()
+  (set $status-code (struct-num-fields (Foo 1 2 3))))
