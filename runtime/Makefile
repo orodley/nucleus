@@ -8,7 +8,7 @@ all: nuc-runtime.bc
 nuc-runtime.bc: $(BC)
 	llvm-link-3.5 $^ -o $@
 
-%.bc: %.c
+%.bc: %.c src/nuc.h
 	clang $(CFLAGS) -c -emit-llvm $< -o $@
 
 clean:
