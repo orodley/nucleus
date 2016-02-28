@@ -1,0 +1,10 @@
+; run-stdout: (nil 23 foo "foo")
+
+(struct Foo
+  (a ?)
+  (b int)
+  (c symbol)
+  (d string))
+
+(defun main ()
+  (print (struct-field-values (Foo nil 23 'foo "foo"))))

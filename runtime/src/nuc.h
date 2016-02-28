@@ -57,11 +57,17 @@ typedef uint32_t Symbol;
 #define STRING_TYPE MAKE_DISCRETE(10)
 #define LAMBDA_TYPE MAKE_DISCRETE(11)
 #define STRUCT_TYPE MAKE_DISCRETE(12)
+#define DYNAMIC_TYPE MAKE_DISCRETE(13)
 
 // We hijack the top 16 bits of the pointer for tagging. This is possible
 // because the x64 virtual memory model guarantees that bits 48-63 are a copy
 // of bit 47
 #define STRUCT_ID(struct_value) ((struct_value) >> 48)
+// Here we shift off the tag bits, then do a sign-preserving right shift to
+// fill in the top 16 bits with a copy of bit 48, as required by the way the
+// address space works.
+#define STRUCT_PTR(struct_value) \
+	((void *)(((int64_t)(REMOVE_LOWTAG(struct_value) << 16)) >> 16))
 
 typedef union Float_converter
 {

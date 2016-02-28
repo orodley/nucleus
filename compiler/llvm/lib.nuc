@@ -14,6 +14,7 @@
 
 (extern LLVMCreateTargetData (char*) -> *)
 (extern LLVMABISizeOfType (* *) -> long-long)
+(extern LLVMOffsetOfElement (* * uint) -> long-long)
 
 (extern LLVMConstInt (* long-long bool) -> *)
 (extern LLVMConstIntOfString (* char* u8) -> *)

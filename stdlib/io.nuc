@@ -37,6 +37,8 @@
   (println sexp)
   sexp)
 
+;;; TODO: We could use format for a lot of these now.
+
 (defun print-to-stream (stream sexp)
   (case (type sexp)
     (fixnum-t
@@ -55,10 +57,7 @@
     (lambda-t (write-string-to-stream stream "#<lambda>"))
     (bool-t (write-string-to-stream stream (if sexp "true" "false")))
     (foreign-t (%write-addr-to-stream stream sexp))
-    (struct-t
-      ;; TODO: A proper implementation of this. We need to generate a table
-      ;; containing name and field information for each struct, keyed on ID.
-      (write-string-to-stream stream (struct-name sexp)))
+    (struct-t (write-struct-to-stream stream sexp))
     (default
       (panic! "Can't print this type"))))
 
@@ -91,6 +90,20 @@
      (write-string-to-stream stream " . ")
      (print-to-stream stream c)
      (write-string-to-stream stream ")"))))
+
+;; TODO: Bikeshed the format a bit.
+(defun write-struct-to-stream (stream struct)
+  (write-string-to-stream stream "#<")
+  (write-string-to-stream stream (struct-name struct))
+  (each (lambda (name-and-val)
+          (let ((name (car name-and-val))
+                (val (cdr name-and-val)))
+            (write-string-to-stream stream " ")
+            (write-string-to-stream stream name)
+            (write-string-to-stream stream ": ")
+            (print-to-stream stream val)))
+        (zip (struct-field-names struct) (struct-field-values struct)))
+  (write-string-to-stream stream ">"))
 
 
 ;;; When and only when EOF is reached, read returns a value eq? to this

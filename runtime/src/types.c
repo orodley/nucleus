@@ -41,7 +41,7 @@ static const char *type_name(nuc_val type)
 	switch (type) {
 #define CASE(x) case x##_TYPE: return #x;
 		CASE(FIXNUM) CASE(STRUCT) CASE(CONS) CASE(SYMBOL) CASE(STRING)
-		CASE(LAMBDA) CASE(FOREIGN) CASE(BOOL) CASE(FLOAT)
+		CASE(LAMBDA) CASE(FOREIGN) CASE(BOOL) CASE(FLOAT) CASE(DYNAMIC)
 #undef CASE
 	default:
 		printf("Got type %ld (ft = %d)\n", type, (int)FIXNUM_TYPE);
@@ -54,11 +54,10 @@ typedef struct FieldInfo
 {
 	// TODO: This should be a nucleus String object instead.
 	const char *name;
+	nuc_val type;
+	uint32_t offset;
 } FieldInfo;
 
-// TODO: Dump more info: number of fields, and for each field its name, type,
-// and offset within the struct. This can then be used for fun stuff like
-// incorporating struct literals into the reader and printer.
 // NOTE: This corresponds to the structure defined in compiler/types.nuc, in
 // generate-type-table.
 typedef struct StructInfo
@@ -150,6 +149,60 @@ nuc_val rt_get_struct_field_names(nuc_val val)
 
 		Cons *new_cons = malloc(sizeof(*new_cons));
 		new_cons->car = field_name_val;
+		new_cons->cdr = current_cons;
+		new_cons->guarded_reference_flags = 3; // Both fields are dynamic
+		current_cons = (nuc_val)new_cons | CONS_LOWTAG;
+	}
+
+	return current_cons;
+}
+
+static nuc_val make_dynamic(uint8_t *value_ptr, nuc_val type)
+{
+	switch (type) {
+	case FIXNUM_TYPE: return INT_TO_NUC_VAL(*(uint32_t *)value_ptr);
+	case BOOL_TYPE: return *(uint32_t *)value_ptr ? TRUE : FALSE;
+	case FLOAT_TYPE: return float_to_nuc_val(*(float *)value_ptr);
+	case SYMBOL_TYPE:
+		return (((nuc_val)*(uint32_t *)value_ptr) << LOWTAG_BITS) | SYMBOL_LOWTAG;
+	case DYNAMIC_TYPE: return *(nuc_val *)value_ptr;
+
+#define PTR_CASE(type_name) \
+	case type_name##_TYPE: \
+		return ((nuc_val)*(void **)value_ptr) | type_name##_LOWTAG;
+	PTR_CASE(CONS)
+	PTR_CASE(FOREIGN)
+	PTR_CASE(STRING)
+	PTR_CASE(LAMBDA)
+	// TODO: Currently we can't add the tag, as our current crippled run time
+	// type object doesn't track that
+	case STRUCT_TYPE: return NIL;
+	default:
+		UNREACHABLE;
+	}
+}
+
+nuc_val rt_get_struct_field_values(nuc_val val)
+{
+	CHECK(val, STRUCT_TYPE);
+
+	StructInfo *struct_info = &nuc_type_info_table[STRUCT_ID(val)];
+	FieldInfo *fields = struct_info->fields;
+	uint8_t *struct_ptr = STRUCT_PTR(val);
+
+	if (strcmp(struct_info->name, "Func") == 0) {
+		volatile int x = 23;
+		(void)x;
+	}
+
+	nuc_val current_cons = NIL;
+	for (uint32_t i = struct_info->num_fields; i != 0; i--) {
+		FieldInfo *field = &fields[i - 1];
+		uint8_t *field_ptr = struct_ptr + field->offset;
+		nuc_val field_value = make_dynamic(field_ptr, field->type);
+
+		Cons *new_cons = malloc(sizeof(*new_cons));
+		new_cons->car = field_value;
 		new_cons->cdr = current_cons;
 		new_cons->guarded_reference_flags = 3; // Both fields are dynamic
 		current_cons = (nuc_val)new_cons | CONS_LOWTAG;

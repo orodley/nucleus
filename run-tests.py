@@ -155,7 +155,9 @@ def process_header(result, f):
     result['stdin'] = ''
     for line in lines:
         line = line[1:].strip()
-        expectation_type, expectation = [cmpt.strip() for cmpt in line.split(':')]
+        components = line.split(':')
+        expectation_type = components[0].strip()
+        expectation = (':'.join(components[1:])).strip()
 
         if expectation_type == 'status-code':
             result['expected-status-code'] = int(expectation)

@@ -62,6 +62,7 @@
 (defvar LLVM-STRING-T (llvm-i64<-int 2567))
 (defvar LLVM-LAMBDA-T (llvm-i64<-int 2823))
 (defvar LLVM-STRUCT-T (llvm-i64<-int 3079))
+(defvar LLVM-DYNAMIC-T (llvm-i64<-int 3335))
 ;; TODO: these should all have static types
 (defvar $constants
   (list

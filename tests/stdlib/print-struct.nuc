@@ -1,6 +1,10 @@
-; run-stdout: Foo
+; run-stdout: #<Foo a: nil b: 23 c: foo d: "foo">
 
-(struct Foo)
+(struct Foo
+  (a ?)
+  (b int)
+  (c symbol)
+  (d string))
 
 (defun main ()
-  (print (Foo)))
+  (print (Foo nil 23 'foo "foo")))

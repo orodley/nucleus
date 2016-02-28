@@ -3,3 +3,4 @@
 (extern (rt_get_struct_name struct-name) (?) -> string)
 (extern (rt_get_struct_num_fields struct-num-fields) (?) -> uint)
 (extern (rt_get_struct_field_names struct-field-names) (?) -> ?)
+(extern (rt_get_struct_field_values struct-field-values) (?) -> ?)
