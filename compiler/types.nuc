@@ -860,6 +860,9 @@
 (defun generate-type-table ((context Context))
   (when $output-debug-info
     (format true "Generating type info table with ~ entries" $struct-count))
+  (LLVMSetInitializer
+    (LLVMAddGlobal $module (LLVMIntType 32) "nuc_type_info_table_size")
+    (llvm-i32<-int $struct-count))
   ;; NOTE: These correspond to the structures defined in runtime/src/types.c
   (let ((type-info-struct
           (LLVMStructCreateNamed (LLVMGetGlobalContext) "StructInfo"))

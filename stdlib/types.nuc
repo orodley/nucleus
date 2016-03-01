@@ -1,6 +1,8 @@
+(extern (rt_type_info_table_available have-struct-info?) () -> bool)
+
 ; TODO: It would be cool if these could return constants when the type is
 ; statically known
 (extern (rt_get_struct_name struct-name) (?) -> string)
-(extern (rt_get_struct_num_fields struct-num-fields) (?) -> uint)
+(extern (rt_get_struct_num_fields struct-num-fields) (?) -> int)
 (extern (rt_get_struct_field_names struct-field-names) (?) -> ?)
 (extern (rt_get_struct_field_values struct-field-values) (?) -> ?)
