@@ -28,7 +28,7 @@
     (let ((arg (first args)))
       (cond
         ((any? (lambda (s) (string-eq? s arg))
-               '("-ir" "-asm" "-d" "-O" "-u" "-no-struct-info"))
+               '("-ir" "-asm" "-d" "-O" "-u" "-no-struct-info" "-time-sections"))
          (set-cdr acc (cons (cons arg true) (cdr acc))))
         ((string-eq? arg "-link")
          (when (nil? (cdr args)) (panic! "'-link' must be followed by linker args"))
@@ -56,6 +56,7 @@
             (output-asm (get-arg parsed-args "-asm" false))
             (do-optimisation (get-arg parsed-args "-O" false))
             (emit-struct-info (not (get-arg parsed-args "-no-struct-info" false)))
+            (time-sections (get-arg parsed-args "-time-sections" false))
             (linker-args (string-split (get-arg parsed-args "-link" "") (list 10 32))))
        (set $output-debug-info (get-arg parsed-args "-d" false))
        (set $ignore-annotations (get-arg parsed-args "-u" false))
@@ -78,6 +79,7 @@
               (remaining-forms nil))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))
+         (timepoint "Initialise LLVM")
          (set remaining-forms
               (process-toplevel-form-phase1
                 context 
@@ -93,6 +95,7 @@
          (set remaining-forms
               (process-file-phase1 context remaining-forms $dummy-source-loc
                                    (list input-filename)))
+         (timepoint "Phase 1")
          ;; TODO: Disable this with a flag. We'll still need to generate
          ;; something under the symbol so we don't get link errors, and give
          ;; the runtime some way to fall back when type info isn't available.
@@ -100,7 +103,9 @@
          (each (lambda (form)
                  (process-toplevel-form-phase2 context form))
                remaining-forms)
+         (timepoint "Phase 2")
          (each (lambda (f) (compile-function context (cdr f))) $functions)
+         (timepoint "Compile functions")
          (let ((entry-point (LLVMGetNamedFunction
                               $module (mangle-name 'main)))
                (main-func (declare-function "main" INT
@@ -137,12 +142,14 @@
                  "")
                INT
                "truncate-status-code")))
+         (timepoint "Compile static initialisers")
          (when (LLVMVerifyModule $module LLVMPrintMessageAction NULL)
            (LLVMDumpModule $module)
            (fail! context
                   "ICE: Module failed LLVMVerifyModule. Module has been dumped"
                   $dummy-source-loc
                   nil false))
+         (timepoint "Verify module")
          (cond
            ((not (nil? (Context.errors context)))
             (set $status-code 1)
@@ -173,6 +180,7 @@
              (let ((tmp-bc-file (format nil "/tmp/~.bc" (random)))
                    (tmp-o-file (format nil "/tmp/~.o" (random))))
                (LLVMWriteBitcodeToFile $module tmp-bc-file)
+               (timepoint "Write bitcode")
                (cond
                  (output-llvm-ir
                    (let ((llvm-dis-success
@@ -196,6 +204,7 @@
                                                           "-o" tmp-bc-file)))
                      (exec "rm" (list tmp-bc-file))
                      (panic! "llvm-link failed"))
+                   (timepoint "Link in runtime")
                    ;; TODO: Set up a customised optimisation pipeline. We run
                    ;; -Oz first here as that seems to be necessary to get LLVM
                    ;; to optimise tail calls, but this is a stopgap solution.
@@ -203,22 +212,35 @@
                      (unless (zero? (exec "opt" (list tmp-bc-file "-Oz" "-o" tmp-bc-file)))
                        (exec "rm" (list tmp-bc-file))
                        (panic! "opt failed"))
+                     (timepoint "opt -Oz")
                      (unless (zero? (exec "opt" (list tmp-bc-file "-O3" "-o" tmp-bc-file)))
                        (exec "rm" (list tmp-bc-file))
-                       (panic! "opt failed")))
+                       (panic! "opt failed"))
+                     (timepoint "opt -O3"))
                    (unless (zero? (exec "llc" (append
                                                 (if do-optimisation '("-O3") nil)
                                                 (list tmp-bc-file "-filetype=obj"
                                                       "-o" tmp-o-file))))
                      (exec "rm" (list tmp-bc-file))
                      (panic! "llc failed"))
+                   (timepoint "llc")
                    (unless (zero? (exec "g++" (append (list "-lm"
                                                             tmp-o-file
                                                             "-o" output-filename)
                                                       linker-args)))
                      (exec "rm" (list tmp-bc-file tmp-o-file))
                      (panic! "g++ failed"))
-                   (exec "rm" (list tmp-bc-file tmp-o-file))))))))))
+                   (timepoint "Final link")
+                   (exec "rm" (list tmp-bc-file tmp-o-file))))))))
+       (when time-sections
+         (write-string-ln "(times in ms)")
+         (each (lambda (msg-and-time)
+                 (let ((msg (car msg-and-time))
+                       (time (cdr msg-and-time)))
+                   (print (/ time 1000000))
+                   (write-char 9) ; \t
+                   (write-string-ln msg)))
+               (reverse $timepoints)))))
     (true
       (write-string-ln "Usage: nucc <input filename>"))))
 
@@ -247,3 +269,11 @@
        remaining-forms)
       (true (process-file-phase1 context remaining-forms
                                  source-loc (rest filename-and-backups))))))
+
+(defvar $timepoints nil)
+(defvar $last-timepoint (nanoseconds))
+(defun timepoint (description)
+  (let* ((current-time (nanoseconds))
+         (diff (- current-time $last-timepoint)))
+    (set $last-timepoint current-time)
+    (set $timepoints (cons (cons description diff) $timepoints))))
