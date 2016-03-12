@@ -217,10 +217,15 @@
                        (exec "rm" (list tmp-bc-file))
                        (panic! "opt failed"))
                      (timepoint "opt -O3"))
-                   (unless (zero? (exec "llc" (append
-                                                (if do-optimisation '("-O3") nil)
-                                                (list tmp-bc-file "-filetype=obj"
-                                                      "-o" tmp-o-file))))
+                   (unless
+                     (zero? (exec "llc"
+                                  (append
+                                    (if do-optimisation '("-O3") nil)
+                                    (append
+                                      (if time-sections '("-time-passes") nil)
+                                      (list "-filetype=obj"
+                                            tmp-bc-file
+                                            "-o" tmp-o-file)))))
                      (exec "rm" (list tmp-bc-file))
                      (panic! "llc failed"))
                    (timepoint "llc")
