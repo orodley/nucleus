@@ -169,7 +169,7 @@
       (set-cdr list-head (cons param nil))
       (%llvm-params func (cdr list-head)))))
 
-(defun llvm-phi (builder phi-type pairs name)
-  (let ((phi (LLVMBuildPhi builder phi-type name)))
+(defun llvm-phi (builder phi-type pairs)
+  (let ((phi (LLVMBuildPhi builder phi-type "")))
     (LLVMAddIncoming phi (map car pairs) (map cdr pairs) (length pairs))
     phi))

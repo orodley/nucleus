@@ -659,8 +659,7 @@
                cons-ptr
                (llvm-phi $builder NUC-VAL
                          (list (cons car-val before-block)
-                               (cons converted non-gr-resultant-block))
-                         "converted-car"))
+                               (cons converted non-gr-resultant-block))))
              (set-gr-value cons-ptr (llvm-i8<-int 3))
              (set-cdr-value
                cons-ptr
@@ -860,14 +859,20 @@
 (defun generate-type-table ((context Context))
   (when $output-debug-info
     (format true "Generating type info table with ~ entries" $struct-count))
-  (LLVMSetInitializer
-    (LLVMAddGlobal $module (LLVMIntType 32) "nuc_type_info_table_size")
-    (llvm-i32<-int $struct-count))
   ;; NOTE: These correspond to the structures defined in runtime/src/types.c
-  (let ((type-info-struct
-          (LLVMStructCreateNamed (LLVMGetGlobalContext) "StructInfo"))
-        (field-info-struct
-          (LLVMStructCreateNamed (LLVMGetGlobalContext) "FieldInfo")))
+  (let* ((type-info-struct
+           (LLVMStructCreateNamed (LLVMGetGlobalContext) "StructInfo"))
+         (field-info-struct
+           (LLVMStructCreateNamed (LLVMGetGlobalContext) "FieldInfo"))
+         (global-table-size
+           (LLVMAddGlobal $module (LLVMIntType 32) "nuc_type_info_table_size"))
+         (global-table
+           (LLVMAddGlobal $module (LLVMArrayType
+                                    type-info-struct
+                                    (if (Context.emit-struct-info context)
+                                      $struct-count
+                                      0))
+                          "nuc_type_info_table")))
     (LLVMStructSetBody
       type-info-struct
       (list CHAR* (LLVMIntType 32) (LLVMPointerType field-info-struct 0))
@@ -878,52 +883,61 @@
       (list CHAR* NUC-VAL (LLVMIntType 32))
       3
       false)
-    (LLVMSetInitializer
-      (LLVMAddGlobal $module (LLVMArrayType type-info-struct $struct-count)
-                     "nuc_type_info_table")
-      (LLVMConstArray
-        type-info-struct
-        (reverse
-          (map (lambda (struct-type)
-                 (let* ((struct-type (cdr struct-type))
-                        (num-fields
-                          (length (Struct-type.fields struct-type)))
-                        (field-info-table
-                          (LLVMAddGlobal
-                            $module (LLVMArrayType field-info-struct num-fields)
-                            (format nil "nuc_field_info_table(~)"
-                                    (Struct-type.name struct-type)))))
-                   (LLVMSetInitializer
-                     field-info-table
-                     (LLVMConstArray
-                       field-info-struct
-                       (map2
-                         (lambda (field-index field)
-                           (LLVMConstNamedStruct
-                             field-info-struct
-                             (list (global-string
-                                     (string<-symbol (Struct-field.name field)))
-                                   (type-id<-type-spec context (Struct-field.type field))
-                                   (llvm-i32<-int
-                                     (LLVMOffsetOfElement
-                                       (Context.target-data context)
-                                       (LLVMGetElementType
-                                         (Struct-type.llvm-type struct-type))
-                                       field-index)))
-                             3))
-                         (range num-fields)
-                         (Struct-type.fields struct-type))
-                       num-fields))
-                   (LLVMConstNamedStruct
-                     type-info-struct
-                     (list (global-string
-                             (string<-symbol (Struct-type.name struct-type)))
-                           (llvm-i32<-int num-fields)
-                           (LLVMBuildGEP
-                             $builder field-info-table
-                             (list (llvm-i64<-int 0) (llvm-i64<-int 0))
-                             2
-                             ""))
-                     3)))
-               $struct-types))
-        $struct-count))))
+    (cond
+      ((Context.emit-struct-info context)
+       (LLVMSetInitializer global-table-size (llvm-i32<-int $struct-count))
+       (LLVMSetInitializer
+         global-table
+         (LLVMConstArray
+           type-info-struct
+           (reverse
+             (map (lambda (struct-type)
+                    (let* ((struct-type (cdr struct-type))
+                           (num-fields
+                             (length (Struct-type.fields struct-type)))
+                           (field-info-table
+                             (LLVMAddGlobal
+                               $module (LLVMArrayType field-info-struct num-fields)
+                               (format nil "nuc_field_info_table(~)"
+                                       (Struct-type.name struct-type)))))
+                      (LLVMSetInitializer
+                        field-info-table
+                        (LLVMConstArray
+                          field-info-struct
+                          (map2
+                            (lambda (field-index field)
+                              (LLVMConstNamedStruct
+                                field-info-struct
+                                (list (global-string
+                                        (string<-symbol (Struct-field.name field)))
+                                      (type-id<-type-spec context (Struct-field.type field))
+                                      (llvm-i32<-int
+                                        (LLVMOffsetOfElement
+                                          (Context.target-data context)
+                                          (LLVMGetElementType
+                                            (Struct-type.llvm-type struct-type))
+                                          field-index)))
+                                3))
+                            (range num-fields)
+                            (Struct-type.fields struct-type))
+                          num-fields))
+                      (LLVMConstNamedStruct
+                        type-info-struct
+                        (list (global-string
+                                (string<-symbol (Struct-type.name struct-type)))
+                              (llvm-i32<-int num-fields)
+                              (LLVMBuildGEP
+                                $builder field-info-table
+                                (list (llvm-i64<-int 0) (llvm-i64<-int 0))
+                                2
+                                ""))
+                        3)))
+                  $struct-types))
+           $struct-count)))
+      (true
+        (LLVMSetInitializer global-table-size (llvm-i32<-int (- 0 1)))
+        (LLVMSetInitializer
+          global-table (LLVMConstArray type-info-struct nil 0))
+        ; TODO: Fix the bug that prevents void-returning functions from sitting
+        ; at the end of branch
+        nil))))

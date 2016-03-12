@@ -82,11 +82,12 @@ static inline bool type_info_table_available()
 
 static inline const char *struct_name(int type_id)
 {
+	if (!type_info_table_available())
+		return "STRUCT";
+
 	assert(type_id < nuc_type_info_table_size);
 
-	return type_info_table_available() ?
-		nuc_type_info_table[type_id].name :
-		"STRUCT";
+	return nuc_type_info_table[type_id].name;
 }
 
 static const char *value_type_name(nuc_val value)
@@ -148,20 +149,22 @@ String *rt_get_struct_name(nuc_val val)
 int32_t rt_get_struct_num_fields(nuc_val val)
 {
 	CHECK(val, STRUCT_TYPE);
+	if (!type_info_table_available())
+		return -1;
+
 	assert((int)STRUCT_ID(val) < nuc_type_info_table_size);
 
-	return type_info_table_available() ?
-		nuc_type_info_table[STRUCT_ID(val)].num_fields :
-		-1;
+	return nuc_type_info_table[STRUCT_ID(val)].num_fields;
 }
 
 nuc_val rt_get_struct_field_names(nuc_val val)
 {
 	CHECK(val, STRUCT_TYPE);
-	assert((int)STRUCT_ID(val) < nuc_type_info_table_size);
-
 	if (!type_info_table_available())
 		return NIL;
+
+	assert((int)STRUCT_ID(val) < nuc_type_info_table_size);
+
 
 	StructInfo *struct_info = &nuc_type_info_table[STRUCT_ID(val)];
 	FieldInfo *fields = struct_info->fields;
@@ -210,10 +213,11 @@ static nuc_val make_dynamic(uint8_t *value_ptr, nuc_val type)
 nuc_val rt_get_struct_field_values(nuc_val val)
 {
 	CHECK(val, STRUCT_TYPE);
-	assert((int)STRUCT_ID(val) < nuc_type_info_table_size);
 
 	if (!type_info_table_available())
 		return NIL;
+
+	assert((int)STRUCT_ID(val) < nuc_type_info_table_size);
 
 	StructInfo *struct_info = &nuc_type_info_table[STRUCT_ID(val)];
 	FieldInfo *fields = struct_info->fields;

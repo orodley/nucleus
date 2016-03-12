@@ -202,8 +202,7 @@
              ;; based on the the given terms and do the coercions itself.
              (llvm-phi $builder (llvm-type<-type-spec context result-type)
                        (list (cons (tv then-term) then-resultant-block)
-                             (cons (tv else-term) else-resultant-block))
-                       "if-non-constant")
+                             (cons (tv else-term) else-resultant-block)))
              false)))
         ;; If we detect that the condition is constant, we can tell more about
         ;; the result type. We could also remove the other branch, but LLVM
@@ -221,8 +220,7 @@
            (Term else-type
                  (llvm-phi $builder t
                            (list (cons (LLVMGetUndef t) then-resultant-block)
-                                 (cons (tv else-term) else-resultant-block))
-                           "if-constant-false")
+                                 (cons (tv else-term) else-resultant-block)))
                  false)))
         ((eq? (LLVMConstIntGetSExtValue (tv condition)) 1)
          (link-blocks $builder then-resultant-block after-block)
@@ -232,8 +230,7 @@
            (Term then-type
                  (llvm-phi $builder t
                            (list (cons (tv then-term) then-resultant-block)
-                                 (cons (LLVMGetUndef t) else-resultant-block))
-                           "if-constant-true")
+                                 (cons (LLVMGetUndef t) else-resultant-block)))
                  false)))))))
 
 (defun compile-in-block ((context Context) expr block)
@@ -570,8 +567,7 @@
             (LLVMPositionBuilderAtEnd $builder after-block)
             (llvm-phi $builder llvm-field-type
                       (list (cons coerced-field-value gr-resultant-block)
-                            (cons static-field-value non-gr-block))
-                      field-name)))))
+                            (cons static-field-value non-gr-block)))))))
     false))
 
 (defun builtin-car ((context Context) args)
@@ -628,8 +624,7 @@
                            (llvm-phi
                              $builder NUC-VAL
                              (list (cons coerced-value non-gr-resultant-block)
-                                   (cons (tv val-term) original-block))
-                             "final-value")))))))
+                                   (cons (tv val-term) original-block)))))))))
     ((type-eq? field-type '?)
      ;; The field is dynamic, but the value being assigned isn't. We convert
      ;; the static value into a dynamic value and stick it in.
@@ -675,8 +670,7 @@
                           (llvm-phi
                             $builder NUC-VAL
                             (list (cons coerced-value gr-resultant-block)
-                                  (cons i64-val non-gr-block))
-                            "final-value")))))))
+                                  (cons i64-val non-gr-block)))))))))
   val-term)
 
 (defun builtin-set-car ((context Context) args)
@@ -749,8 +743,7 @@
              'bool
              (llvm-phi $builder (llvm-type<-type-spec context 'bool)
                        (list (cons (tv ct-term) ct-resultant-block)
-                             (cons (llvm-i32<-int 0) wrong-type-block))
-                       "eq?")
+                             (cons (llvm-i32<-int 0) wrong-type-block)))
              false))))
       ((type-eq? (tt term2) '?)
        ;; Reverse the order so we go into the case above where the type of the

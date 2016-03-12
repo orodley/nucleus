@@ -28,7 +28,7 @@
     (let ((arg (first args)))
       (cond
         ((any? (lambda (s) (string-eq? s arg))
-               '("-ir" "-asm" "-d" "-O" "-u"))
+               '("-ir" "-asm" "-d" "-O" "-u" "-no-struct-info"))
          (set-cdr acc (cons (cons arg true) (cdr acc))))
         ((string-eq? arg "-link")
          (when (nil? (cdr args)) (panic! "'-link' must be followed by linker args"))
@@ -55,6 +55,7 @@
             (output-llvm-ir (get-arg parsed-args "-ir" false))
             (output-asm (get-arg parsed-args "-asm" false))
             (do-optimisation (get-arg parsed-args "-O" false))
+            (emit-struct-info (not (get-arg parsed-args "-no-struct-info" false)))
             (linker-args (string-split (get-arg parsed-args "-link" "") (list 10 32))))
        (set $output-debug-info (get-arg parsed-args "-d" false))
        (set $ignore-annotations (get-arg parsed-args "-u" false))
@@ -72,7 +73,8 @@
               (target-data (LLVMCreateTargetData
                              "e-m:e-i64:64-f80:128-n8:16:32:64-S128"))
               (context
-                (Context (copy-list $constants) "" nil target-data nil))
+                (Context (copy-list $constants) "" nil emit-struct-info
+                         target-data nil))
               (remaining-forms nil))
          (set $module (LLVMModuleCreateWithNameInContext
                         input-filename llvm-context))

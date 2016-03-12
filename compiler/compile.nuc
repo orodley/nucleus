@@ -9,6 +9,9 @@
   (file string)
   ;(func Func) ; TODO: Figure out why this annotation doesn't work
   func
+  ;; TODO: When we have more flags, just have a list of them or something which
+  ;; we query using symbols
+  (emit-struct-info bool)
   target-data ; TODO: annotate
   errors)
 

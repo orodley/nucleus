@@ -327,8 +327,7 @@
               (LLVMPositionBuilderAtEnd $builder after-block)
               (llvm-phi $builder llvm-return-type
                         (list (cons then-result then-block)
-                              (cons else-result else-block))
-                        "closure-call"))))))))
+                              (cons else-result else-block))))))))))
 
 (defvar $proxy-count 0)
 (defun mangle-proxy-func-name (original-arg-types proxy-arg-types)
