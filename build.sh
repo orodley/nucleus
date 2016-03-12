@@ -1,14 +1,18 @@
 #!/bin/sh
 
 just_stage1=false
+time_sections=false
 save_snapshot=true
 script_dir=$(dirname "$(realpath "$0")")
 
 OPTIND=1
-while getopts '1d' opt; do
+while getopts '1td' opt; do
 	case "$opt" in
 		1)
 			just_stage1=true
+			;;
+		t)
+			time_sections=true
 			;;
 		d)
 			save_snapshot=false
@@ -44,7 +48,11 @@ compile()
 	output="$2"
 
 	echo "Compiling $output with $compiler"
-	"$compiler" -link "$link_flags" compiler/main.nuc "$output"
+	if [ "$time_sections" = true ]; then
+		"$compiler" -time-sections -link "$link_flags" compiler/main.nuc "$output"
+	else
+		"$compiler" -link "$link_flags" compiler/main.nuc "$output"
+	fi
 	compile_status="$?"
 	if [ "$compile_status" -ne 0 ]; then
 		exit "$compile_status"
@@ -57,7 +65,11 @@ compile_ir()
 	output="$2"
 
 	echo "Compiling $output with $compiler"
-	"$compiler" -ir compiler/main.nuc "$output"
+	if [ "$time_sections" = true ]; then
+		"$compiler" -time-sections -ir compiler/main.nuc "$output"
+	else
+		"$compiler" -ir compiler/main.nuc "$output"
+	fi
 
 	compile_status="$?"
 	if [ "$compile_status" -ne 0 ]; then
